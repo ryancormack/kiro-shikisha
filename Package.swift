@@ -10,7 +10,11 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "KiroShikisha",
-            path: "Sources/KiroShikisha"
+            path: "Sources/KiroShikisha",
+            exclude: ["Info.plist"],
+            linkerSettings: [
+                .unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", "Sources/KiroShikisha/Info.plist"])
+            ]
         ),
         .testTarget(
             name: "KiroShikishaTests",

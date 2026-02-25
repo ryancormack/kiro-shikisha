@@ -66,6 +66,7 @@ public struct AgentStatusIndicator: View {
             ProgressView()
                 .controlSize(.mini)
                 .tint(statusColor)
+                .frame(width: 12, height: 12)
             
         case .active:
             // Green pulsing circle for active

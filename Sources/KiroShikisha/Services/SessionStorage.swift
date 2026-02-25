@@ -63,7 +63,7 @@ public final class SessionStorage: Sendable {
     public let sessionsDirectory: URL
     
     /// File manager for file operations
-    private let fileManager: FileManager
+    private nonisolated(unsafe) let fileManager: FileManager
     
     /// Initialize with the default sessions directory (~/.kiro/sessions/cli/)
     public init() {

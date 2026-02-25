@@ -1,5 +1,5 @@
 #if os(macOS)
-import UserNotifications
+@preconcurrency import UserNotifications
 import Foundation
 
 /// Service for managing macOS notifications for agent events

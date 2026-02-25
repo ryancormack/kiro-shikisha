@@ -1,8 +1,15 @@
 #if os(macOS)
 import SwiftUI
 
+import AppKit
+
 @main
 struct KiroShikishaApp: App {
+    
+    init() {
+        NSApplication.shared.setActivationPolicy(.regular)
+    }
+    
     @State private var agentManager = AgentManager()
     @State private var appStateManager = AppStateManager()
     @State private var appSettings = AppSettings()

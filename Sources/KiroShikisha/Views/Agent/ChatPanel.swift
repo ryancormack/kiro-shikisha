@@ -4,7 +4,8 @@ import SwiftUI
 /// Chat panel with message list and input area
 public struct ChatPanel: View {
     let agent: Agent
-    @State private var isLoading: Bool = false
+    @Environment(AgentManager.self) private var agentManager
+    @State private var errorMessage: String?
     
     public init(agent: Agent) {
         self.agent = agent
@@ -20,7 +21,7 @@ public struct ChatPanel: View {
                                 .id(message.id)
                         }
                         
-                        if isLoading {
+                        if agent.status == .active {
                             TypingIndicator()
                                 .id("typing-indicator")
                         }
@@ -30,7 +31,7 @@ public struct ChatPanel: View {
                 .onChange(of: agent.messages.count) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: isLoading) { _, _ in
+                .onChange(of: agent.status) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
                 .onAppear {
@@ -44,12 +45,20 @@ public struct ChatPanel: View {
                 sendMessage(message)
             }
             .padding()
+            
+            if let error = errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+            }
         }
         .background(Color(nsColor: .textBackgroundColor))
     }
     
     private func scrollToBottom(proxy: ScrollViewProxy) {
-        if isLoading {
+        if agent.status == .active {
             withAnimation(.easeOut(duration: 0.2)) {
                 proxy.scrollTo("typing-indicator", anchor: .bottom)
             }
@@ -61,17 +70,13 @@ public struct ChatPanel: View {
     }
     
     private func sendMessage(_ content: String) {
-        // In a real implementation, this would:
-        // 1. Add the user message to the agent
-        // 2. Send via ACP to the agent
-        // 3. Set isLoading = true
-        // 4. Handle streaming response
-        // For now, just a placeholder
-        isLoading = true
-        
-        // Simulate async response
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            isLoading = false
+        errorMessage = nil
+        Task {
+            do {
+                try await agentManager.sendPrompt(agentId: agent.id, prompt: content)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }

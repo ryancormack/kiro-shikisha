@@ -23,10 +23,13 @@ public struct AgentInfo: Codable, Sendable {
     public let name: String
     /// Agent version
     public let version: String
+    /// Agent title
+    public let title: String?
     
-    public init(name: String, version: String) {
+    public init(name: String, version: String, title: String? = nil) {
         self.name = name
         self.version = version
+        self.title = title
     }
 }
 
@@ -36,10 +39,10 @@ public struct AgentInfo: Codable, Sendable {
 public struct ClientCapabilities: Codable, Sendable {
     /// File system capabilities
     public let fs: FileSystemCapabilities?
-    /// Terminal capabilities
-    public let terminal: TerminalCapabilities?
+    /// Whether the client supports all terminal/* methods
+    public let terminal: Bool?
     
-    public init(fs: FileSystemCapabilities? = nil, terminal: TerminalCapabilities? = nil) {
+    public init(fs: FileSystemCapabilities? = nil, terminal: Bool? = nil) {
         self.fs = fs
         self.terminal = terminal
     }
@@ -73,11 +76,11 @@ public struct TerminalCapabilities: Codable, Sendable {
 /// Capabilities that the agent provides
 public struct AgentCapabilities: Codable, Sendable {
     /// Agent supports loading existing sessions
-    public let loadSession: Bool
+    public let loadSession: Bool?
     /// Prompt-related capabilities
     public let promptCapabilities: PromptCapabilities?
     
-    public init(loadSession: Bool = false, promptCapabilities: PromptCapabilities? = nil) {
+    public init(loadSession: Bool? = false, promptCapabilities: PromptCapabilities? = nil) {
         self.loadSession = loadSession
         self.promptCapabilities = promptCapabilities
     }
@@ -86,9 +89,15 @@ public struct AgentCapabilities: Codable, Sendable {
 /// Capabilities related to prompts
 public struct PromptCapabilities: Codable, Sendable {
     /// Agent supports image content in prompts
-    public let image: Bool
+    public let image: Bool?
+    /// Agent supports audio content
+    public let audio: Bool?
+    /// Agent supports embedded context
+    public let embeddedContext: Bool?
     
-    public init(image: Bool = false) {
+    public init(image: Bool? = false, audio: Bool? = false, embeddedContext: Bool? = false) {
         self.image = image
+        self.audio = audio
+        self.embeddedContext = embeddedContext
     }
 }

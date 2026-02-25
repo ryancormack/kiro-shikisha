@@ -4,7 +4,7 @@ import Observation
 #endif
 
 /// Errors that can occur during agent management operations
-public enum AgentManagerError: Error, Sendable {
+public enum AgentManagerError: Error, Sendable, LocalizedError {
     case agentNotFound(UUID)
     case notConnected
     case noSessionId
@@ -12,6 +12,18 @@ public enum AgentManagerError: Error, Sendable {
     case requestFailed(JSONRPCError)
     case platformNotSupported
     case notAGitRepository
+    
+    public var errorDescription: String? {
+        switch self {
+        case .agentNotFound(let id): return "Agent not found: \(id)"
+        case .notConnected: return "Not connected to kiro-cli"
+        case .noSessionId: return "No active session"
+        case .connectionFailed(let msg): return "Connection failed: \(msg)"
+        case .requestFailed(let err): return "Request failed: \(err.message)"
+        case .platformNotSupported: return "Platform not supported"
+        case .notAGitRepository: return "Not a git repository"
+        }
+    }
 }
 
 #if os(macOS)
@@ -78,28 +90,37 @@ public final class AgentManager {
         agents[agent.id] = agent
         
         do {
+            print("[ACP] Starting agent for workspace: \(workspace.path.path)")
+            print("[ACP] Using kiro-cli at: \(kirocliPath)")
+            
             // Create and connect ACP connection
             let connection = ACPConnection()
             try await connection.connect(kirocliPath: kirocliPath)
             connections[agent.id] = connection
+            print("[ACP] Process spawned successfully")
             
             // Start streaming task for this connection
             startStreamingTask(for: agent, connection: connection)
             
             // Send initialize request
-            let initializeResult = try await sendInitialize(agentId: agent.id)
+            print("[ACP] Sending initialize...")
+            let _ = try await sendInitialize(agentId: agent.id)
+            print("[ACP] Initialize succeeded")
             
             // Create new session with workspace path
+            print("[ACP] Sending session/new...")
             let sessionResult = try await sendSessionNew(
                 agentId: agent.id,
                 cwd: workspace.path.path
             )
+            print("[ACP] Session created: \(sessionResult.sessionId)")
             
             agent.sessionId = sessionResult.sessionId
             agent.status = .active
             
             return agent
         } catch {
+            print("[ACP] ERROR: \(error)")
             agent.status = .error
             agent.errorMessage = error.localizedDescription
             throw error
@@ -318,7 +339,7 @@ public final class AgentManager {
             clientInfo: ClientInfo(name: "KiroShikisha", version: "1.0.0"),
             clientCapabilities: ClientCapabilities(
                 fs: FileSystemCapabilities(readTextFile: true, writeTextFile: true),
-                terminal: TerminalCapabilities(execute: true)
+                terminal: true
             )
         )
         
@@ -330,7 +351,7 @@ public final class AgentManager {
     }
     
     private func sendSessionNew(agentId: UUID, cwd: String) async throws -> SessionNewResult {
-        let params = SessionNewParams(cwd: cwd)
+        let params = SessionNewParams(cwd: cwd, mcpServers: [])
         return try await sendRequest(
             agentId: agentId,
             method: "session/new",
@@ -394,9 +415,10 @@ public final class AgentManager {
         }
         
         guard let result = response.result else {
+            let raw = String(data: responseData, encoding: .utf8) ?? "undecodable"
             throw AgentManagerError.requestFailed(JSONRPCError(
                 code: JSONRPCError.internalError,
-                message: "No result in response"
+                message: "No result in response: \(raw)"
             ))
         }
         
@@ -436,11 +458,17 @@ public final class AgentManager {
     }
     
     private func processMessage(_ data: Data, for agent: Agent, decoder: JSONDecoder) async {
+        let raw = String(data: data, encoding: .utf8) ?? "undecodable"
+        print("[ACP] Received: \(raw.prefix(200))")
+        
         // Try to decode as a response (has "id" field)
         if let responseId = extractResponseId(from: data) {
             // This is a response to a pending request
             if let continuation = pendingRequests.removeValue(forKey: responseId) {
+                print("[ACP] Matched response for request \(responseId)")
                 continuation.resume(returning: data)
+            } else {
+                print("[ACP] No pending request for id \(responseId)")
             }
             return
         }
@@ -455,6 +483,8 @@ public final class AgentManager {
                     self.handleSessionUpdate(params.update, for: agent)
                 }
             }
+        } else {
+            print("[ACP] Unhandled message: \(raw.prefix(300))")
         }
     }
     

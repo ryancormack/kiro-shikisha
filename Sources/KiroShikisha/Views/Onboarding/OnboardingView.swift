@@ -147,7 +147,7 @@ public struct OnboardingView: View {
                     
                     if isAutoDetecting {
                         ProgressView()
-                            .scaleEffect(0.8)
+                            .controlSize(.small)
                             .frame(width: 20, height: 20)
                     } else {
                         Image(systemName: isKirocliValid ? "checkmark.circle.fill" : "xmark.circle.fill")

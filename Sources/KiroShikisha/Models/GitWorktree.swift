@@ -1,7 +1,7 @@
 import Foundation
 
 /// Represents a Git worktree (main or linked)
-public struct GitWorktree: Identifiable, Equatable, Sendable {
+public struct GitWorktree: Identifiable, Equatable, Hashable, Sendable {
     /// Unique identifier for this worktree instance
     public let id: UUID
     /// Path to the worktree directory

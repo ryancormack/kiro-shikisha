@@ -14,6 +14,11 @@ public struct MainView: View {
         return agentManager.getAllAgents().first { $0.workspace.id == workspaceId }
     }
     
+    private var selectedWorkspace: Workspace? {
+        guard let workspaceId = appStateManager.selectedWorkspaceId else { return nil }
+        return appStateManager.workspaces.first { $0.id == workspaceId }
+    }
+    
     /// Sorted list of agents for keyboard shortcut selection
     private var sortedAgents: [Agent] {
         agentManager.getAllAgents().sorted { $0.name < $1.name }
@@ -47,6 +52,8 @@ public struct MainView: View {
                 }
             } else if let agent = selectedAgent {
                 AgentView(agent: agent)
+            } else if let workspace = selectedWorkspace {
+                WorkspaceReadyView(workspace: workspace, agentManager: agentManager)
             } else {
                 PlaceholderView()
             }
@@ -63,7 +70,6 @@ public struct MainView: View {
             }
         }
         .onChange(of: appStateManager.selectedWorkspaceId) { _, newValue in
-            // Save state when selection changes
             appStateManager.saveState()
         }
         // Keyboard shortcuts
@@ -71,8 +77,6 @@ public struct MainView: View {
         .sheet(isPresented: $showNewWorkspaceSheet) {
             NewWorkspaceSheet { workspace in
                 appStateManager.addWorkspace(workspace)
-                showNewWorkspaceSheet = false
-            } onCancel: {
                 showNewWorkspaceSheet = false
             }
         }
@@ -121,75 +125,54 @@ public struct MainViewCommands: Commands {
     }
 }
 
-/// Sheet for creating a new workspace
-struct NewWorkspaceSheet: View {
-    let onSave: (Workspace) -> Void
-    let onCancel: () -> Void
-    
-    @State private var workspaceName: String = ""
-    @State private var workspacePath: String = ""
-    @State private var showFolderPicker: Bool = false
+/// View shown when a workspace is selected but no agent is running
+struct WorkspaceReadyView: View {
+    let workspace: Workspace
+    let agentManager: AgentManager
+    @State private var isStarting = false
+    @State private var errorMessage: String?
     
     var body: some View {
-        VStack(spacing: 20) {
-            Text("New Workspace")
+        VStack(spacing: 16) {
+            Image(systemName: "play.circle")
+                .font(.system(size: 64))
+                .foregroundColor(.accentColor)
+            
+            Text(workspace.name)
                 .font(.title2)
-                .fontWeight(.semibold)
             
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Name")
-                    .font(.headline)
-                TextField("Workspace name", text: $workspaceName)
-                    .textFieldStyle(.roundedBorder)
-            }
+            Text(workspace.path.path)
+                .font(.caption)
+                .foregroundColor(.secondary)
             
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Folder")
-                    .font(.headline)
-                HStack {
-                    TextField("Select a folder", text: $workspacePath)
-                        .textFieldStyle(.roundedBorder)
-                        .disabled(true)
-                    
-                    Button("Browse...") {
-                        showFolderPicker = true
+            if isStarting {
+                ProgressView("Connecting…")
+            } else {
+                Button("Start Agent") {
+                    isStarting = true
+                    errorMessage = nil
+                    Task {
+                        do {
+                            let _ = try await agentManager.startAgent(workspace: workspace)
+                        } catch {
+                            errorMessage = error.localizedDescription
+                        }
+                        isStarting = false
                     }
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
             
-            HStack {
-                Button("Cancel") {
-                    onCancel()
-                }
-                .keyboardShortcut(.cancelAction)
-                
-                Spacer()
-                
-                Button("Create") {
-                    let workspace = Workspace(
-                        name: workspaceName,
-                        path: URL(fileURLWithPath: workspacePath)
-                    )
-                    onSave(workspace)
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(workspaceName.isEmpty || workspacePath.isEmpty)
+            if let error = errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .frame(maxWidth: 400)
+                    .textSelection(.enabled)
             }
         }
-        .padding(24)
-        .frame(width: 400)
-        .fileImporter(
-            isPresented: $showFolderPicker,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            if case .success(let urls) = result, let url = urls.first {
-                workspacePath = url.path
-                if workspaceName.isEmpty {
-                    workspaceName = url.lastPathComponent
-                }
-            }
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

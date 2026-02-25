@@ -1,7 +1,7 @@
 import Foundation
 
 /// Errors that can occur during ACP connection operations
-public enum ACPConnectionError: Error, Sendable {
+public enum ACPConnectionError: Error, Sendable, LocalizedError {
     case notConnected
     case processSpawnFailed(String)
     case processTerminated(Int32)
@@ -9,6 +9,18 @@ public enum ACPConnectionError: Error, Sendable {
     case decodingFailed
     case streamClosed
     case platformNotSupported
+    
+    public var errorDescription: String? {
+        switch self {
+        case .notConnected: return "Not connected to kiro-cli process"
+        case .processSpawnFailed(let msg): return "Failed to start kiro-cli: \(msg)"
+        case .processTerminated(let code): return "kiro-cli exited with code \(code)"
+        case .encodingFailed: return "Failed to encode message"
+        case .decodingFailed: return "Failed to decode response"
+        case .streamClosed: return "Connection stream closed"
+        case .platformNotSupported: return "Platform not supported"
+        }
+    }
 }
 
 #if os(macOS)
@@ -42,7 +54,9 @@ public actor ACPConnection {
         }
         
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: kirocliPath)
+        proc.executableURL = URL(fileURLWithPath: kirocliPath.hasPrefix("~")
+            ? kirocliPath.replacingOccurrences(of: "~", with: FileManager.default.homeDirectoryForCurrentUser.path, options: .anchored)
+            : kirocliPath)
         
         var arguments = ["acp"]
         if let config = agentConfig {
@@ -72,6 +86,17 @@ public actor ACPConnection {
             process = proc
         } catch {
             throw ACPConnectionError.processSpawnFailed(error.localizedDescription)
+        }
+        
+        // Log stderr in background
+        Task.detached { [stderr] in
+            while true {
+                let data = stderr.fileHandleForReading.availableData
+                if data.isEmpty { break }
+                if let text = String(data: data, encoding: .utf8) {
+                    print("[ACP-stderr] \(text)")
+                }
+            }
         }
         
         // Start reading from stdout in a background task
@@ -148,24 +173,21 @@ public actor ACPConnection {
         Task.detached { [stdout, codec] in
             var buffer = Data()
             
-            do {
-                while let chunk = try stdout.availableData.isEmpty ? nil : stdout.availableData {
-                    if chunk.isEmpty {
-                        break
-                    }
-                    buffer.append(chunk)
-                    
-                    let (messages, remaining) = codec.parseMessages(from: buffer)
-                    buffer = remaining
-                    
-                    for message in messages {
-                        continuation.yield(message)
-                    }
+            while true {
+                let chunk = stdout.availableData
+                if chunk.isEmpty {
+                    break
                 }
-                continuation.finish()
-            } catch {
-                continuation.finish(throwing: error)
+                buffer.append(chunk)
+                
+                let (messages, remaining) = codec.parseMessages(from: buffer)
+                buffer = remaining
+                
+                for message in messages {
+                    continuation.yield(message)
+                }
             }
+            continuation.finish()
         }
     }
 }

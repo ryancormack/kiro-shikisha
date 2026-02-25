@@ -177,7 +177,6 @@ public actor GitService {
         var currentPath: URL?
         var currentCommit: String?
         var currentBranch: String?
-        var isFirst = true
         
         let lines = output.components(separatedBy: .newlines)
         
@@ -198,7 +197,6 @@ public actor GitService {
                 currentPath = URL(fileURLWithPath: pathString)
                 currentCommit = nil
                 currentBranch = nil
-                isFirst = false
             } else if line.hasPrefix("HEAD ") {
                 currentCommit = String(line.dropFirst("HEAD ".count))
             } else if line.hasPrefix("branch ") {

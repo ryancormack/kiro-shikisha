@@ -23,16 +23,37 @@ public struct InitializeParams: Codable, Sendable {
 /// Result from the initialize method
 public struct InitializeResult: Codable, Sendable {
     /// Protocol version supported by the agent
-    public let protocolVersion: String
+    public let protocolVersion: ProtocolVersion
     /// Information about the agent
-    public let agentInfo: AgentInfo
+    public let agentInfo: AgentInfo?
     /// Agent capabilities
-    public let agentCapabilities: AgentCapabilities
+    public let agentCapabilities: AgentCapabilities?
     
-    public init(protocolVersion: String, agentInfo: AgentInfo, agentCapabilities: AgentCapabilities) {
+    public init(protocolVersion: ProtocolVersion, agentInfo: AgentInfo? = nil, agentCapabilities: AgentCapabilities? = nil) {
         self.protocolVersion = protocolVersion
         self.agentInfo = agentInfo
         self.agentCapabilities = agentCapabilities
+    }
+}
+
+/// Protocol version that can be either a string or integer
+public struct ProtocolVersion: Codable, Sendable {
+    public let value: String
+    
+    public init(_ value: String) { self.value = value }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let intVal = try? container.decode(Int.self) {
+            value = String(intVal)
+        } else {
+            value = try container.decode(String.self)
+        }
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(value)
     }
 }
 
@@ -42,10 +63,10 @@ public struct InitializeResult: Codable, Sendable {
 public struct SessionNewParams: Codable, Sendable {
     /// Current working directory for the session
     public let cwd: String
-    /// Optional MCP server configurations
-    public let mcpServers: [String: JSONValue]?
+    /// MCP server configurations
+    public let mcpServers: [JSONValue]
     
-    public init(cwd: String, mcpServers: [String: JSONValue]? = nil) {
+    public init(cwd: String, mcpServers: [JSONValue] = []) {
         self.cwd = cwd
         self.mcpServers = mcpServers
     }
@@ -81,13 +102,18 @@ public struct SessionLoadParams: Codable, Sendable {
 public struct SessionPromptParams: Codable, Sendable {
     /// Session ID
     public let sessionId: String
-    /// Content blocks in the prompt
-    public let content: [ContentBlock]
+    /// Prompt containing content blocks
+    public let prompt: PromptContent
     
     public init(sessionId: String, content: [ContentBlock]) {
         self.sessionId = sessionId
-        self.content = content
+        self.prompt = PromptContent(content: content)
     }
+}
+
+/// Prompt content wrapper
+public struct PromptContent: Codable, Sendable {
+    public let content: [ContentBlock]
 }
 
 /// Parameters for session/cancel method

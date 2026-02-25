@@ -15,6 +15,9 @@ public struct SidebarView: View {
     /// Callback when a workspace should be removed
     var onRemoveWorkspace: ((UUID) -> Void)?
     
+    /// Workspace pending delete confirmation
+    @State private var workspaceToDelete: Workspace?
+    
     /// Whether the new workspace sheet is showing
     @State private var showingNewWorkspace: Bool = false
     
@@ -66,6 +69,11 @@ public struct SidebarView: View {
                     ForEach(activeAgents) { agent in
                         WorkspaceRow(workspace: agent.workspace, agent: agent)
                             .tag(agent.workspace.id)
+                            .contextMenu {
+                                Button("Delete Workspace", role: .destructive) {
+                                    workspaceToDelete = agent.workspace
+                                }
+                            }
                     }
                 }
             }
@@ -86,6 +94,11 @@ public struct SidebarView: View {
                             }
                         )
                         .tag(workspace.id)
+                        .contextMenu {
+                            Button("Delete Workspace", role: .destructive) {
+                                workspaceToDelete = workspace
+                            }
+                        }
                     }
                 }
             }
@@ -119,6 +132,22 @@ public struct SidebarView: View {
         }
         .onChange(of: workspaces) { _, _ in
             refreshSessionCounts()
+        }
+        .alert("Delete Workspace?", isPresented: Binding(
+            get: { workspaceToDelete != nil },
+            set: { if !$0 { workspaceToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { workspaceToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let ws = workspaceToDelete {
+                    onRemoveWorkspace?(ws.id)
+                    workspaceToDelete = nil
+                }
+            }
+        } message: {
+            if let ws = workspaceToDelete {
+                Text("Remove \"\(ws.name)\" from the sidebar? This won't delete any files on disk.")
+            }
         }
     }
     

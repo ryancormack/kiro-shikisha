@@ -10,44 +10,58 @@ public final class AppSettings {
     // MARK: - General Settings
     
     /// Path to the kiro-cli executable
-    @ObservationIgnored @AppStorage("kirocliPath")
-    public var kirocliPath: String = "~/.local/bin/kiro-cli"
+    public var kirocliPath: String = UserDefaults.standard.string(forKey: "kirocliPath") ?? "~/.local/bin/kiro-cli" {
+        didSet { UserDefaults.standard.set(kirocliPath, forKey: "kirocliPath") }
+    }
     
     /// Default directory for new workspaces
-    @ObservationIgnored @AppStorage("defaultWorkspaceDirectory")
-    public var defaultWorkspaceDirectory: String = "~"
+    public var defaultWorkspaceDirectory: String = UserDefaults.standard.string(forKey: "defaultWorkspaceDirectory") ?? "~" {
+        didSet { UserDefaults.standard.set(defaultWorkspaceDirectory, forKey: "defaultWorkspaceDirectory") }
+    }
     
     /// Whether to launch the app at system startup
-    @ObservationIgnored @AppStorage("launchAtStartup")
-    public var launchAtStartup: Bool = false
+    public var launchAtStartup: Bool = UserDefaults.standard.bool(forKey: "launchAtStartup") {
+        didSet { UserDefaults.standard.set(launchAtStartup, forKey: "launchAtStartup") }
+    }
     
     /// Whether the user has completed the onboarding flow
-    @ObservationIgnored @AppStorage("hasCompletedOnboarding")
-    public var hasCompletedOnboarding: Bool = false
+    public var hasCompletedOnboarding: Bool = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
+        didSet { UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") }
+    }
     
     // MARK: - Agent Settings
     
     /// Default agent configuration path (passed via --agent flag)
-    @ObservationIgnored @AppStorage("defaultAgentConfig")
-    public var defaultAgentConfig: String = ""
+    public var defaultAgentConfig: String = UserDefaults.standard.string(forKey: "defaultAgentConfig") ?? "" {
+        didSet { UserDefaults.standard.set(defaultAgentConfig, forKey: "defaultAgentConfig") }
+    }
     
     /// Whether to automatically start agent when workspace is selected
-    @ObservationIgnored @AppStorage("autoStartAgent")
-    public var autoStartAgent: Bool = true
+    public var autoStartAgent: Bool = {
+        UserDefaults.standard.object(forKey: "autoStartAgent") != nil ? UserDefaults.standard.bool(forKey: "autoStartAgent") : true
+    }() {
+        didSet { UserDefaults.standard.set(autoStartAgent, forKey: "autoStartAgent") }
+    }
     
     // MARK: - Appearance Settings
     
     /// Application theme: "light", "dark", or "system"
-    @ObservationIgnored @AppStorage("theme")
-    public var theme: String = "system"
+    public var theme: String = UserDefaults.standard.string(forKey: "theme") ?? "system" {
+        didSet { UserDefaults.standard.set(theme, forKey: "theme") }
+    }
     
     /// Base font size for the application
-    @ObservationIgnored @AppStorage("fontSize")
-    public var fontSize: Double = 13.0
+    public var fontSize: Double = {
+        let val = UserDefaults.standard.double(forKey: "fontSize")
+        return val > 0 ? val : 13.0
+    }() {
+        didSet { UserDefaults.standard.set(fontSize, forKey: "fontSize") }
+    }
     
     /// Position of the code panel: "right" or "bottom"
-    @ObservationIgnored @AppStorage("codePanelPosition")
-    public var codePanelPosition: String = "right"
+    public var codePanelPosition: String = UserDefaults.standard.string(forKey: "codePanelPosition") ?? "right" {
+        didSet { UserDefaults.standard.set(codePanelPosition, forKey: "codePanelPosition") }
+    }
     
     // MARK: - Computed Properties
     

@@ -77,9 +77,15 @@ public final class AppStateManager {
     // MARK: - Workspace Management
     
     /// Adds a new workspace and persists state
-    public func addWorkspace(_ workspace: Workspace) {
+    /// Returns false if a workspace with the same path already exists
+    @discardableResult
+    public func addWorkspace(_ workspace: Workspace) -> Bool {
+        if workspaces.contains(where: { $0.path == workspace.path }) {
+            return false
+        }
         workspaces.append(workspace)
         saveState()
+        return true
     }
     
     /// Removes a workspace by ID and persists state
