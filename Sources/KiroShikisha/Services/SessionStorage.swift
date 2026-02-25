@@ -157,6 +157,112 @@ public final class SessionStorage: Sendable {
         }
     }
     
+    /// Get metadata for a single session by ID
+    /// - Parameter sessionId: The session ID to load metadata for
+    /// - Returns: SessionMetadata if found and valid, nil otherwise
+    public func getSessionMetadata(sessionId: String) throws -> SessionMetadata? {
+        let metadataFileURL = sessionsDirectory
+            .appendingPathComponent("\(sessionId).json")
+        
+        guard fileManager.fileExists(atPath: metadataFileURL.path) else {
+            return nil
+        }
+        
+        return loadSessionMetadata(from: metadataFileURL)
+    }
+    
+    /// Load and reconstruct the conversation history for a session
+    /// - Parameter sessionId: The session ID to load history for
+    /// - Returns: Array of ChatMessage representing the conversation
+    /// - Throws: SessionStorageError if the session cannot be loaded
+    public func loadSessionHistory(sessionId: String) throws -> [ChatMessage] {
+        guard let eventsData = loadSessionEvents(sessionId: sessionId) else {
+            throw SessionStorageError.sessionNotFound(sessionId)
+        }
+        
+        let decoder = JSONDecoder()
+        var messages: [ChatMessage] = []
+        var currentAssistantContent = ""
+        var currentAssistantTimestamp: Date?
+        var currentToolCallIds: [String] = []
+        
+        for eventData in eventsData {
+            guard let event = try? decoder.decode(SessionEvent.self, from: eventData) else {
+                continue // Skip malformed events
+            }
+            
+            switch event.type {
+            case .userMessage:
+                // Flush any pending assistant message
+                if !currentAssistantContent.isEmpty {
+                    messages.append(ChatMessage(
+                        role: .assistant,
+                        content: currentAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines),
+                        timestamp: currentAssistantTimestamp ?? Date(),
+                        toolCallIds: currentToolCallIds.isEmpty ? nil : currentToolCallIds
+                    ))
+                    currentAssistantContent = ""
+                    currentAssistantTimestamp = nil
+                    currentToolCallIds = []
+                }
+                
+                // Add user message
+                if let content = event.content, !content.isEmpty {
+                    messages.append(ChatMessage(
+                        role: .user,
+                        content: content,
+                        timestamp: event.timestamp ?? Date()
+                    ))
+                }
+                
+            case .agentMessage:
+                // Accumulate assistant content (may come in chunks)
+                if let content = event.content {
+                    if currentAssistantTimestamp == nil {
+                        currentAssistantTimestamp = event.timestamp
+                    }
+                    currentAssistantContent += content
+                }
+                
+            case .toolCall:
+                // Track tool call IDs for the current assistant message
+                if let toolCallId = event.toolCallId {
+                    currentToolCallIds.append(toolCallId)
+                }
+                
+            case .turnEnd:
+                // Flush any pending assistant message at turn end
+                if !currentAssistantContent.isEmpty {
+                    messages.append(ChatMessage(
+                        role: .assistant,
+                        content: currentAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines),
+                        timestamp: currentAssistantTimestamp ?? Date(),
+                        toolCallIds: currentToolCallIds.isEmpty ? nil : currentToolCallIds
+                    ))
+                    currentAssistantContent = ""
+                    currentAssistantTimestamp = nil
+                    currentToolCallIds = []
+                }
+                
+            case .toolResult, .sessionStart, .sessionEnd, .error, .unknown:
+                // These events don't directly contribute to chat messages
+                break
+            }
+        }
+        
+        // Flush any remaining assistant content
+        if !currentAssistantContent.isEmpty {
+            messages.append(ChatMessage(
+                role: .assistant,
+                content: currentAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines),
+                timestamp: currentAssistantTimestamp ?? Date(),
+                toolCallIds: currentToolCallIds.isEmpty ? nil : currentToolCallIds
+            ))
+        }
+        
+        return messages
+    }
+    
     // MARK: - Private Helpers
     
     private func loadSessionMetadata(from fileURL: URL) -> SessionMetadata? {
@@ -166,6 +272,21 @@ public final class SessionStorage: Sendable {
             return try decoder.decode(SessionMetadata.self, from: data)
         } catch {
             return nil
+        }
+    }
+}
+
+/// Errors that can occur during session storage operations
+public enum SessionStorageError: Error, LocalizedError {
+    case sessionNotFound(String)
+    case invalidSessionData(String)
+    
+    public var errorDescription: String? {
+        switch self {
+        case .sessionNotFound(let sessionId):
+            return "Session not found: \(sessionId)"
+        case .invalidSessionData(let reason):
+            return "Invalid session data: \(reason)"
         }
     }
 }
