@@ -6,9 +6,22 @@ public struct WorkspaceRow: View {
     let workspace: Workspace
     let agent: Agent?
     
-    public init(workspace: Workspace, agent: Agent? = nil) {
+    /// Number of resumable sessions for this workspace (optional)
+    var sessionCount: Int?
+    
+    /// Callback when session history button is tapped
+    var onShowSessionHistory: (() -> Void)?
+    
+    public init(
+        workspace: Workspace,
+        agent: Agent? = nil,
+        sessionCount: Int? = nil,
+        onShowSessionHistory: (() -> Void)? = nil
+    ) {
         self.workspace = workspace
         self.agent = agent
+        self.sessionCount = sessionCount
+        self.onShowSessionHistory = onShowSessionHistory
     }
     
     private var truncatedPath: String {
@@ -71,6 +84,25 @@ public struct WorkspaceRow: View {
             
             Spacer()
             
+            // Session count badge
+            if let count = sessionCount, count > 0, agent == nil {
+                Button(action: { onShowSessionHistory?() }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.caption)
+                        Text("\(count)")
+                            .font(.caption)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.blue.opacity(0.15))
+                    .foregroundColor(.blue)
+                    .cornerRadius(4)
+                }
+                .buttonStyle(.plain)
+                .help("View \(count) previous session\(count == 1 ? "" : "s")")
+            }
+            
             if let agent = agent {
                 StatusBadge(status: agent.status)
             }
@@ -98,13 +130,18 @@ public struct WorkspaceRow: View {
     let agent = Agent(name: "Test Agent", workspace: regularWorkspace, status: .active)
     
     return VStack(alignment: .leading, spacing: 8) {
-        Text("Regular workspace:").font(.caption).foregroundColor(.secondary)
+        Text("Regular workspace with agent:").font(.caption).foregroundColor(.secondary)
         WorkspaceRow(workspace: regularWorkspace, agent: agent)
         
         Divider()
         
-        Text("Regular workspace without agent:").font(.caption).foregroundColor(.secondary)
-        WorkspaceRow(workspace: regularWorkspace, agent: nil)
+        Text("Workspace with sessions:").font(.caption).foregroundColor(.secondary)
+        WorkspaceRow(
+            workspace: regularWorkspace,
+            agent: nil,
+            sessionCount: 3,
+            onShowSessionHistory: { print("Show history") }
+        )
         
         Divider()
         
@@ -112,6 +149,6 @@ public struct WorkspaceRow: View {
         WorkspaceRow(workspace: worktreeWorkspace, agent: nil)
     }
     .padding()
-    .frame(width: 300)
+    .frame(width: 350)
 }
 #endif

@@ -12,6 +12,18 @@ public struct SidebarView: View {
     /// Whether the new workspace sheet is showing
     @State private var showingNewWorkspace: Bool = false
     
+    /// Workspace currently showing session history
+    @State private var sessionHistoryWorkspace: Workspace?
+    
+    /// Session counts for each workspace path
+    @State private var sessionCounts: [String: Int] = [:]
+    
+    /// Session storage for loading session data
+    private let sessionStorage = SessionStorage()
+    
+    /// Callback when a session should be resumed
+    var onResumeSession: ((Workspace, String) -> Void)?
+    
     private var activeAgents: [Agent] {
         agentManager.getAllAgents().filter { $0.status == .active || $0.status == .connecting }
     }
@@ -23,8 +35,12 @@ public struct SidebarView: View {
             .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
     }
     
-    public init(selectedWorkspaceId: Binding<UUID?>) {
+    public init(
+        selectedWorkspaceId: Binding<UUID?>,
+        onResumeSession: ((Workspace, String) -> Void)? = nil
+    ) {
         self._selectedWorkspaceId = selectedWorkspaceId
+        self.onResumeSession = onResumeSession
     }
     
     public var body: some View {
@@ -49,8 +65,15 @@ public struct SidebarView: View {
                         .font(.caption)
                 } else {
                     ForEach(recentWorkspaces) { workspace in
-                        WorkspaceRow(workspace: workspace, agent: nil)
-                            .tag(workspace.id)
+                        WorkspaceRow(
+                            workspace: workspace,
+                            agent: nil,
+                            sessionCount: sessionCounts[workspace.path.path],
+                            onShowSessionHistory: {
+                                sessionHistoryWorkspace = workspace
+                            }
+                        )
+                        .tag(workspace.id)
                     }
                 }
             }
@@ -65,8 +88,66 @@ public struct SidebarView: View {
             NewWorkspaceSheet { workspace in
                 workspaces.append(workspace)
                 selectedWorkspaceId = workspace.id
+                // Refresh session counts after adding workspace
+                refreshSessionCounts()
             }
         }
+        .sheet(item: $sessionHistoryWorkspace) { workspace in
+            SessionHistorySheet(
+                workspace: workspace,
+                sessionStorage: sessionStorage,
+                onResumeSession: { sessionId in
+                    sessionHistoryWorkspace = nil
+                    onResumeSession?(workspace, sessionId)
+                }
+            )
+        }
+        .onAppear {
+            refreshSessionCounts()
+        }
+    }
+    
+    /// Refresh session counts for all workspaces
+    private func refreshSessionCounts() {
+        Task {
+            var counts: [String: Int] = [:]
+            for workspace in workspaces {
+                let sessions = sessionStorage.getSessionsForWorkspace(path: workspace.path)
+                counts[workspace.path.path] = sessions.count
+            }
+            await MainActor.run {
+                sessionCounts = counts
+            }
+        }
+    }
+}
+
+/// Sheet wrapper for SessionHistoryView
+private struct SessionHistorySheet: View {
+    let workspace: Workspace
+    let sessionStorage: SessionStorage
+    let onResumeSession: (String) -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            SessionHistoryView(
+                workspacePath: workspace.path,
+                sessionStorage: sessionStorage,
+                onSelectSession: onResumeSession
+            )
+            .navigationTitle("Session History")
+            .navigationSubtitle(workspace.name)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 400, minHeight: 300)
     }
 }
 
