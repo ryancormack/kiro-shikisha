@@ -1,0 +1,93 @@
+import Foundation
+#if canImport(Observation)
+import Observation
+#endif
+
+/// Current operational status of an agent
+public enum AgentStatus: String, Codable, Sendable {
+    /// Agent is idle, not processing any requests
+    case idle
+    /// Agent is connecting to the ACP process
+    case connecting
+    /// Agent is actively processing a request
+    case active
+    /// Agent encountered an error
+    case error
+}
+
+/// An AI agent operating on a workspace
+/// Note: ACPConnection is managed separately by AgentManager to avoid circular dependencies
+#if canImport(Observation)
+@Observable
+@MainActor
+public final class Agent: Identifiable {
+    /// Unique identifier for this agent
+    public let id: UUID
+    /// Human-readable name for this agent
+    public var name: String
+    /// The workspace this agent operates on
+    public let workspace: Workspace
+    /// Session ID for the ACP session (nil if not yet established)
+    public var sessionId: String?
+    /// Current status of the agent
+    public var status: AgentStatus
+    /// Chat message history
+    public var messages: [ChatMessage]
+    /// Currently active tool calls
+    public var activeToolCalls: [ToolCall]
+    /// Error message if status is .error
+    public var errorMessage: String?
+    
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        workspace: Workspace,
+        sessionId: String? = nil,
+        status: AgentStatus = .idle,
+        messages: [ChatMessage] = [],
+        activeToolCalls: [ToolCall] = [],
+        errorMessage: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.workspace = workspace
+        self.sessionId = sessionId
+        self.status = status
+        self.messages = messages
+        self.activeToolCalls = activeToolCalls
+        self.errorMessage = errorMessage
+    }
+}
+#else
+// Fallback for non-macOS platforms (Linux builds)
+public final class Agent: Identifiable {
+    public let id: UUID
+    public var name: String
+    public let workspace: Workspace
+    public var sessionId: String?
+    public var status: AgentStatus
+    public var messages: [ChatMessage]
+    public var activeToolCalls: [ToolCall]
+    public var errorMessage: String?
+    
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        workspace: Workspace,
+        sessionId: String? = nil,
+        status: AgentStatus = .idle,
+        messages: [ChatMessage] = [],
+        activeToolCalls: [ToolCall] = [],
+        errorMessage: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.workspace = workspace
+        self.sessionId = sessionId
+        self.status = status
+        self.messages = messages
+        self.activeToolCalls = activeToolCalls
+        self.errorMessage = errorMessage
+    }
+}
+#endif
