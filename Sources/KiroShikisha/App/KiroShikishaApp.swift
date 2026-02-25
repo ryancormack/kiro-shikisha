@@ -3,17 +3,13 @@ import SwiftUI
 
 @main
 struct KiroShikishaApp: App {
+    @State private var agentManager = AgentManager()
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainView()
+                .environment(agentManager)
         }
-    }
-}
-
-struct ContentView: View {
-    var body: some View {
-        Text("Kiro Shikisha")
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 #else
