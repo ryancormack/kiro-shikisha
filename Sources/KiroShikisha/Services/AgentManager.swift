@@ -474,6 +474,12 @@ public final class AgentManager {
         }
         
         // Try to decode as a notification (no "id" field)
+        // First, check if this is a Kiro extension notification
+        if let method = extractMethod(from: data), method.hasPrefix("_kiro.dev/") {
+            await handleKiroExtensionNotification(method: method, data: data, decoder: decoder, for: agent)
+            return
+        }
+        
         if let notification = try? decoder.decode(
             JSONRPCNotification<SessionUpdateNotification>.self,
             from: data
@@ -485,6 +491,43 @@ public final class AgentManager {
             }
         } else {
             print("[ACP] Unhandled message: \(raw.prefix(300))")
+        }
+    }
+    
+    private func extractMethod(from data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let method = json["method"] as? String else {
+            return nil
+        }
+        return method
+    }
+    
+    private func handleKiroExtensionNotification(method: String, data: Data, decoder: JSONDecoder, for agent: Agent) async {
+        switch method {
+        case "_kiro.dev/commands/available":
+            if let notification = try? decoder.decode(
+                JSONRPCNotification<KiroCommandsAvailableParams>.self,
+                from: data
+            ), let params = notification.params {
+                let commandNames = params.commands.map { $0.name }.joined(separator: ", ")
+                print("[ACP] Received Kiro commands: \(commandNames)")
+            } else {
+                print("[ACP] Received Kiro commands")
+            }
+            
+        case "_kiro.dev/mcp/server_init_failure":
+            if let notification = try? decoder.decode(
+                JSONRPCNotification<KiroMcpServerInitFailureParams>.self,
+                from: data
+            ), let params = notification.params {
+                print("[ACP] MCP server init failed: \(params.serverName) - \(params.error)")
+            } else {
+                print("[ACP] MCP server init failed: unknown")
+            }
+            
+        default:
+            // Catch-all for other _kiro.dev/* methods
+            print("[ACP] Kiro extension: \(method)")
         }
     }
     

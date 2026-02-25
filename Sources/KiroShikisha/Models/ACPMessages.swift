@@ -157,3 +157,50 @@ public struct ContentBlock: Codable, Sendable {
         ContentBlock(type: .image, data: data, mediaType: mediaType)
     }
 }
+
+// MARK: - Kiro Extension Notifications
+
+/// Parameters for _kiro.dev/commands/available notification
+public struct KiroCommandsAvailableParams: Codable, Sendable {
+    /// Session ID for which commands are available
+    public let sessionId: String
+    /// List of available commands
+    public let commands: [AvailableCommand]
+    
+    public init(sessionId: String, commands: [AvailableCommand]) {
+        self.sessionId = sessionId
+        self.commands = commands
+    }
+}
+
+/// An available command from Kiro extension
+public struct AvailableCommand: Codable, Sendable {
+    /// Name of the command
+    public let name: String
+    /// Description of the command
+    public let description: String
+    /// Optional metadata about the command
+    public let meta: JSONValue?
+    
+    public init(name: String, description: String, meta: JSONValue? = nil) {
+        self.name = name
+        self.description = description
+        self.meta = meta
+    }
+}
+
+/// Parameters for _kiro.dev/mcp/server_init_failure notification
+public struct KiroMcpServerInitFailureParams: Codable, Sendable {
+    /// Session ID where the failure occurred
+    public let sessionId: String
+    /// Name of the MCP server that failed to initialize
+    public let serverName: String
+    /// Error message describing the failure
+    public let error: String
+    
+    public init(sessionId: String, serverName: String, error: String) {
+        self.sessionId = sessionId
+        self.serverName = serverName
+        self.error = error
+    }
+}
