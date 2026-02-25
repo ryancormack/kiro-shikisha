@@ -6,6 +6,8 @@ struct FilesChangedView: View {
     let agent: Agent
     
     @State private var selectedFileId: UUID?
+    @State private var selectedFileChange: FileChange?
+    @State private var showingDiff = false
     
     var body: some View {
         if agent.fileChanges.isEmpty {
@@ -28,11 +30,20 @@ struct FilesChangedView: View {
                         ForEach(group.1) { fileChange in
                             FileChangeRow(fileChange: fileChange, isSelected: selectedFileId == fileChange.id)
                                 .tag(fileChange.id)
+                                .onTapGesture {
+                                    selectedFileChange = fileChange
+                                    showingDiff = true
+                                }
                         }
                     }
                 }
             }
             .listStyle(.sidebar)
+            .sheet(isPresented: $showingDiff) {
+                if let fileChange = selectedFileChange {
+                    DiffSheet(fileChange: fileChange, isPresented: $showingDiff)
+                }
+            }
         }
     }
     
@@ -98,6 +109,36 @@ struct FilesChangedView: View {
         case .other:
             return "questionmark.circle"
         }
+    }
+}
+
+/// Sheet view for displaying file diff
+struct DiffSheet: View {
+    let fileChange: FileChange
+    @Binding var isPresented: Bool
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Title bar with close button
+            HStack {
+                Text("Changes: \(fileChange.fileName)")
+                    .font(.headline)
+                Spacer()
+                Button(action: { isPresented = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding()
+            .background(Color(nsColor: .windowBackgroundColor))
+            
+            Divider()
+            
+            // Diff view
+            DiffView(fileChange: fileChange)
+        }
+        .frame(minWidth: 600, idealWidth: 800, minHeight: 400, idealHeight: 600)
     }
 }
 

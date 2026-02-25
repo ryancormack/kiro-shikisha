@@ -52,22 +52,6 @@ enum CodePanelTab: String, CaseIterable {
     }
 }
 
-/// Placeholder for terminal output view
-struct TerminalOutputView: View {
-    let agent: Agent
-    
-    var body: some View {
-        VStack {
-            Spacer()
-            Text("Terminal output will appear here")
-                .foregroundColor(.secondary)
-                .font(.caption)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
 #Preview {
     let workspace = Workspace(
         name: "Test Project",

@@ -14,8 +14,8 @@ public struct AgentView: View {
             ChatPanel(agent: agent)
                 .frame(minWidth: 300)
             
-            ToolCallsPanel(agent: agent)
-                .frame(minWidth: 200, idealWidth: 280, maxWidth: 400)
+            CodePanel(agent: agent)
+                .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
         }
         .navigationTitle(agent.name)
     }
@@ -162,11 +162,27 @@ struct ToolCallRow: View {
                 kind: .edit,
                 status: .inProgress,
                 content: "Adding new function..."
+            ),
+            ToolCall(
+                toolCallId: "3",
+                title: "swift build",
+                kind: .execute,
+                status: .completed,
+                content: "Build complete!"
+            )
+        ],
+        fileChanges: [
+            FileChange(
+                path: "Sources/main.swift",
+                oldContent: "let x = 1",
+                newContent: "let x = 2\nlet y = 3",
+                changeType: .modified,
+                toolCallId: "2"
             )
         ]
     )
     
     return AgentView(agent: agent)
-        .frame(width: 800, height: 600)
+        .frame(width: 900, height: 600)
 }
 #endif
