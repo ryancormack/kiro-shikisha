@@ -11,6 +11,7 @@ public enum AgentManagerError: Error, Sendable {
     case connectionFailed(String)
     case requestFailed(JSONRPCError)
     case platformNotSupported
+    case notAGitRepository
 }
 
 #if os(macOS)
@@ -205,6 +206,48 @@ public final class AgentManager {
         }
         
         try await sendSessionCancel(agentId: agentId, sessionId: sessionId)
+    }
+    
+    /// Start a new agent in a git worktree
+    /// - Parameters:
+    ///   - sourceWorkspace: The source workspace containing the git repository
+    ///   - branchName: The name for the new branch/worktree
+    ///   - worktreePath: Optional path for the worktree; if nil, creates next to source workspace
+    /// - Returns: The newly created and connected agent
+    public func startAgentInWorktree(
+        sourceWorkspace: Workspace,
+        branchName: String,
+        worktreePath: URL? = nil
+    ) async throws -> Agent {
+        // 1. Detect git repository at sourceWorkspace.path
+        let gitService = GitService()
+        guard let repo = try await gitService.detectGitRepository(at: sourceWorkspace.path) else {
+            throw AgentManagerError.notAGitRepository
+        }
+        
+        // 2. Determine worktree path (use provided or generate)
+        let targetPath = worktreePath ?? sourceWorkspace.path
+            .deletingLastPathComponent()
+            .appendingPathComponent("\(sourceWorkspace.name)-\(branchName)")
+        
+        // 3. Create worktree
+        let worktree = try await gitService.createWorktree(
+            repository: repo,
+            branch: branchName,
+            path: targetPath
+        )
+        
+        // 4. Create workspace linked to source
+        var newWorkspace = Workspace(
+            name: "\(sourceWorkspace.name) (\(branchName))",
+            path: worktree.path
+        )
+        newWorkspace.gitBranch = branchName
+        newWorkspace.gitWorktreePath = worktree.path
+        newWorkspace.sourceWorkspaceId = sourceWorkspace.id
+        
+        // 5. Start agent in new workspace
+        return try await startAgent(workspace: newWorkspace)
     }
     
     /// Handle a session update for an agent
@@ -514,6 +557,14 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
+    public func startAgentInWorktree(
+        sourceWorkspace: Workspace,
+        branchName: String,
+        worktreePath: URL? = nil
+    ) async throws -> Agent {
+        throw AgentManagerError.platformNotSupported
+    }
+    
     public func handleSessionUpdate(_ update: SessionUpdate, for agent: Agent) {
         // No-op on non-macOS
     }
@@ -554,6 +605,14 @@ public final class AgentManager {
     }
     
     public func cancelPrompt(agentId: UUID) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func startAgentInWorktree(
+        sourceWorkspace: Workspace,
+        branchName: String,
+        worktreePath: URL? = nil
+    ) async throws -> Agent {
         throw AgentManagerError.platformNotSupported
     }
     
