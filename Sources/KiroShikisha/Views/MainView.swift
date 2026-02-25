@@ -49,26 +49,6 @@ struct PlaceholderView: View {
     }
 }
 
-/// Temporary stub for AgentView until it's fully implemented in a later step
-struct AgentView: View {
-    let agent: Agent
-    
-    var body: some View {
-        VStack {
-            Text("Agent: \(agent.name)")
-                .font(.headline)
-            
-            Text("Workspace: \(agent.workspace.path.path)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            StatusBadge(status: agent.status, showLabel: true)
-                .padding(.top)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
 #Preview {
     MainView()
         .environment(AgentManager())

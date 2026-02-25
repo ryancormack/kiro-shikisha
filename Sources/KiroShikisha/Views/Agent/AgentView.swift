@@ -1,0 +1,172 @@
+#if os(macOS)
+import SwiftUI
+
+/// Main container view for a single agent with chat and tool calls panels
+public struct AgentView: View {
+    let agent: Agent
+    
+    public init(agent: Agent) {
+        self.agent = agent
+    }
+    
+    public var body: some View {
+        HSplitView {
+            ChatPanel(agent: agent)
+                .frame(minWidth: 300)
+            
+            ToolCallsPanel(agent: agent)
+                .frame(minWidth: 200, idealWidth: 280, maxWidth: 400)
+        }
+        .navigationTitle(agent.name)
+    }
+}
+
+/// Sidebar panel showing current and recent tool calls
+struct ToolCallsPanel: View {
+    let agent: Agent
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Tool Calls")
+                .font(.headline)
+                .padding()
+            
+            Divider()
+            
+            if agent.activeToolCalls.isEmpty {
+                VStack {
+                    Spacer()
+                    Text("No active tool calls")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                List {
+                    ForEach(agent.activeToolCalls, id: \.toolCallId) { toolCall in
+                        ToolCallRow(toolCall: toolCall)
+                    }
+                }
+                .listStyle(.plain)
+            }
+        }
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+}
+
+/// Row displaying a single tool call with status and details
+struct ToolCallRow: View {
+    let toolCall: ToolCall
+    
+    private var statusIcon: String {
+        switch toolCall.status {
+        case .pending:
+            return "clock"
+        case .inProgress:
+            return "arrow.triangle.2.circlepath"
+        case .completed:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "xmark.circle.fill"
+        }
+    }
+    
+    private var statusColor: Color {
+        switch toolCall.status {
+        case .pending:
+            return .secondary
+        case .inProgress:
+            return .blue
+        case .completed:
+            return .green
+        case .failed:
+            return .red
+        }
+    }
+    
+    private var kindIcon: String {
+        switch toolCall.kind {
+        case .read:
+            return "doc.text"
+        case .edit:
+            return "pencil"
+        case .delete:
+            return "trash"
+        case .move:
+            return "arrow.right.arrow.left"
+        case .search:
+            return "magnifyingglass"
+        case .execute:
+            return "terminal"
+        case .think:
+            return "brain"
+        case .fetch:
+            return "arrow.down.circle"
+        case .other:
+            return "questionmark.circle"
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: kindIcon)
+                    .foregroundColor(.secondary)
+                    .frame(width: 16)
+                
+                Text(toolCall.title)
+                    .font(.subheadline)
+                    .lineLimit(2)
+                
+                Spacer()
+                
+                Image(systemName: statusIcon)
+                    .foregroundColor(statusColor)
+            }
+            
+            if let content = toolCall.content, !content.isEmpty {
+                Text(content)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(3)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+#Preview {
+    let workspace = Workspace(
+        name: "Test Project",
+        path: URL(fileURLWithPath: "/Users/test/Projects/test-project")
+    )
+    let agent = Agent(
+        name: "Test Agent",
+        workspace: workspace,
+        status: .active,
+        messages: [
+            ChatMessage(role: .user, content: "Hello!"),
+            ChatMessage(role: .assistant, content: "Hi there!")
+        ],
+        activeToolCalls: [
+            ToolCall(
+                toolCallId: "1",
+                title: "Reading file.swift",
+                kind: .read,
+                status: .completed
+            ),
+            ToolCall(
+                toolCallId: "2",
+                title: "Editing main.swift",
+                kind: .edit,
+                status: .inProgress,
+                content: "Adding new function..."
+            )
+        ]
+    )
+    
+    return AgentView(agent: agent)
+        .frame(width: 800, height: 600)
+}
+#endif
