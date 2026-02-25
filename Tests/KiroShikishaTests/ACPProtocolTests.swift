@@ -100,4 +100,24 @@ final class ACPProtocolTests: XCTestCase {
         XCTAssertTrue(json.contains("\"method\":\"session.update\""))
         XCTAssertFalse(json.contains("\"id\""))
     }
+    
+    func testSessionPromptParamsEncoding() throws {
+        // Test that prompt is encoded as a direct array, not wrapped in {"content": [...]}
+        let params = SessionPromptParams(
+            sessionId: "sess_abc123",
+            content: [ContentBlock.text("Hello")]
+        )
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(params)
+        let json = String(data: data, encoding: .utf8)!
+        
+        // Verify prompt is a direct array (contains "prompt":[) not nested (would be "prompt":{"content":[)
+        XCTAssertTrue(json.contains("\"prompt\":["))
+        XCTAssertFalse(json.contains("\"content\":["), "prompt should not be wrapped in a content object")
+        XCTAssertTrue(json.contains("\"sessionId\":\"sess_abc123\""))
+        XCTAssertTrue(json.contains("\"type\":\"text\""))
+        XCTAssertTrue(json.contains("\"text\":\"Hello\""))
+    }
 }

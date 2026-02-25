@@ -102,18 +102,13 @@ public struct SessionLoadParams: Codable, Sendable {
 public struct SessionPromptParams: Codable, Sendable {
     /// Session ID
     public let sessionId: String
-    /// Prompt containing content blocks
-    public let prompt: PromptContent
+    /// Prompt content blocks (array of ContentBlock per ACP spec)
+    public let prompt: [ContentBlock]
     
     public init(sessionId: String, content: [ContentBlock]) {
         self.sessionId = sessionId
-        self.prompt = PromptContent(content: content)
+        self.prompt = content
     }
-}
-
-/// Prompt content wrapper
-public struct PromptContent: Codable, Sendable {
-    public let content: [ContentBlock]
 }
 
 /// Parameters for session/cancel method
