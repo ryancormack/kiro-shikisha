@@ -407,7 +407,8 @@ public final class AgentManager {
     
     private func startStreamingTask(for agent: Agent, connection: ACPConnection) {
         let task = Task { [weak self] in
-            await self?.handleStream(for: agent, connection: connection)
+            guard let self = self else { return }
+            await self.handleStream(for: agent, connection: connection)
         }
         streamingTasks[agent.id] = task
     }
