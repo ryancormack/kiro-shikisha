@@ -9,6 +9,9 @@ public struct SidebarView: View {
     /// Sample data for workspaces (in real app, would come from persistence)
     @State private var workspaces: [Workspace] = []
     
+    /// Whether the new workspace sheet is showing
+    @State private var showingNewWorkspace: Bool = false
+    
     private var activeAgents: [Agent] {
         agentManager.getAllAgents().filter { $0.status == .active || $0.status == .connecting }
     }
@@ -55,16 +58,15 @@ public struct SidebarView: View {
         .listStyle(.sidebar)
         .toolbar {
             ToolbarItem {
-                Button(action: addWorkspace) {
-                    Label("Add Workspace", systemImage: "plus")
-                }
+                NewWorkspaceButton(showingSheet: $showingNewWorkspace)
             }
         }
-    }
-    
-    private func addWorkspace() {
-        // TODO: Implement workspace creation sheet
-        // For now, this is a placeholder action
+        .sheet(isPresented: $showingNewWorkspace) {
+            NewWorkspaceSheet { workspace in
+                workspaces.append(workspace)
+                selectedWorkspaceId = workspace.id
+            }
+        }
     }
 }
 
