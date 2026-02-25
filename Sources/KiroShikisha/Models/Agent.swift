@@ -35,6 +35,8 @@ public final class Agent: Identifiable {
     public var messages: [ChatMessage]
     /// Currently active tool calls
     public var activeToolCalls: [ToolCall]
+    /// File changes made by this agent
+    public var fileChanges: [FileChange]
     /// Error message if status is .error
     public var errorMessage: String?
     
@@ -46,6 +48,7 @@ public final class Agent: Identifiable {
         status: AgentStatus = .idle,
         messages: [ChatMessage] = [],
         activeToolCalls: [ToolCall] = [],
+        fileChanges: [FileChange] = [],
         errorMessage: String? = nil
     ) {
         self.id = id
@@ -55,6 +58,7 @@ public final class Agent: Identifiable {
         self.status = status
         self.messages = messages
         self.activeToolCalls = activeToolCalls
+        self.fileChanges = fileChanges
         self.errorMessage = errorMessage
     }
 }
@@ -68,6 +72,7 @@ public final class Agent: Identifiable {
     public var status: AgentStatus
     public var messages: [ChatMessage]
     public var activeToolCalls: [ToolCall]
+    public var fileChanges: [FileChange]
     public var errorMessage: String?
     
     public init(
@@ -78,6 +83,7 @@ public final class Agent: Identifiable {
         status: AgentStatus = .idle,
         messages: [ChatMessage] = [],
         activeToolCalls: [ToolCall] = [],
+        fileChanges: [FileChange] = [],
         errorMessage: String? = nil
     ) {
         self.id = id
@@ -87,6 +93,7 @@ public final class Agent: Identifiable {
         self.status = status
         self.messages = messages
         self.activeToolCalls = activeToolCalls
+        self.fileChanges = fileChanges
         self.errorMessage = errorMessage
     }
 }
