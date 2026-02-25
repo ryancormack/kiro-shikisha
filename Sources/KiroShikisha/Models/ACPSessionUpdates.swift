@@ -143,6 +143,95 @@ public struct ToolCall: Codable, Sendable {
     }
 }
 
+// MARK: - Tool Call Content Types
+
+/// Content type discriminator for tool call content
+public enum ToolCallContentType: String, Codable, Sendable {
+    case content
+    case diff
+    case terminal
+}
+
+/// Base protocol for tool call content
+public enum ToolCallContent: Codable, Sendable {
+    /// Text or image content
+    case content(TextContent)
+    /// Diff content showing file changes
+    case diff(DiffContent)
+    /// Terminal output content
+    case terminal(TerminalContent)
+    
+    private enum CodingKeys: String, CodingKey {
+        case type
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(ToolCallContentType.self, forKey: .type)
+        
+        switch type {
+        case .content:
+            self = .content(try TextContent(from: decoder))
+        case .diff:
+            self = .diff(try DiffContent(from: decoder))
+        case .terminal:
+            self = .terminal(try TerminalContent(from: decoder))
+        }
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .content(let textContent):
+            try textContent.encode(to: encoder)
+        case .diff(let diffContent):
+            try diffContent.encode(to: encoder)
+        case .terminal(let terminalContent):
+            try terminalContent.encode(to: encoder)
+        }
+    }
+}
+
+/// Text content for tool calls
+public struct TextContent: Codable, Sendable {
+    public let type: ToolCallContentType
+    public let text: String?
+    
+    public init(text: String?) {
+        self.type = .content
+        self.text = text
+    }
+}
+
+/// Diff content showing file changes
+public struct DiffContent: Codable, Sendable {
+    public let type: ToolCallContentType
+    /// Path to the file being changed
+    public let path: String
+    /// Original text before the change (nil for new files)
+    public let oldText: String?
+    /// New text after the change
+    public let newText: String
+    
+    public init(path: String, oldText: String?, newText: String) {
+        self.type = .diff
+        self.path = path
+        self.oldText = oldText
+        self.newText = newText
+    }
+}
+
+/// Terminal output content
+public struct TerminalContent: Codable, Sendable {
+    public let type: ToolCallContentType
+    /// Terminal session identifier
+    public let terminalId: String
+    
+    public init(terminalId: String) {
+        self.type = .terminal
+        self.terminalId = terminalId
+    }
+}
+
 // MARK: - Tool Call Update
 
 /// Update to an existing tool call
@@ -153,14 +242,25 @@ public struct ToolCallUpdate: Codable, Sendable {
     public let toolCallId: String
     /// New status
     public let status: ToolCallStatus
-    /// Updated content
+    /// Updated string content (legacy)
     public let content: String?
+    /// Structured tool call content
+    public let toolContent: ToolCallContent?
     
-    public init(toolCallId: String, status: ToolCallStatus, content: String? = nil) {
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case toolCallId
+        case status
+        case content
+        case toolContent
+    }
+    
+    public init(toolCallId: String, status: ToolCallStatus, content: String? = nil, toolContent: ToolCallContent? = nil) {
         self.type = .toolCallUpdate
         self.toolCallId = toolCallId
         self.status = status
         self.content = content
+        self.toolContent = toolContent
     }
 }
 

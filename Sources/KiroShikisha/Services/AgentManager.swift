@@ -426,6 +426,34 @@ public final class AgentManager {
             )
             agent.activeToolCalls[index] = updatedCall
         }
+        
+        // Extract file changes from diff content
+        if let toolContent = update.toolContent {
+            switch toolContent {
+            case .diff(let diffContent):
+                let changeType: FileChangeType
+                if diffContent.oldText == nil {
+                    changeType = .created
+                } else if diffContent.newText.isEmpty {
+                    changeType = .deleted
+                } else {
+                    changeType = .modified
+                }
+                
+                let fileChange = FileChange(
+                    path: diffContent.path,
+                    oldContent: diffContent.oldText,
+                    newContent: diffContent.newText,
+                    changeType: changeType,
+                    toolCallId: update.toolCallId
+                )
+                agent.fileChanges.append(fileChange)
+                
+            case .content, .terminal:
+                // These content types don't represent file changes
+                break
+            }
+        }
     }
     
     private func handleTurnEnd(_ turnEnd: TurnEnd, for agent: Agent) {
