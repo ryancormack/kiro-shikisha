@@ -11,6 +11,9 @@ struct KiroShikishaApp: App {
     @State private var showDashboard: Bool = false
     @State private var showNewWorkspaceSheet: Bool = false
     
+    // Environment for scene lifecycle
+    @Environment(\.scenePhase) var scenePhase
+    
     var body: some Scene {
         WindowGroup {
             Group {
@@ -31,6 +34,20 @@ struct KiroShikishaApp: App {
             .onChange(of: appSettings.kirocliPath) { _, _ in
                 // Update agent manager when settings change
                 agentManager.kirocliPath = appSettings.expandedKirocliPath
+            }
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                if newPhase == .background {
+                    // App going to background - stop all agents
+                    Task {
+                        await agentManager.stopAllAgents()
+                    }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                // App is about to quit - gracefully stop all agents
+                Task {
+                    await agentManager.stopAllAgents()
+                }
             }
         }
         .commands {

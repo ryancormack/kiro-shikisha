@@ -166,6 +166,15 @@ public final class AgentManager {
         agents.removeValue(forKey: id)
     }
     
+    /// Stop all agents gracefully
+    /// Iterates through all agents and stops each one
+    public func stopAllAgents() async {
+        let agentIds = Array(agents.keys)
+        for id in agentIds {
+            await stopAgent(id: id)
+        }
+    }
+    
     /// Get an agent by ID
     /// - Parameter id: The agent ID
     /// - Returns: The agent if found
@@ -613,6 +622,10 @@ public final class AgentManager {
         // No-op on non-macOS
     }
     
+    public func stopAllAgents() async {
+        // No-op on non-macOS
+    }
+    
     public func getAgent(id: UUID) -> Agent? {
         return nil
     }
@@ -670,6 +683,10 @@ public final class AgentManager {
     }
     
     public func stopAgent(id: UUID) async {
+        // No-op on non-macOS
+    }
+    
+    public func stopAllAgents() async {
         // No-op on non-macOS
     }
     
