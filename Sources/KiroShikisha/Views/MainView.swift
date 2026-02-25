@@ -6,6 +6,8 @@ public struct MainView: View {
     @Environment(AgentManager.self) var agentManager
     @Environment(AppStateManager.self) var appStateManager
     
+    @State private var showDashboard: Bool = false
+    
     private var selectedAgent: Agent? {
         guard let workspaceId = appStateManager.selectedWorkspaceId else { return nil }
         return agentManager.getAllAgents().first { $0.workspace.id == workspaceId }
@@ -31,13 +33,29 @@ public struct MainView: View {
                 }
             )
         } detail: {
-            if let agent = selectedAgent {
+            if showDashboard {
+                DashboardView { agent in
+                    // Switch to agent detail view when selecting from dashboard
+                    stateManager.selectedWorkspaceId = agent.workspace.id
+                    showDashboard = false
+                }
+            } else if let agent = selectedAgent {
                 AgentView(agent: agent)
             } else {
                 PlaceholderView()
             }
         }
         .frame(minWidth: 800, minHeight: 600)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showDashboard.toggle()
+                } label: {
+                    Image(systemName: showDashboard ? "person.fill" : "rectangle.grid.2x2")
+                        .help(showDashboard ? "Show Single Agent" : "Show Dashboard")
+                }
+            }
+        }
         .onChange(of: appStateManager.selectedWorkspaceId) { _, newValue in
             // Save state when selection changes
             appStateManager.saveState()
