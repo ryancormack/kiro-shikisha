@@ -6,8 +6,14 @@ public struct SidebarView: View {
     @Binding var selectedWorkspaceId: UUID?
     @Environment(AgentManager.self) var agentManager
     
-    /// Sample data for workspaces (in real app, would come from persistence)
-    @State private var workspaces: [Workspace] = []
+    /// Workspaces from AppStateManager
+    let workspaces: [Workspace]
+    
+    /// Callback when a workspace is created
+    var onAddWorkspace: ((Workspace) -> Void)?
+    
+    /// Callback when a workspace should be removed
+    var onRemoveWorkspace: ((UUID) -> Void)?
     
     /// Whether the new workspace sheet is showing
     @State private var showingNewWorkspace: Bool = false
@@ -37,9 +43,15 @@ public struct SidebarView: View {
     
     public init(
         selectedWorkspaceId: Binding<UUID?>,
+        workspaces: [Workspace] = [],
+        onAddWorkspace: ((Workspace) -> Void)? = nil,
+        onRemoveWorkspace: ((UUID) -> Void)? = nil,
         onResumeSession: ((Workspace, String) -> Void)? = nil
     ) {
         self._selectedWorkspaceId = selectedWorkspaceId
+        self.workspaces = workspaces
+        self.onAddWorkspace = onAddWorkspace
+        self.onRemoveWorkspace = onRemoveWorkspace
         self.onResumeSession = onResumeSession
     }
     
@@ -86,7 +98,7 @@ public struct SidebarView: View {
         }
         .sheet(isPresented: $showingNewWorkspace) {
             NewWorkspaceSheet { workspace in
-                workspaces.append(workspace)
+                onAddWorkspace?(workspace)
                 selectedWorkspaceId = workspace.id
                 // Refresh session counts after adding workspace
                 refreshSessionCounts()
@@ -103,6 +115,9 @@ public struct SidebarView: View {
             )
         }
         .onAppear {
+            refreshSessionCounts()
+        }
+        .onChange(of: workspaces) { _, _ in
             refreshSessionCounts()
         }
     }
@@ -152,8 +167,11 @@ private struct SessionHistorySheet: View {
 }
 
 #Preview {
-    SidebarView(selectedWorkspaceId: .constant(nil))
-        .environment(AgentManager())
-        .frame(width: 250)
+    SidebarView(
+        selectedWorkspaceId: .constant(nil),
+        workspaces: []
+    )
+    .environment(AgentManager())
+    .frame(width: 250)
 }
 #endif

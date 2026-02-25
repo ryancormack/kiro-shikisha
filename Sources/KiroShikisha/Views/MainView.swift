@@ -3,19 +3,33 @@ import SwiftUI
 
 /// Main application view with sidebar navigation and agent detail view
 public struct MainView: View {
-    @State private var selectedWorkspaceId: UUID?
     @Environment(AgentManager.self) var agentManager
+    @Environment(AppStateManager.self) var appStateManager
     
     private var selectedAgent: Agent? {
-        guard let workspaceId = selectedWorkspaceId else { return nil }
+        guard let workspaceId = appStateManager.selectedWorkspaceId else { return nil }
         return agentManager.getAllAgents().first { $0.workspace.id == workspaceId }
     }
     
     public init() {}
     
     public var body: some View {
+        @Bindable var stateManager = appStateManager
+        
         NavigationSplitView {
-            SidebarView(selectedWorkspaceId: $selectedWorkspaceId)
+            SidebarView(
+                selectedWorkspaceId: $stateManager.selectedWorkspaceId,
+                workspaces: appStateManager.workspaces,
+                onAddWorkspace: { workspace in
+                    appStateManager.addWorkspace(workspace)
+                },
+                onRemoveWorkspace: { id in
+                    appStateManager.removeWorkspace(id: id)
+                },
+                onResumeSession: { workspace, sessionId in
+                    appStateManager.updateSessionForWorkspace(workspace.id, sessionId: sessionId)
+                }
+            )
         } detail: {
             if let agent = selectedAgent {
                 AgentView(agent: agent)
@@ -24,6 +38,10 @@ public struct MainView: View {
             }
         }
         .frame(minWidth: 800, minHeight: 600)
+        .onChange(of: appStateManager.selectedWorkspaceId) { _, newValue in
+            // Save state when selection changes
+            appStateManager.saveState()
+        }
     }
 }
 
@@ -52,5 +70,6 @@ struct PlaceholderView: View {
 #Preview {
     MainView()
         .environment(AgentManager())
+        .environment(AppStateManager())
 }
 #endif

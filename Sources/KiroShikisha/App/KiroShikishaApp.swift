@@ -4,11 +4,13 @@ import SwiftUI
 @main
 struct KiroShikishaApp: App {
     @State private var agentManager = AgentManager()
+    @State private var appStateManager = AppStateManager()
     
     var body: some Scene {
         WindowGroup {
             MainView()
                 .environment(agentManager)
+                .environment(appStateManager)
         }
     }
 }
