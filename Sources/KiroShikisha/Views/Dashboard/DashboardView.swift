@@ -21,7 +21,7 @@ public struct DashboardView: View {
     
     public var body: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header with Quick Actions
             HStack {
                 Text("Active Agents")
                     .font(.title2)
@@ -29,9 +29,10 @@ public struct DashboardView: View {
                 
                 Spacer()
                 
-                Text("\(activeAgents.count) agent\(activeAgents.count == 1 ? "" : "s")")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                QuickActionsView(
+                    onStopAll: stopAllAgents,
+                    onRefreshAll: refreshAllAgents
+                )
             }
             .padding()
             
@@ -41,15 +42,23 @@ public struct DashboardView: View {
             if activeAgents.isEmpty {
                 emptyStateView
             } else {
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(activeAgents, id: \.id) { agent in
-                            AgentCard(agent: agent) {
-                                onSelectAgent(agent)
+                HSplitView {
+                    // Agent cards grid
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 16) {
+                            ForEach(activeAgents, id: \.id) { agent in
+                                AgentCard(agent: agent) {
+                                    onSelectAgent(agent)
+                                }
                             }
                         }
+                        .padding()
                     }
-                    .padding()
+                    .frame(minWidth: 400)
+                    
+                    // Activity feed
+                    ActivityFeed(events: agentManager.activityEvents)
+                        .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
                 }
             }
         }
@@ -78,6 +87,22 @@ public struct DashboardView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    /// Stops all active agents
+    private func stopAllAgents() async {
+        let agentIds = activeAgents.map { $0.id }
+        for id in agentIds {
+            await agentManager.stopAgent(id: id)
+        }
+    }
+    
+    /// Refreshes all agents (reconnects them)
+    private func refreshAllAgents() async {
+        // For now, this is a placeholder that would reconnect agents
+        // In a real implementation, this would disconnect and reconnect each agent
+        // For now, we just simulate a delay
+        try? await Task.sleep(for: .milliseconds(500))
     }
 }
 

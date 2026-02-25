@@ -26,6 +26,12 @@ public final class AgentManager {
     /// Path to the kiro-cli executable
     public var kirocliPath: String
     
+    /// Activity events across all agents
+    public private(set) var activityEvents: [ActivityEvent] = []
+    
+    /// Maximum number of activity events to retain
+    private let maxActivityEvents = 100
+    
     /// Active ACP connections indexed by agent ID
     private var connections: [UUID: ACPConnection] = [:]
     
@@ -40,6 +46,22 @@ public final class AgentManager {
     
     public init(kirocliPath: String = "/usr/local/bin/kiro-cli") {
         self.kirocliPath = kirocliPath
+    }
+    
+    // MARK: - Activity Event Management
+    
+    /// Adds an activity event to the stream
+    /// - Parameter event: The event to add
+    public func addActivityEvent(_ event: ActivityEvent) {
+        activityEvents.append(event)
+        if activityEvents.count > maxActivityEvents {
+            activityEvents.removeFirst()
+        }
+    }
+    
+    /// Clears all activity events
+    public func clearActivityEvents() {
+        activityEvents.removeAll()
     }
     
     // MARK: - Public Methods
@@ -181,6 +203,15 @@ public final class AgentManager {
         )
         agent.messages.append(userMessage)
         agent.status = .active
+        
+        // Add activity event for user message
+        let messagePreview = prompt.prefix(80)
+        addActivityEvent(ActivityEvent(
+            agentId: agent.id,
+            agentName: agent.name,
+            eventType: .message,
+            description: "User: \(messagePreview)\(prompt.count > 80 ? "..." : "")"
+        ))
         
         // Send prompt request (response comes via streaming)
         try await sendSessionPrompt(
@@ -384,6 +415,12 @@ public final class AgentManager {
             await MainActor.run {
                 agent.status = .error
                 agent.errorMessage = error.localizedDescription
+                self.addActivityEvent(ActivityEvent(
+                    agentId: agent.id,
+                    agentName: agent.name,
+                    eventType: .error,
+                    description: "Connection error: \(error.localizedDescription)"
+                ))
             }
         }
     }
@@ -452,6 +489,14 @@ public final class AgentManager {
             toolCallIds.append(toolCall.toolCallId)
             agent.messages[index].toolCallIds = toolCallIds
         }
+        
+        // Add activity event for tool call
+        addActivityEvent(ActivityEvent(
+            agentId: agent.id,
+            agentName: agent.name,
+            eventType: .toolCall,
+            description: "Tool: \(toolCall.title)"
+        ))
     }
     
     private func handleToolCallUpdate(_ update: ToolCallUpdate, for agent: Agent) {
@@ -503,14 +548,32 @@ public final class AgentManager {
         // Clear active tool calls
         agent.activeToolCalls.removeAll()
         
-        // Update agent status
+        // Update agent status and add activity event
         switch turnEnd.reason {
         case .endTurn, .maxTurns:
             agent.status = .idle
+            addActivityEvent(ActivityEvent(
+                agentId: agent.id,
+                agentName: agent.name,
+                eventType: .complete,
+                description: "Task completed"
+            ))
         case .cancelled:
             agent.status = .idle
+            addActivityEvent(ActivityEvent(
+                agentId: agent.id,
+                agentName: agent.name,
+                eventType: .complete,
+                description: "Task cancelled"
+            ))
         case .error:
             agent.status = .error
+            addActivityEvent(ActivityEvent(
+                agentId: agent.id,
+                agentName: agent.name,
+                eventType: .error,
+                description: "Error occurred during task"
+            ))
         }
     }
 }
@@ -524,9 +587,18 @@ public final class AgentManager {
 public final class AgentManager {
     public private(set) var agents: [UUID: Agent] = [:]
     public var kirocliPath: String
+    public private(set) var activityEvents: [ActivityEvent] = []
     
     public init(kirocliPath: String = "/usr/local/bin/kiro-cli") {
         self.kirocliPath = kirocliPath
+    }
+    
+    public func addActivityEvent(_ event: ActivityEvent) {
+        // No-op on non-macOS
+    }
+    
+    public func clearActivityEvents() {
+        // No-op on non-macOS
     }
     
     public func startAgent(workspace: Workspace) async throws -> Agent {
@@ -575,9 +647,18 @@ public final class AgentManager {
 public final class AgentManager {
     public private(set) var agents: [UUID: Agent] = [:]
     public var kirocliPath: String
+    public private(set) var activityEvents: [ActivityEvent] = []
     
     public init(kirocliPath: String = "/usr/local/bin/kiro-cli") {
         self.kirocliPath = kirocliPath
+    }
+    
+    public func addActivityEvent(_ event: ActivityEvent) {
+        // No-op on non-macOS
+    }
+    
+    public func clearActivityEvents() {
+        // No-op on non-macOS
     }
     
     public func startAgent(workspace: Workspace) async throws -> Agent {
