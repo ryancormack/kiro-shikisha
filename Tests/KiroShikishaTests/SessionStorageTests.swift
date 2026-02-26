@@ -397,4 +397,117 @@ final class SessionStorageTests: XCTestCase {
         
         XCTAssertFalse(sessionStorage.sessionExists(sessionId: sessionId))
     }
+    
+    // MARK: - Path Matching Tests
+    
+    func testGetSessionsForWorkspace_MatchingPath() throws {
+        let workspacePath = "/Users/test/myproject"
+        let sessionId = "matching-path-session"
+        let metadataJSON = """
+        {
+            "session_id": "\(sessionId)",
+            "cwd": "\(workspacePath)"
+        }
+        """
+        try metadataJSON.data(using: .utf8)!.write(to: tempDirectory.appendingPathComponent("\(sessionId).json"))
+        
+        let sessions = sessionStorage.getSessionsForWorkspace(path: URL(fileURLWithPath: workspacePath))
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.sessionId, sessionId)
+    }
+    
+    func testGetSessionsForWorkspace_NonMatchingPath() throws {
+        // Session created in worktree should not appear under main workspace
+        let mainWorkspacePath = "/Users/test/myproject"
+        let worktreePath = "/Users/test/myproject-feature"
+        
+        let sessionId = "worktree-session"
+        let metadataJSON = """
+        {
+            "session_id": "\(sessionId)",
+            "cwd": "\(worktreePath)"
+        }
+        """
+        try metadataJSON.data(using: .utf8)!.write(to: tempDirectory.appendingPathComponent("\(sessionId).json"))
+        
+        // Should NOT find the worktree session when searching for main workspace
+        let sessions = sessionStorage.getSessionsForWorkspace(path: URL(fileURLWithPath: mainWorkspacePath))
+        XCTAssertEqual(sessions.count, 0, "Worktree session should not appear under main workspace")
+    }
+    
+    func testGetSessionsForWorkspace_CanonicalPathComparison() throws {
+        // Test that paths are canonicalized - trailing slashes, extra components, etc.
+        let sessionId = "canonical-test"
+        let metadataJSON = """
+        {
+            "session_id": "\(sessionId)",
+            "cwd": "/tmp/test-project"
+        }
+        """
+        try metadataJSON.data(using: .utf8)!.write(to: tempDirectory.appendingPathComponent("\(sessionId).json"))
+        
+        // Path with trailing slash should still match
+        let sessions = sessionStorage.getSessionsForWorkspace(path: URL(fileURLWithPath: "/tmp/test-project/"))
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.sessionId, sessionId)
+    }
+    
+    func testSessionMatchesWorkspacePath_Matching() throws {
+        let sessionId = "match-test"
+        let path = "/Users/test/workspace"
+        let metadataJSON = """
+        {
+            "session_id": "\(sessionId)",
+            "cwd": "\(path)"
+        }
+        """
+        try metadataJSON.data(using: .utf8)!.write(to: tempDirectory.appendingPathComponent("\(sessionId).json"))
+        
+        XCTAssertTrue(sessionStorage.sessionMatchesWorkspacePath(sessionId: sessionId, workspacePath: URL(fileURLWithPath: path)))
+    }
+    
+    func testSessionMatchesWorkspacePath_NotMatching() throws {
+        let sessionId = "no-match-test"
+        let metadataJSON = """
+        {
+            "session_id": "\(sessionId)",
+            "cwd": "/Users/test/workspace-A"
+        }
+        """
+        try metadataJSON.data(using: .utf8)!.write(to: tempDirectory.appendingPathComponent("\(sessionId).json"))
+        
+        // Different path should not match
+        XCTAssertFalse(sessionStorage.sessionMatchesWorkspacePath(sessionId: sessionId, workspacePath: URL(fileURLWithPath: "/Users/test/workspace-B")))
+    }
+    
+    func testSessionMatchesWorkspacePath_SessionNotFound() throws {
+        XCTAssertFalse(sessionStorage.sessionMatchesWorkspacePath(sessionId: "nonexistent", workspacePath: URL(fileURLWithPath: "/any/path")))
+    }
+    
+    func testCanonicalPath() throws {
+        // Test the canonical path helper
+        let path = "/tmp/test/../test/./project/"
+        let canonical = sessionStorage.canonicalPath(path)
+        
+        // After resolving . and .. and removing trailing slash
+        XCTAssertTrue(canonical.hasSuffix("/test/project") || canonical.hasSuffix("/tmp/test/project"), "Expected path normalization, got: \(canonical)")
+        XCTAssertFalse(canonical.hasSuffix("/"), "Canonical path should not have trailing slash")
+    }
+    
+    func testCwdCanonical_Property() throws {
+        let sessionId = "canonical-prop-test"
+        let metadataJSON = """
+        {
+            "session_id": "\(sessionId)",
+            "cwd": "/tmp/test-workspace"
+        }
+        """
+        try metadataJSON.data(using: .utf8)!.write(to: tempDirectory.appendingPathComponent("\(sessionId).json"))
+        
+        let metadata = try sessionStorage.getSessionMetadata(sessionId: sessionId)
+        XCTAssertNotNil(metadata)
+        XCTAssertNotNil(metadata?.cwdCanonical)
+        // cwdCanonical should be a non-empty resolved path
+        XCTAssertFalse(metadata!.cwdCanonical.isEmpty)
+    }
 }

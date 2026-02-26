@@ -39,9 +39,9 @@ struct KiroShikishaApp: App {
                 agentManager.kirocliPath = appSettings.expandedKirocliPath
                 // Kill only our own kiro-cli processes from previous runs
                 killOwnedProcesses()
-                // Auto-reconnect saved sessions
+                // Auto-reconnect saved sessions (with path verification)
                 for workspace in appStateManager.workspaces {
-                    if let sessionId = appStateManager.getLastSessionForWorkspace(workspace.id) {
+                    if let sessionId = appStateManager.getValidSessionForWorkspace(workspace.id, workspacePath: workspace.path) {
                         Task {
                             do {
                                 let _ = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
@@ -65,9 +65,17 @@ struct KiroShikishaApp: App {
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                 // Save active sessions and PIDs for reconnect on next launch
+                let sessionStorage = SessionStorage()
                 for agent in agentManager.getAllAgents() {
                     if let sessionId = agent.sessionId?.value {
-                        appStateManager.updateSessionForWorkspace(agent.workspace.id, sessionId: sessionId)
+                        // Get the session's cwd for path verification on next load
+                        let cwd: String
+                        if let metadata = try? sessionStorage.getSessionMetadata(sessionId: sessionId) {
+                            cwd = metadata.cwd
+                        } else {
+                            cwd = agent.workspace.path.path
+                        }
+                        appStateManager.updateSessionForWorkspace(agent.workspace.id, sessionId: sessionId, cwd: cwd)
                     }
                 }
                 // Save PIDs so we can kill only our processes on next launch

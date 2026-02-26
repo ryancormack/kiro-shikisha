@@ -41,7 +41,15 @@ public struct MainView: View {
                     appStateManager.removeWorkspace(id: id)
                 },
                 onResumeSession: { workspace, sessionId in
-                    appStateManager.updateSessionForWorkspace(workspace.id, sessionId: sessionId)
+                    // Get the session's cwd for proper association
+                    let sessionStorage = SessionStorage()
+                    let cwd: String
+                    if let metadata = try? sessionStorage.getSessionMetadata(sessionId: sessionId) {
+                        cwd = metadata.cwd
+                    } else {
+                        cwd = workspace.path.path
+                    }
+                    appStateManager.updateSessionForWorkspace(workspace.id, sessionId: sessionId, cwd: cwd)
                     appStateManager.selectedWorkspaceId = workspace.id
                     Task {
                         do {

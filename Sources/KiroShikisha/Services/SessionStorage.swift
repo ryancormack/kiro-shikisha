@@ -28,6 +28,11 @@ public struct SessionMetadata: Codable, Identifiable, Sendable {
         sessionName != nil && !(sessionName?.isEmpty ?? true)
     }
     
+    /// Canonical path of cwd for comparison - resolves symlinks and standardizes the path
+    public var cwdCanonical: String {
+        URL(fileURLWithPath: cwd).resolvingSymlinksInPath().standardizedFileURL.path
+    }
+    
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
@@ -135,14 +140,34 @@ public final class SessionStorage: Sendable {
     /// - Returns: Array of session metadata for sessions matching the workspace
     public func getSessionsForWorkspace(path: URL) -> [SessionMetadata] {
         let allSessions = listAllSessions()
-        let workspacePath = path.path
+        let workspaceCanonical = canonicalPath(path.path)
         
         return allSessions.filter { session in
-            // Normalize paths for comparison
-            let sessionPath = URL(fileURLWithPath: session.cwd).standardizedFileURL.path
-            let targetPath = URL(fileURLWithPath: workspacePath).standardizedFileURL.path
-            return sessionPath == targetPath
+            // Use canonical paths for comparison to handle symlinks and standardization
+            return session.cwdCanonical == workspaceCanonical
         }
+    }
+    
+    /// Verify if a session's cwd matches a given workspace path using canonical comparison
+    /// - Parameters:
+    ///   - sessionId: The session ID to check
+    ///   - workspacePath: The workspace path to compare against
+    /// - Returns: True if the session's cwd matches the workspace path
+    public func sessionMatchesWorkspacePath(sessionId: String, workspacePath: URL) -> Bool {
+        guard let metadata = try? getSessionMetadata(sessionId: sessionId) else {
+            return false
+        }
+        let workspaceCanonical = canonicalPath(workspacePath.path)
+        return metadata.cwdCanonical == workspaceCanonical
+    }
+    
+    // MARK: - Path Helpers
+    
+    /// Convert a path string to its canonical form (resolved symlinks and standardized)
+    /// - Parameter path: The path string to canonicalize
+    /// - Returns: The canonical path string
+    public func canonicalPath(_ path: String) -> String {
+        return URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
     }
     
     /// Load session events from a JSONL file
