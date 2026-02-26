@@ -1,13 +1,12 @@
 import Foundation
+import ACPModel
+import ACP
 
 /// Errors that can occur during ACP connection operations
 public enum ACPConnectionError: Error, Sendable, LocalizedError {
     case notConnected
     case processSpawnFailed(String)
     case processTerminated(Int32)
-    case encodingFailed
-    case decodingFailed
-    case streamClosed
     case platformNotSupported
     
     public var errorDescription: String? {
@@ -15,9 +14,6 @@ public enum ACPConnectionError: Error, Sendable, LocalizedError {
         case .notConnected: return "Not connected to kiro-cli process"
         case .processSpawnFailed(let msg): return "Failed to start kiro-cli: \(msg)"
         case .processTerminated(let code): return "kiro-cli exited with code \(code)"
-        case .encodingFailed: return "Failed to encode message"
-        case .decodingFailed: return "Failed to decode response"
-        case .streamClosed: return "Connection stream closed"
         case .platformNotSupported: return "Platform not supported"
         }
     }
@@ -25,16 +21,209 @@ public enum ACPConnectionError: Error, Sendable, LocalizedError {
 
 #if os(macOS)
 
-/// Actor that manages a kiro-cli subprocess for ACP communication
+/// Transport implementation that communicates with a subprocess via pipes.
+///
+/// Unlike StdioTransport which uses standardInput/standardOutput, this transport
+/// connects to a Process's stdin/stdout pipes for subprocess communication.
+public final class ProcessTransport: Transport, @unchecked Sendable {
+    private let stdinPipe: Pipe
+    private let stdoutPipe: Pipe
+    
+    private let stateActor: ProcessTransportStateActor
+    
+    /// Initialize with process pipes
+    /// - Parameters:
+    ///   - stdinPipe: Pipe connected to the subprocess's stdin
+    ///   - stdoutPipe: Pipe connected to the subprocess's stdout
+    public init(stdinPipe: Pipe, stdoutPipe: Pipe) {
+        self.stdinPipe = stdinPipe
+        self.stdoutPipe = stdoutPipe
+        self.stateActor = ProcessTransportStateActor()
+    }
+    
+    public var state: AsyncStream<TransportState> {
+        stateActor.stateStream
+    }
+    
+    public func start() async throws {
+        try await stateActor.transitionTo(.starting)
+        
+        await withTaskGroup(of: Void.self) { group in
+            // Read task
+            group.addTask {
+                await self.readLoop()
+            }
+            
+            // Write task
+            group.addTask {
+                await self.writeLoop()
+            }
+            
+            // Transition to started
+            try? await self.stateActor.transitionTo(.started)
+            
+            // Wait for both tasks to complete
+            await group.waitForAll()
+        }
+    }
+    
+    public func send(_ message: JsonRpcMessage) async throws {
+        try await stateActor.enqueue(message)
+    }
+    
+    public var messages: AsyncStream<JsonRpcMessage> {
+        stateActor.messageStream
+    }
+    
+    public func close() async {
+        await stateActor.close()
+    }
+    
+    // MARK: - Private Methods
+    
+    private func readLoop() async {
+        defer {
+            Task { await self.close() }
+        }
+        
+        let handle = stdoutPipe.fileHandleForReading
+        var buffer = Data()
+        
+        do {
+            while !Task.isCancelled {
+                // Read available data
+                let chunk = try await Task {
+                    handle.availableData
+                }.value
+                
+                if chunk.isEmpty {
+                    // End of stream
+                    break
+                }
+                
+                buffer.append(chunk)
+                
+                // Parse newline-delimited messages
+                while let newlineIndex = buffer.firstIndex(of: UInt8(ascii: "\n")) {
+                    let messageData = buffer[buffer.startIndex..<newlineIndex]
+                    buffer = Data(buffer[buffer.index(after: newlineIndex)...])
+                    
+                    if messageData.isEmpty {
+                        continue
+                    }
+                    
+                    // Decode JSON-RPC message
+                    let decoder = JSONDecoder()
+                    if let message = try? decoder.decode(JsonRpcMessage.self, from: Data(messageData)) {
+                        await stateActor.deliver(message)
+                    } else {
+                        let raw = String(data: Data(messageData), encoding: .utf8) ?? "undecodable"
+                        print("[ProcessTransport] Failed to decode: \(raw.prefix(200))")
+                    }
+                }
+            }
+        } catch {
+            print("[ProcessTransport] Read error: \(error)")
+        }
+    }
+    
+    private func writeLoop() async {
+        defer {
+            Task { await self.close() }
+        }
+        
+        let handle = stdinPipe.fileHandleForWriting
+        let encoder = JSONEncoder()
+        
+        do {
+            for await message in stateActor.sendQueue {
+                let data = try encoder.encode(message)
+                var lineData = data
+                lineData.append(UInt8(ascii: "\n"))
+                
+                try await Task {
+                    try handle.write(contentsOf: lineData)
+                }.value
+            }
+        } catch {
+            print("[ProcessTransport] Write error: \(error)")
+        }
+    }
+}
+
+/// Actor managing ProcessTransport state
+private actor ProcessTransportStateActor {
+    private var currentState: TransportState = .created
+    private let stateContinuation: AsyncStream<TransportState>.Continuation
+    private let messageContinuation: AsyncStream<JsonRpcMessage>.Continuation
+    private let sendContinuation: AsyncStream<JsonRpcMessage>.Continuation
+    
+    let stateStream: AsyncStream<TransportState>
+    let messageStream: AsyncStream<JsonRpcMessage>
+    let sendQueue: AsyncStream<JsonRpcMessage>
+    
+    init() {
+        (stateStream, stateContinuation) = AsyncStream.makeStream()
+        (messageStream, messageContinuation) = AsyncStream.makeStream()
+        (sendQueue, sendContinuation) = AsyncStream.makeStream()
+        
+        stateContinuation.yield(.created)
+    }
+    
+    func transitionTo(_ newState: TransportState) throws {
+        switch (currentState, newState) {
+        case (.created, .starting),
+             (.starting, .started),
+             (.started, .closing),
+             (.starting, .closing),
+             (.closing, .closed):
+            currentState = newState
+            stateContinuation.yield(newState)
+            
+            if newState == .closed {
+                stateContinuation.finish()
+                messageContinuation.finish()
+                sendContinuation.finish()
+            }
+        default:
+            break // Ignore invalid transitions
+        }
+    }
+    
+    func enqueue(_ message: JsonRpcMessage) throws {
+        guard currentState == .started else {
+            throw ACPConnectionError.notConnected
+        }
+        sendContinuation.yield(message)
+    }
+    
+    func deliver(_ message: JsonRpcMessage) {
+        messageContinuation.yield(message)
+    }
+    
+    func close() {
+        if currentState != .closed && currentState != .closing {
+            try? transitionTo(.closing)
+            sendContinuation.finish()
+            
+            Task {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                try? self.transitionTo(.closed)
+            }
+        }
+    }
+}
+
+/// Actor that manages a kiro-cli subprocess for ACP communication using the SDK's ClientConnection.
 public actor ACPConnection {
     private var process: Process?
     private var stdinPipe: Pipe?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
-    private var messageStream: AsyncThrowingStream<Data, Error>?
-    private var messageContinuation: AsyncThrowingStream<Data, Error>.Continuation?
     
-    private let codec = ACPMessageCodec()
+    private var clientConnection: ClientConnection?
+    private var kiroClient: KiroClient?
+    private var transport: ProcessTransport?
     
     /// Whether the connection is currently active
     public var isConnected: Bool {
@@ -47,7 +236,12 @@ public actor ACPConnection {
     /// - Parameters:
     ///   - kirocliPath: Path to the kiro-cli executable
     ///   - agentConfig: Optional agent configuration path (passed via --agent flag)
-    public func connect(kirocliPath: String, agentConfig: String? = nil) async throws {
+    ///   - onSessionUpdate: Callback for session updates
+    public func connect(
+        kirocliPath: String,
+        agentConfig: String? = nil,
+        onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void
+    ) async throws {
         guard process == nil else {
             // Already connected
             return
@@ -78,9 +272,6 @@ public actor ACPConnection {
         stdoutPipe = stdout
         stderrPipe = stderr
         
-        // Set up the message stream before starting the process
-        setupMessageStream()
-        
         do {
             try proc.run()
             process = proc
@@ -99,15 +290,37 @@ public actor ACPConnection {
             }
         }
         
-        // Start reading from stdout in a background task
-        startReadingMessages()
+        // Create transport with process pipes
+        let processTransport = ProcessTransport(stdinPipe: stdin, stdoutPipe: stdout)
+        transport = processTransport
+        
+        // Create client with session update callback
+        let client = KiroClient()
+        client.onSessionUpdateCallback = onSessionUpdate
+        kiroClient = client
+        
+        // Create and connect ClientConnection
+        let connection = ClientConnection(transport: processTransport, client: client)
+        clientConnection = connection
+        
+        // Connect performs initialization
+        _ = try await connection.connect()
     }
     
     /// Disconnect from kiro-cli by terminating the subprocess
     public func disconnect() async {
-        messageContinuation?.finish()
-        messageContinuation = nil
-        messageStream = nil
+        // Disconnect the client connection
+        if let connection = clientConnection {
+            await connection.disconnect()
+        }
+        clientConnection = nil
+        kiroClient = nil
+        
+        // Close transport
+        if let transport = transport {
+            await transport.close()
+        }
+        transport = nil
         
         if let proc = process, proc.isRunning {
             proc.terminate()
@@ -120,75 +333,52 @@ public actor ACPConnection {
         stderrPipe = nil
     }
     
-    /// Send a JSON-RPC request to the kiro-cli process
-    /// - Parameter request: The request to send
-    public func send<Params: Encodable>(_ request: JSONRPCRequest<Params>) async throws {
-        try await sendData(request)
-    }
-    
-    /// Send a JSON-RPC notification to the kiro-cli process
-    /// - Parameter notification: The notification to send
-    public func sendNotification<Params: Encodable>(_ notification: JSONRPCNotification<Params>) async throws {
-        try await sendData(notification)
-    }
-    
-    /// Get a stream of incoming messages from the kiro-cli process
-    /// - Returns: An AsyncThrowingStream that yields Data for each complete message
-    public func receive() -> AsyncThrowingStream<Data, Error> {
-        if let stream = messageStream {
-            return stream
-        }
-        // Return an empty stream if not connected
-        return AsyncThrowingStream { continuation in
-            continuation.finish(throwing: ACPConnectionError.notConnected)
-        }
-    }
-    
-    // MARK: - Private Methods
-    
-    private func sendData<T: Encodable>(_ message: T) async throws {
-        guard let stdin = stdinPipe?.fileHandleForWriting else {
+    /// Create a new session
+    /// - Parameter cwd: Current working directory
+    /// - Returns: Session response containing sessionId
+    public func createSession(cwd: String) async throws -> NewSessionResponse {
+        guard let connection = clientConnection else {
             throw ACPConnectionError.notConnected
         }
         
-        let data = try codec.encode(message)
-        try stdin.write(contentsOf: data)
+        let request = NewSessionRequest(cwd: cwd, mcpServers: [])
+        return try await connection.createSession(request: request)
     }
     
-    private func setupMessageStream() {
-        let (stream, continuation) = AsyncThrowingStream<Data, Error>.makeStream()
-        messageStream = stream
-        messageContinuation = continuation
+    /// Load an existing session
+    /// - Parameters:
+    ///   - sessionId: Session ID to load
+    ///   - cwd: Current working directory
+    /// - Returns: Load session response
+    public func loadSession(sessionId: SessionId, cwd: String) async throws -> LoadSessionResponse {
+        guard let connection = clientConnection else {
+            throw ACPConnectionError.notConnected
+        }
+        
+        let request = LoadSessionRequest(sessionId: sessionId, cwd: cwd, mcpServers: [])
+        return try await connection.loadSession(request: request)
     }
     
-    private func startReadingMessages() {
-        guard let stdout = stdoutPipe?.fileHandleForReading,
-              let continuation = messageContinuation else {
-            return
+    /// Send a prompt to the agent
+    /// - Parameters:
+    ///   - sessionId: Session ID
+    ///   - prompt: Content blocks for the prompt
+    /// - Returns: Prompt response with stop reason
+    public func prompt(sessionId: SessionId, prompt: [ContentBlock]) async throws -> PromptResponse {
+        guard let connection = clientConnection else {
+            throw ACPConnectionError.notConnected
         }
         
-        // Capture what we need for the detached task
-        let codec = self.codec
-        
-        Task.detached { [stdout, codec] in
-            var buffer = Data()
-            
-            while true {
-                let chunk = stdout.availableData
-                if chunk.isEmpty {
-                    break
-                }
-                buffer.append(chunk)
-                
-                let (messages, remaining) = codec.parseMessages(from: buffer)
-                buffer = remaining
-                
-                for message in messages {
-                    continuation.yield(message)
-                }
-            }
-            continuation.finish()
-        }
+        let request = PromptRequest(sessionId: sessionId, prompt: prompt)
+        return try await connection.prompt(request: request)
+    }
+    
+    /// Get the agent capabilities from initialization
+    public func getAgentCapabilities() -> AgentCapabilities? {
+        // ClientConnection stores this after connect()
+        // We need to access it through the clientConnection actor
+        // For now, return nil - this information isn't critical
+        return nil
     }
 }
 
@@ -204,7 +394,11 @@ public actor ACPConnection {
     
     public init() {}
     
-    public func connect(kirocliPath: String, agentConfig: String? = nil) async throws {
+    public func connect(
+        kirocliPath: String,
+        agentConfig: String? = nil,
+        onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void
+    ) async throws {
         throw ACPConnectionError.platformNotSupported
     }
     
@@ -212,18 +406,20 @@ public actor ACPConnection {
         // No-op on non-macOS
     }
     
-    public func send<Params: Encodable>(_ request: JSONRPCRequest<Params>) async throws {
+    public func createSession(cwd: String) async throws -> NewSessionResponse {
         throw ACPConnectionError.platformNotSupported
     }
     
-    public func sendNotification<Params: Encodable>(_ notification: JSONRPCNotification<Params>) async throws {
+    public func loadSession(sessionId: SessionId, cwd: String) async throws -> LoadSessionResponse {
         throw ACPConnectionError.platformNotSupported
     }
     
-    public func receive() -> AsyncThrowingStream<Data, Error> {
-        AsyncThrowingStream { continuation in
-            continuation.finish(throwing: ACPConnectionError.platformNotSupported)
-        }
+    public func prompt(sessionId: SessionId, prompt: [ContentBlock]) async throws -> PromptResponse {
+        throw ACPConnectionError.platformNotSupported
+    }
+    
+    public func getAgentCapabilities() -> AgentCapabilities? {
+        return nil
     }
 }
 

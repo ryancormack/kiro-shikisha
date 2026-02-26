@@ -1,4 +1,5 @@
 import Foundation
+import ACPModel
 #if canImport(Observation)
 import Observation
 #endif
@@ -28,13 +29,13 @@ public final class Agent: Identifiable {
     /// The workspace this agent operates on
     public let workspace: Workspace
     /// Session ID for the ACP session (nil if not yet established)
-    public var sessionId: String?
+    public var sessionId: SessionId?
     /// Current status of the agent
     public var status: AgentStatus
     /// Chat message history
     public var messages: [ChatMessage]
-    /// Currently active tool calls
-    public var activeToolCalls: [ToolCall]
+    /// Currently active tool calls (using SDK's ToolCallUpdate type)
+    public var activeToolCalls: [ToolCallUpdate]
     /// File changes made by this agent
     public var fileChanges: [FileChange]
     /// Error message if status is .error
@@ -44,10 +45,10 @@ public final class Agent: Identifiable {
         id: UUID = UUID(),
         name: String,
         workspace: Workspace,
-        sessionId: String? = nil,
+        sessionId: SessionId? = nil,
         status: AgentStatus = .idle,
         messages: [ChatMessage] = [],
-        activeToolCalls: [ToolCall] = [],
+        activeToolCalls: [ToolCallUpdate] = [],
         fileChanges: [FileChange] = [],
         errorMessage: String? = nil
     ) {
@@ -68,10 +69,10 @@ public final class Agent: Identifiable {
     public let id: UUID
     public var name: String
     public let workspace: Workspace
-    public var sessionId: String?
+    public var sessionId: SessionId?
     public var status: AgentStatus
     public var messages: [ChatMessage]
-    public var activeToolCalls: [ToolCall]
+    public var activeToolCalls: [ToolCallUpdate]
     public var fileChanges: [FileChange]
     public var errorMessage: String?
     
@@ -79,10 +80,10 @@ public final class Agent: Identifiable {
         id: UUID = UUID(),
         name: String,
         workspace: Workspace,
-        sessionId: String? = nil,
+        sessionId: SessionId? = nil,
         status: AgentStatus = .idle,
         messages: [ChatMessage] = [],
-        activeToolCalls: [ToolCall] = [],
+        activeToolCalls: [ToolCallUpdate] = [],
         fileChanges: [FileChange] = [],
         errorMessage: String? = nil
     ) {

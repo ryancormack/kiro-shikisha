@@ -1,4 +1,6 @@
 import Foundation
+import ACPModel
+import ACP
 #if canImport(Observation)
 import Observation
 #endif
@@ -9,7 +11,7 @@ public enum AgentManagerError: Error, Sendable, LocalizedError {
     case notConnected
     case noSessionId
     case connectionFailed(String)
-    case requestFailed(JSONRPCError)
+    case requestFailed(String)
     case platformNotSupported
     case notAGitRepository
     
@@ -19,7 +21,7 @@ public enum AgentManagerError: Error, Sendable, LocalizedError {
         case .notConnected: return "Not connected to kiro-cli"
         case .noSessionId: return "No active session"
         case .connectionFailed(let msg): return "Connection failed: \(msg)"
-        case .requestFailed(let err): return "Request failed: \(err.message)"
+        case .requestFailed(let msg): return "Request failed: \(msg)"
         case .platformNotSupported: return "Platform not supported"
         case .notAGitRepository: return "Not a git repository"
         }
@@ -47,14 +49,8 @@ public final class AgentManager {
     /// Active ACP connections indexed by agent ID
     private var connections: [UUID: ACPConnection] = [:]
     
-    /// Request ID counter for JSON-RPC
-    private var nextRequestId: Int = 1
-    
-    /// Pending response handlers indexed by request ID
-    private var pendingRequests: [Int: CheckedContinuation<Data, Error>] = [:]
-    
-    /// Background tasks for streaming updates
-    private var streamingTasks: [UUID: Task<Void, Never>] = [:]
+    /// Background tasks for prompt responses
+    private var promptTasks: [UUID: Task<Void, Never>] = [:]
     
     public init(kirocliPath: String = "/usr/local/bin/kiro-cli") {
         self.kirocliPath = kirocliPath
@@ -95,25 +91,27 @@ public final class AgentManager {
             
             // Create and connect ACP connection
             let connection = ACPConnection()
-            try await connection.connect(kirocliPath: kirocliPath)
+            
+            // Create session update handler that captures agent reference
+            let agentId = agent.id
+            let sessionUpdateHandler: @Sendable (SessionUpdate) async -> Void = { [weak self] update in
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    self.handleSessionUpdate(update, for: agent)
+                }
+            }
+            
+            try await connection.connect(
+                kirocliPath: kirocliPath,
+                onSessionUpdate: sessionUpdateHandler
+            )
             connections[agent.id] = connection
-            print("[ACP] Process spawned successfully")
-            
-            // Start streaming task for this connection
-            startStreamingTask(for: agent, connection: connection)
-            
-            // Send initialize request
-            print("[ACP] Sending initialize...")
-            let _ = try await sendInitialize(agentId: agent.id)
-            print("[ACP] Initialize succeeded")
+            print("[ACP] Process spawned and initialized successfully")
             
             // Create new session with workspace path
-            print("[ACP] Sending session/new...")
-            let sessionResult = try await sendSessionNew(
-                agentId: agent.id,
-                cwd: workspace.path.path
-            )
-            print("[ACP] Session created: \(sessionResult.sessionId)")
+            print("[ACP] Creating session...")
+            let sessionResult = try await connection.createSession(cwd: workspace.path.path)
+            print("[ACP] Session created: \(sessionResult.sessionId.value)")
             
             agent.sessionId = sessionResult.sessionId
             agent.status = .active
@@ -133,10 +131,11 @@ public final class AgentManager {
     ///   - sessionId: The session ID to load
     /// - Returns: The agent with the loaded session
     public func loadAgent(workspace: Workspace, sessionId: String) async throws -> Agent {
+        let sessionIdValue = SessionId(value: sessionId)
         let agent = Agent(
             name: workspace.name,
             workspace: workspace,
-            sessionId: sessionId,
+            sessionId: sessionIdValue,
             status: .connecting
         )
         agents[agent.id] = agent
@@ -144,19 +143,25 @@ public final class AgentManager {
         do {
             // Create and connect ACP connection
             let connection = ACPConnection()
-            try await connection.connect(kirocliPath: kirocliPath)
+            
+            // Create session update handler
+            let agentId = agent.id
+            let sessionUpdateHandler: @Sendable (SessionUpdate) async -> Void = { [weak self] update in
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    self.handleSessionUpdate(update, for: agent)
+                }
+            }
+            
+            try await connection.connect(
+                kirocliPath: kirocliPath,
+                onSessionUpdate: sessionUpdateHandler
+            )
             connections[agent.id] = connection
             
-            // Start streaming task for this connection
-            startStreamingTask(for: agent, connection: connection)
-            
-            // Send initialize request
-            _ = try await sendInitialize(agentId: agent.id)
-            
             // Load existing session
-            try await sendSessionLoad(
-                agentId: agent.id,
-                sessionId: sessionId,
+            _ = try await connection.loadSession(
+                sessionId: sessionIdValue,
                 cwd: workspace.path.path
             )
             
@@ -173,9 +178,9 @@ public final class AgentManager {
     /// Stop and remove an agent
     /// - Parameter id: The agent ID to stop
     public func stopAgent(id: UUID) async {
-        // Cancel streaming task
-        streamingTasks[id]?.cancel()
-        streamingTasks.removeValue(forKey: id)
+        // Cancel prompt task
+        promptTasks[id]?.cancel()
+        promptTasks.removeValue(forKey: id)
         
         // Disconnect connection
         if let connection = connections[id] {
@@ -222,7 +227,7 @@ public final class AgentManager {
             throw AgentManagerError.noSessionId
         }
         
-        guard connections[agentId] != nil else {
+        guard let connection = connections[agentId] else {
             throw AgentManagerError.notConnected
         }
         
@@ -243,30 +248,43 @@ public final class AgentManager {
             description: "User: \(messagePreview)\(prompt.count > 80 ? "..." : "")"
         ))
         
-        // Send prompt request (response comes via streaming)
-        try await sendSessionPrompt(
-            agentId: agentId,
-            sessionId: sessionId,
-            content: [.text(prompt)]
-        )
+        // Send prompt and wait for response
+        let task = Task { [weak self] in
+            do {
+                let contentBlocks = [ContentBlock.text(TextContent(text: prompt))]
+                let response = try await connection.prompt(sessionId: sessionId, prompt: contentBlocks)
+                
+                // Handle completion based on stop reason
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    self.handlePromptCompletion(stopReason: response.stopReason, for: agent)
+                }
+            } catch {
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    agent.status = .error
+                    agent.errorMessage = error.localizedDescription
+                    self.addActivityEvent(ActivityEvent(
+                        agentId: agent.id,
+                        agentName: agent.name,
+                        eventType: .error,
+                        description: "Error: \(error.localizedDescription)"
+                    ))
+                }
+            }
+        }
+        promptTasks[agentId] = task
     }
     
     /// Cancel the current prompt for an agent
     /// - Parameter agentId: The agent ID
     public func cancelPrompt(agentId: UUID) async throws {
-        guard let agent = agents[agentId] else {
-            throw AgentManagerError.agentNotFound(agentId)
-        }
+        // Cancel the prompt task
+        promptTasks[agentId]?.cancel()
+        promptTasks.removeValue(forKey: agentId)
         
-        guard let sessionId = agent.sessionId else {
-            throw AgentManagerError.noSessionId
-        }
-        
-        guard connections[agentId] != nil else {
-            throw AgentManagerError.notConnected
-        }
-        
-        try await sendSessionCancel(agentId: agentId, sessionId: sessionId)
+        // Note: The SDK's ClientConnection doesn't expose a cancel method directly
+        // We could add support for session/cancel if needed
     }
     
     /// Start a new agent in a git worktree
@@ -313,238 +331,55 @@ public final class AgentManager {
     
     /// Handle a session update for an agent
     /// - Parameters:
-    ///   - update: The session update
+    ///   - update: The session update from the SDK
     ///   - agent: The agent to update
     public func handleSessionUpdate(_ update: SessionUpdate, for agent: Agent) {
         switch update {
         case .agentMessageChunk(let chunk):
             handleAgentMessageChunk(chunk, for: agent)
             
-        case .toolCall(let toolCall):
-            handleToolCall(toolCall, for: agent)
+        case .toolCall(let toolCallUpdate):
+            handleToolCall(toolCallUpdate, for: agent)
             
-        case .toolCallUpdate(let toolCallUpdate):
-            handleToolCallUpdate(toolCallUpdate, for: agent)
+        case .toolCallUpdate(let toolCallUpdateData):
+            handleToolCallUpdate(toolCallUpdateData, for: agent)
             
-        case .turnEnd(let turnEnd):
-            handleTurnEnd(turnEnd, for: agent)
-        }
-    }
-    
-    // MARK: - Private ACP Communication Methods
-    
-    private func sendInitialize(agentId: UUID) async throws -> InitializeResult {
-        let params = InitializeParams(
-            protocolVersion: "1.0",
-            clientInfo: ClientInfo(name: "KiroShikisha", version: "1.0.0"),
-            clientCapabilities: ClientCapabilities(
-                fs: FileSystemCapabilities(readTextFile: true, writeTextFile: true),
-                terminal: true
-            )
-        )
-        
-        return try await sendRequest(
-            agentId: agentId,
-            method: "initialize",
-            params: params
-        )
-    }
-    
-    private func sendSessionNew(agentId: UUID, cwd: String) async throws -> SessionNewResult {
-        let params = SessionNewParams(cwd: cwd, mcpServers: [])
-        return try await sendRequest(
-            agentId: agentId,
-            method: "session/new",
-            params: params
-        )
-    }
-    
-    private func sendSessionLoad(agentId: UUID, sessionId: String, cwd: String) async throws {
-        let params = SessionLoadParams(sessionId: sessionId, cwd: cwd)
-        let _: JSONValue = try await sendRequest(
-            agentId: agentId,
-            method: "session/load",
-            params: params
-        )
-    }
-    
-    private func sendSessionPrompt(agentId: UUID, sessionId: String, content: [ContentBlock]) async throws {
-        let params = SessionPromptParams(sessionId: sessionId, content: content)
-        let _: JSONValue = try await sendRequest(
-            agentId: agentId,
-            method: "session/prompt",
-            params: params
-        )
-    }
-    
-    private func sendSessionCancel(agentId: UUID, sessionId: String) async throws {
-        let params = SessionCancelParams(sessionId: sessionId)
-        let _: JSONValue = try await sendRequest(
-            agentId: agentId,
-            method: "session/cancel",
-            params: params
-        )
-    }
-    
-    private func sendRequest<Params: Codable & Sendable, Result: Codable & Sendable>(
-        agentId: UUID,
-        method: String,
-        params: Params
-    ) async throws -> Result {
-        guard let connection = connections[agentId] else {
-            throw AgentManagerError.notConnected
-        }
-        
-        let requestId = nextRequestId
-        nextRequestId += 1
-        
-        let request = JSONRPCRequest(id: requestId, method: method, params: params)
-        try await connection.send(request)
-        
-        // Wait for response via continuation
-        let responseData = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
-            pendingRequests[requestId] = continuation
-        }
-        
-        // Decode response
-        let decoder = JSONDecoder()
-        let response = try decoder.decode(JSONRPCResponse<Result>.self, from: responseData)
-        
-        if let error = response.error {
-            throw AgentManagerError.requestFailed(error)
-        }
-        
-        guard let result = response.result else {
-            let raw = String(data: responseData, encoding: .utf8) ?? "undecodable"
-            throw AgentManagerError.requestFailed(JSONRPCError(
-                code: JSONRPCError.internalError,
-                message: "No result in response: \(raw)"
-            ))
-        }
-        
-        return result
-    }
-    
-    // MARK: - Private Streaming Methods
-    
-    private func startStreamingTask(for agent: Agent, connection: ACPConnection) {
-        let task = Task { [weak self] in
-            guard let self = self else { return }
-            await self.handleStream(for: agent, connection: connection)
-        }
-        streamingTasks[agent.id] = task
-    }
-    
-    private func handleStream(for agent: Agent, connection: ACPConnection) async {
-        let stream = await connection.receive()
-        let decoder = JSONDecoder()
-        
-        do {
-            for try await data in stream {
-                await processMessage(data, for: agent, decoder: decoder)
-            }
-        } catch {
-            await MainActor.run {
-                agent.status = .error
-                agent.errorMessage = error.localizedDescription
-                self.addActivityEvent(ActivityEvent(
-                    agentId: agent.id,
-                    agentName: agent.name,
-                    eventType: .error,
-                    description: "Connection error: \(error.localizedDescription)"
-                ))
-            }
-        }
-    }
-    
-    private func processMessage(_ data: Data, for agent: Agent, decoder: JSONDecoder) async {
-        let raw = String(data: data, encoding: .utf8) ?? "undecodable"
-        print("[ACP] Received: \(raw.prefix(200))")
-        
-        // Try to decode as a response (has "id" field)
-        if let responseId = extractResponseId(from: data) {
-            // This is a response to a pending request
-            if let continuation = pendingRequests.removeValue(forKey: responseId) {
-                print("[ACP] Matched response for request \(responseId)")
-                continuation.resume(returning: data)
-            } else {
-                print("[ACP] No pending request for id \(responseId)")
-            }
-            return
-        }
-        
-        // Try to decode as a notification (no "id" field)
-        // First, check if this is a Kiro extension notification
-        if let method = extractMethod(from: data), method.hasPrefix("_kiro.dev/") {
-            await handleKiroExtensionNotification(method: method, data: data, decoder: decoder, for: agent)
-            return
-        }
-        
-        if let notification = try? decoder.decode(
-            JSONRPCNotification<SessionUpdateNotification>.self,
-            from: data
-        ) {
-            if let params = notification.params {
-                await MainActor.run {
-                    self.handleSessionUpdate(params.update, for: agent)
-                }
-            }
-        } else {
-            print("[ACP] Unhandled message: \(raw.prefix(300))")
-        }
-    }
-    
-    private func extractMethod(from data: Data) -> String? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let method = json["method"] as? String else {
-            return nil
-        }
-        return method
-    }
-    
-    private func handleKiroExtensionNotification(method: String, data: Data, decoder: JSONDecoder, for agent: Agent) async {
-        switch method {
-        case "_kiro.dev/commands/available":
-            if let notification = try? decoder.decode(
-                JSONRPCNotification<KiroCommandsAvailableParams>.self,
-                from: data
-            ), let params = notification.params {
-                let commandNames = params.commands.map { $0.name }.joined(separator: ", ")
-                print("[ACP] Received Kiro commands: \(commandNames)")
-            } else {
-                print("[ACP] Received Kiro commands")
-            }
+        case .userMessageChunk:
+            // Echo of user message, ignore
+            break
             
-        case "_kiro.dev/mcp/server_init_failure":
-            if let notification = try? decoder.decode(
-                JSONRPCNotification<KiroMcpServerInitFailureParams>.self,
-                from: data
-            ), let params = notification.params {
-                print("[ACP] MCP server init failed: \(params.serverName) - \(params.error)")
-            } else {
-                print("[ACP] MCP server init failed: unknown")
-            }
+        case .agentThoughtChunk:
+            // Internal reasoning, could log or display separately
+            break
             
-        default:
-            // Catch-all for other _kiro.dev/* methods
-            print("[ACP] Kiro extension: \(method)")
+        case .planUpdate:
+            // Execution plan, could display if desired
+            break
+            
+        case .availableCommandsUpdate(let commandsUpdate):
+            let commandNames = commandsUpdate.availableCommands.map { $0.name }.joined(separator: ", ")
+            print("[ACP] Available commands: \(commandNames)")
+            
+        case .currentModeUpdate:
+            // Mode change, could track if desired
+            break
+            
+        case .configOptionUpdate:
+            // Config options updated
+            break
+            
+        case .sessionInfoUpdate:
+            // Session info updated
+            break
         }
-    }
-    
-    private func extractResponseId(from data: Data) -> Int? {
-        // Quick JSON parsing to extract id field
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let id = json["id"] as? Int else {
-            return nil
-        }
-        return id
     }
     
     // MARK: - Private Session Update Handlers
     
     private func handleAgentMessageChunk(_ chunk: AgentMessageChunk, for agent: Agent) {
         // Get text content from chunk
-        guard let text = chunk.content.text else { return }
+        guard case .text(let textContent) = chunk.content else { return }
+        let text = textContent.text
         
         // Find or create assistant message
         if let lastMessage = agent.messages.last, lastMessage.role == .assistant {
@@ -561,15 +396,15 @@ public final class AgentManager {
         }
     }
     
-    private func handleToolCall(_ toolCall: ToolCall, for agent: Agent) {
+    private func handleToolCall(_ toolCallUpdate: ToolCallUpdate, for agent: Agent) {
         // Add to active tool calls
-        agent.activeToolCalls.append(toolCall)
+        agent.activeToolCalls.append(toolCallUpdate)
         
         // Associate with current assistant message
         if let lastMessage = agent.messages.last, lastMessage.role == .assistant {
             let index = agent.messages.count - 1
             var toolCallIds = agent.messages[index].toolCallIds ?? []
-            toolCallIds.append(toolCall.toolCallId)
+            toolCallIds.append(toolCallUpdate.toolCallId.value)
             agent.messages[index].toolCallIds = toolCallIds
         }
         
@@ -578,62 +413,62 @@ public final class AgentManager {
             agentId: agent.id,
             agentName: agent.name,
             eventType: .toolCall,
-            description: "Tool: \(toolCall.title)"
+            description: "Tool: \(toolCallUpdate.title)"
         ))
     }
     
-    private func handleToolCallUpdate(_ update: ToolCallUpdate, for agent: Agent) {
+    private func handleToolCallUpdate(_ updateData: ToolCallUpdateData, for agent: Agent) {
         // Find and update the existing tool call
-        if let index = agent.activeToolCalls.firstIndex(where: { $0.toolCallId == update.toolCallId }) {
-            let existingCall = agent.activeToolCalls[index]
-            let updatedCall = ToolCall(
-                toolCallId: existingCall.toolCallId,
-                title: existingCall.title,
-                kind: existingCall.kind,
-                status: update.status,
-                content: update.content ?? existingCall.content,
-                rawInput: existingCall.rawInput,
-                rawOutput: existingCall.rawOutput
+        if let index = agent.activeToolCalls.firstIndex(where: { $0.toolCallId == updateData.toolCallId }) {
+            let existing = agent.activeToolCalls[index]
+            
+            // Create updated tool call with merged data
+            let updated = ToolCallUpdate(
+                toolCallId: existing.toolCallId,
+                title: updateData.title ?? existing.title,
+                kind: updateData.kind ?? existing.kind,
+                status: updateData.status ?? existing.status,
+                content: updateData.content ?? existing.content,
+                locations: updateData.locations ?? existing.locations,
+                rawInput: updateData.rawInput ?? existing.rawInput,
+                rawOutput: updateData.rawOutput ?? existing.rawOutput
             )
-            agent.activeToolCalls[index] = updatedCall
+            agent.activeToolCalls[index] = updated
         }
         
         // Extract file changes from diff content
-        if let toolContent = update.toolContent {
-            switch toolContent {
-            case .diff(let diffContent):
-                let changeType: FileChangeType
-                if diffContent.oldText == nil {
-                    changeType = .created
-                } else if diffContent.newText.isEmpty {
-                    changeType = .deleted
-                } else {
-                    changeType = .modified
+        if let content = updateData.content {
+            for item in content {
+                if case .diff(let diffContent) = item {
+                    let changeType: FileChangeType
+                    if diffContent.oldText == nil {
+                        changeType = .created
+                    } else if diffContent.newText.isEmpty {
+                        changeType = .deleted
+                    } else {
+                        changeType = .modified
+                    }
+                    
+                    let fileChange = FileChange(
+                        path: diffContent.path,
+                        oldContent: diffContent.oldText,
+                        newContent: diffContent.newText,
+                        changeType: changeType,
+                        toolCallId: updateData.toolCallId.value
+                    )
+                    agent.fileChanges.append(fileChange)
                 }
-                
-                let fileChange = FileChange(
-                    path: diffContent.path,
-                    oldContent: diffContent.oldText,
-                    newContent: diffContent.newText,
-                    changeType: changeType,
-                    toolCallId: update.toolCallId
-                )
-                agent.fileChanges.append(fileChange)
-                
-            case .content, .terminal:
-                // These content types don't represent file changes
-                break
             }
         }
     }
     
-    private func handleTurnEnd(_ turnEnd: TurnEnd, for agent: Agent) {
+    private func handlePromptCompletion(stopReason: StopReason, for agent: Agent) {
         // Clear active tool calls
         agent.activeToolCalls.removeAll()
         
         // Update agent status and add activity event
-        switch turnEnd.reason {
-        case .endTurn, .maxTurns:
+        switch stopReason {
+        case .endTurn, .maxTokens, .maxTurnRequests:
             agent.status = .idle
             addActivityEvent(ActivityEvent(
                 agentId: agent.id,
@@ -649,13 +484,13 @@ public final class AgentManager {
                 eventType: .complete,
                 description: "Task cancelled"
             ))
-        case .error:
+        case .refusal:
             agent.status = .error
             addActivityEvent(ActivityEvent(
                 agentId: agent.id,
                 agentName: agent.name,
                 eventType: .error,
-                description: "Error occurred during task"
+                description: "Agent refused to continue"
             ))
         }
     }
