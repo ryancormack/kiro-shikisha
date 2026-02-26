@@ -239,6 +239,16 @@ public final class AgentManager {
         return Array(agents.values)
     }
     
+    /// Get all agents for a workspace including worktrees
+    /// - Parameter workspaceId: The workspace ID to filter by
+    /// - Returns: Array of agents in the workspace or its worktrees
+    public func getAgentsForWorkspace(_ workspaceId: UUID) -> [Agent] {
+        return getAllAgents().filter { agent in
+            agent.workspace.id == workspaceId ||
+            agent.workspace.sourceWorkspaceId == workspaceId
+        }
+    }
+    
     /// Send a prompt to an agent
     /// - Parameters:
     ///   - agentId: The agent to send the prompt to
@@ -571,6 +581,10 @@ public final class AgentManager {
         return []
     }
     
+    public func getAgentsForWorkspace(_ workspaceId: UUID) -> [Agent] {
+        return []
+    }
+    
     public func sendPrompt(agentId: UUID, prompt: String) async throws {
         throw AgentManagerError.platformNotSupported
     }
@@ -632,6 +646,10 @@ public final class AgentManager {
     }
     
     public func getAllAgents() -> [Agent] {
+        return []
+    }
+    
+    public func getAgentsForWorkspace(_ workspaceId: UUID) -> [Agent] {
         return []
     }
     
