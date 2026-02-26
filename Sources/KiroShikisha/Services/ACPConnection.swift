@@ -48,23 +48,11 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
     public func start() async throws {
         try await stateActor.transitionTo(.starting)
         
-        await withTaskGroup(of: Void.self) { group in
-            // Read task
-            group.addTask {
-                await self.readLoop()
-            }
-            
-            // Write task
-            group.addTask {
-                await self.writeLoop()
-            }
-            
-            // Transition to started
-            try? await self.stateActor.transitionTo(.started)
-            
-            // Wait for both tasks to complete
-            await group.waitForAll()
-        }
+        // Launch read/write loops as background tasks (must not block)
+        Task { await self.readLoop() }
+        Task { await self.writeLoop() }
+        
+        try await stateActor.transitionTo(.started)
     }
     
     public func send(_ message: JsonRpcMessage) async throws {
@@ -217,6 +205,11 @@ private actor ProcessTransportStateActor {
 /// Actor that manages a kiro-cli subprocess for ACP communication using the SDK's ClientConnection.
 public actor ACPConnection {
     private var process: Process?
+
+    /// PID of the kiro-cli process, if running
+    public var processId: Int32? {
+        process?.isRunning == true ? process?.processIdentifier : nil
+    }
     private var stdinPipe: Pipe?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
@@ -306,7 +299,14 @@ public actor ACPConnection {
         // Connect performs initialization
         _ = try await connection.connect()
     }
-    
+
+    /// Synchronously kill the kiro-cli process (for app quit)
+    public func killProcess() {
+        if let proc = process, proc.isRunning {
+            proc.terminate()
+        }
+    }
+
     /// Disconnect from kiro-cli by terminating the subprocess
     public func disconnect() async {
         // Disconnect the client connection

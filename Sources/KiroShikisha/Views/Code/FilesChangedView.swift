@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import ACPModel
 
 /// View showing list of files changed by the agent
 struct FilesChangedView: View {
@@ -7,7 +8,10 @@ struct FilesChangedView: View {
     
     @State private var selectedFileId: UUID?
     @State private var selectedFileChange: FileChange?
-    @State private var showingDiff = false
+    
+    private var selectedFile: FileChange? {
+        selectedFileChange
+    }
     
     var body: some View {
         if agent.fileChanges.isEmpty {
@@ -23,25 +27,26 @@ struct FilesChangedView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            List(selection: $selectedFileId) {
-                // Group by tool call ID if available
-                ForEach(groupedFileChanges, id: \.0) { group in
-                    Section(header: sectionHeader(for: group.0)) {
-                        ForEach(group.1) { fileChange in
-                            FileChangeRow(fileChange: fileChange, isSelected: selectedFileId == fileChange.id)
-                                .tag(fileChange.id)
-                                .onTapGesture {
-                                    selectedFileChange = fileChange
-                                    showingDiff = true
-                                }
+            VStack(spacing: 0) {
+                List(selection: $selectedFileId) {
+                    ForEach(groupedFileChanges, id: \.0) { group in
+                        Section(header: sectionHeader(for: group.0)) {
+                            ForEach(group.1) { fileChange in
+                                FileChangeRow(fileChange: fileChange, isSelected: selectedFileId == fileChange.id)
+                                    .tag(fileChange.id)
+                            }
                         }
                     }
                 }
-            }
-            .listStyle(.sidebar)
-            .sheet(isPresented: $showingDiff) {
-                if let fileChange = selectedFileChange {
-                    DiffSheet(fileChange: fileChange, isPresented: $showingDiff)
+                .listStyle(.sidebar)
+                .frame(maxHeight: selectedFile != nil ? 150 : .infinity)
+                .onChange(of: selectedFileId) { _, newId in
+                    selectedFileChange = newId.flatMap { id in agent.fileChanges.first { $0.id == id } }
+                }
+
+                if let file = selectedFile {
+                    Divider()
+                    DiffView(fileChange: file)
                 }
             }
         }
@@ -72,7 +77,7 @@ struct FilesChangedView: View {
                 .foregroundColor(.secondary)
         } else {
             // Try to find the tool call title
-            if let toolCall = agent.activeToolCalls.first(where: { $0.toolCallId == toolCallId }) {
+            if let toolCall = agent.toolCallHistory[toolCallId] {
                 HStack {
                     Image(systemName: iconForKind(toolCall.kind))
                         .foregroundColor(.secondary)
@@ -88,7 +93,7 @@ struct FilesChangedView: View {
         }
     }
     
-    private func iconForKind(_ kind: ToolCallKind) -> String {
+    private func iconForKind(_ kind: ToolKind?) -> String {
         switch kind {
         case .read:
             return "doc.text"
@@ -106,7 +111,7 @@ struct FilesChangedView: View {
             return "brain"
         case .fetch:
             return "arrow.down.circle"
-        case .other:
+        case .switchMode, .other, .none:
             return "questionmark.circle"
         }
     }
@@ -174,7 +179,7 @@ struct DiffSheet: View {
         ]
     )
     
-    return FilesChangedView(agent: agent)
+    FilesChangedView(agent: agent)
         .frame(width: 300, height: 400)
 }
 #endif

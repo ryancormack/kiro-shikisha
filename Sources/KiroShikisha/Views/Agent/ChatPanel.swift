@@ -17,12 +17,35 @@ public struct ChatPanel: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(agent.messages) { message in
-                            ChatMessageView(message: message)
-                                .id(message.id)
+                            if message.role == .system, let tcIds = message.toolCallIds {
+                                // Inline tool call marker
+                                ForEach(tcIds, id: \.self) { tcId in
+                                    let tc = agent.toolCallHistory[tcId]
+                                    InlineToolCallView(toolCall: tc, toolCallId: tcId)
+                                        .id("\(message.id)-\(tcId)")
+                                }
+                            } else if !message.content.isEmpty {
+                                ChatMessageView(message: message)
+                                    .id(message.id)
+                            }
                         }
                         
+                        if agent.messages.isEmpty && agent.status != .active {
+                            VStack(spacing: 8) {
+                                Spacer()
+                                Image(systemName: "bubble.left.and.bubble.right")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.secondary)
+                                Text("Agent ready — waiting for first response")
+                                    .foregroundColor(.secondary)
+                                    .font(.caption)
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+
                         if agent.status == .active {
-                            TypingIndicator()
+                            TypingIndicator(label: agent.messages.isEmpty ? "Agent is starting up…" : nil)
                                 .id("typing-indicator")
                         }
                     }
@@ -41,10 +64,20 @@ public struct ChatPanel: View {
             
             Divider()
             
-            ChatInputView { message in
-                sendMessage(message)
+            if agent.sessionId == nil {
+                HStack {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Connecting…")
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+            } else {
+                ChatInputView { message in
+                    sendMessage(message)
+                }
+                .padding()
             }
-            .padding()
             
             if let error = errorMessage {
                 Text(error)
@@ -83,6 +116,7 @@ public struct ChatPanel: View {
 
 /// Typing indicator showing the agent is processing
 struct TypingIndicator: View {
+    var label: String? = nil
     @State private var animationOffset: CGFloat = 0
     
     var body: some View {
@@ -93,6 +127,12 @@ struct TypingIndicator: View {
                         .fill(Color.secondary)
                         .frame(width: 6, height: 6)
                         .offset(y: animationOffset(for: index))
+                }
+                if let label {
+                    Text(label)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 4)
                 }
             }
             .padding(.horizontal, 12)

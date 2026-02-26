@@ -37,6 +37,21 @@ struct KiroShikishaApp: App {
             .onAppear {
                 // Sync kiro-cli path from settings to agent manager
                 agentManager.kirocliPath = appSettings.expandedKirocliPath
+                // Kill only our own kiro-cli processes from previous runs
+                killOwnedProcesses()
+                // Auto-reconnect saved sessions
+                for workspace in appStateManager.workspaces {
+                    if let sessionId = appStateManager.getLastSessionForWorkspace(workspace.id) {
+                        Task {
+                            do {
+                                let _ = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
+                            } catch {
+                                print("[AutoReconnect] Failed for \(workspace.name): \(error)")
+                                appStateManager.clearSessionForWorkspace(workspace.id)
+                            }
+                        }
+                    }
+                }
             }
             .onChange(of: appSettings.kirocliPath) { _, _ in
                 // Update agent manager when settings change
@@ -44,17 +59,24 @@ struct KiroShikishaApp: App {
             }
             .onChange(of: scenePhase) { oldPhase, newPhase in
                 if newPhase == .background {
-                    // App going to background - stop all agents
-                    Task {
-                        await agentManager.stopAllAgents()
-                    }
+                    // App going to background - only stop agents on macOS if app is actually being hidden
+                    // Don't stop on sheet dismissals which can briefly trigger background phase
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-                // App is about to quit - gracefully stop all agents
-                Task {
-                    await agentManager.stopAllAgents()
+                // Save active sessions and PIDs for reconnect on next launch
+                for agent in agentManager.getAllAgents() {
+                    if let sessionId = agent.sessionId?.value {
+                        appStateManager.updateSessionForWorkspace(agent.workspace.id, sessionId: sessionId)
+                    }
                 }
+                // Save PIDs so we can kill only our processes on next launch
+                Task {
+                    appStateManager.ownedProcessPids = await agentManager.collectProcessPids()
+                    appStateManager.saveState()
+                }
+                // Kill processes
+                agentManager.killAllProcesses()
             }
         }
         .commands {
@@ -70,6 +92,24 @@ struct KiroShikishaApp: App {
         Settings {
             SettingsView()
                 .environment(appSettings)
+        }
+    }
+
+    /// Kill only kiro-cli processes that this app previously spawned (by saved PID)
+    private func killOwnedProcesses() {
+        let pids = appStateManager.ownedProcessPids
+        guard !pids.isEmpty else { return }
+        for pid in pids {
+            // Only kill if the process is still running (kill(pid, 0) checks existence)
+            if kill(pid, 0) == 0 {
+                kill(pid, SIGTERM)
+            }
+        }
+        appStateManager.ownedProcessPids = []
+        appStateManager.saveState()
+        if pids.contains(where: { kill($0, 0) == 0 }) {
+            // Brief pause only if we actually killed something
+            Thread.sleep(forTimeInterval: 0.5)
         }
     }
 }
@@ -104,8 +144,8 @@ struct AppCommands: Commands {
             Divider()
             
             // Agent selection shortcuts (Cmd+1 through Cmd+9)
-            ForEach(0..<min(9, sortedAgents.count), id: \.self) { index in
-                Button("Select \(sortedAgents[index].name)") {
+            ForEach(Array(sortedAgents.prefix(9).enumerated()), id: \.element.id) { index, agent in
+                Button("Select \(agent.name)") {
                     selectAgent(at: index)
                 }
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)

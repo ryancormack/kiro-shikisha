@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import ACPModel
 
 /// Entry representing a single terminal command and its output
 struct TerminalEntry: Identifiable {
@@ -44,16 +45,27 @@ struct TerminalOutputView: View {
     
     /// Extract terminal entries from execute tool calls
     private var terminalEntries: [TerminalEntry] {
-        agent.activeToolCalls
+        agent.toolCallHistory.values
             .filter { $0.kind == .execute }
+            .sorted { ($0.toolCallId.value) < ($1.toolCallId.value) }
             .map { toolCall in
                 TerminalEntry(
-                    toolCallId: toolCall.toolCallId,
+                    toolCallId: toolCall.toolCallId.value,
                     title: toolCall.title,
-                    status: toolCall.status,
-                    output: stripAnsiCodes(toolCall.content ?? "")
+                    status: toolCall.status ?? .pending,
+                    output: stripAnsiCodes(extractText(from: toolCall.content))
                 )
             }
+    }
+    
+    /// Extract text content from ToolCallContent array
+    private func extractText(from content: [ToolCallContent]) -> String {
+        content.compactMap { item in
+            if case .content(let c) = item, case .text(let t) = c.content {
+                return t.text
+            }
+            return nil
+        }.joined(separator: "\n")
     }
     
     /// Strip ANSI escape codes from terminal output
@@ -196,46 +208,34 @@ struct StatusIndicator: View {
         name: "Test Agent",
         workspace: workspace,
         activeToolCalls: [
-            ToolCall(
+            ToolCallUpdate(
                 toolCallId: "exec-1",
                 title: "swift build",
                 kind: .execute,
-                status: .completed,
-                content: """
-                Building for debugging...
-                Build complete! (0.52s)
-                """
+                status: .completed
             ),
-            ToolCall(
+            ToolCallUpdate(
                 toolCallId: "exec-2",
                 title: "swift test",
                 kind: .execute,
-                status: .inProgress,
-                content: """
-                Test Suite 'All tests' started at 2024-01-15 10:30:00.000
-                Test Suite 'KiroShikishaTests.xctest' started at 2024-01-15 10:30:00.001
-                Test Suite 'WorkspaceTests' started at 2024-01-15 10:30:00.002
-                Test Case '-[KiroShikishaTests.WorkspaceTests testInit]' started.
-                """
+                status: .inProgress
             ),
-            ToolCall(
+            ToolCallUpdate(
                 toolCallId: "exec-3",
                 title: "git status",
                 kind: .execute,
-                status: .failed,
-                content: "fatal: not a git repository"
+                status: .failed
             ),
-            ToolCall(
+            ToolCallUpdate(
                 toolCallId: "read-1",
                 title: "Reading Package.swift",
                 kind: .read,
-                status: .completed,
-                content: "File content..."
+                status: .completed
             )
         ]
     )
     
-    return TerminalOutputView(agent: agent)
+    TerminalOutputView(agent: agent)
         .frame(width: 500, height: 400)
 }
 
@@ -249,7 +249,7 @@ struct StatusIndicator: View {
         workspace: workspace
     )
     
-    return TerminalOutputView(agent: agent)
+    TerminalOutputView(agent: agent)
         .frame(width: 400, height: 300)
 }
 #endif

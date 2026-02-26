@@ -34,7 +34,7 @@ public struct SidebarView: View {
     var onResumeSession: ((Workspace, String) -> Void)?
     
     private var activeAgents: [Agent] {
-        agentManager.getAllAgents().filter { $0.status == .active || $0.status == .connecting }
+        agentManager.agents.values.filter { $0.status == .active || $0.status == .connecting || $0.status == .idle }
     }
     
     private var recentWorkspaces: [Workspace] {
@@ -70,6 +70,10 @@ public struct SidebarView: View {
                         WorkspaceRow(workspace: agent.workspace, agent: agent)
                             .tag(agent.workspace.id)
                             .contextMenu {
+                                Button("Stop Agent") {
+                                    Task { await agentManager.stopAgent(id: agent.id) }
+                                }
+                                Divider()
                                 Button("Delete Workspace", role: .destructive) {
                                     workspaceToDelete = agent.workspace
                                 }

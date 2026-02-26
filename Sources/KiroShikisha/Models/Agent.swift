@@ -42,6 +42,10 @@ public final class Agent: Identifiable {
     public var fileChanges: [FileChange]
     /// Error message if status is .error
     public var errorMessage: String?
+    /// Raw ACP debug log entries
+    public var debugLog: [DebugLogEntry] = []
+    /// All tool calls by ID, persisted after completion for chat history
+    public var toolCallHistory: [String: ToolCallUpdate] = [:]
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {

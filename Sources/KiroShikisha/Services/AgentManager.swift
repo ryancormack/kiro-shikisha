@@ -108,16 +108,15 @@ public final class AgentManager {
             workspace: workspace,
             status: .connecting
         )
+        // Publish immediately so sidebar shows the agent
         agents[agent.id] = agent
         
         do {
             print("[ACP] Starting agent for workspace: \(workspace.path.path)")
             print("[ACP] Using kiro-cli at: \(kirocliPath)")
             
-            // Create and connect ACP connection
             let connection = ACPConnection()
             
-            // Create session update handler that captures agent reference
             let agentId = agent.id
             let sessionUpdateHandler: @Sendable (SessionUpdate) async -> Void = { [weak self] update in
                 await MainActor.run {
@@ -133,19 +132,21 @@ public final class AgentManager {
             connections[agent.id] = connection
             print("[ACP] Process spawned and initialized successfully")
             
-            // Create new session with workspace path
             print("[ACP] Creating session...")
             let sessionResult = try await connection.createSession(cwd: workspace.path.path)
             print("[ACP] Session created: \(sessionResult.sessionId.value)")
             
             agent.sessionId = sessionResult.sessionId
+            agent.messages.append(ChatMessage(role: .system, content: "Agent connected and ready."))
             agent.status = .active
             
             return agent
         } catch {
             print("[ACP] ERROR: \(error)")
-            agent.status = .error
-            agent.errorMessage = error.localizedDescription
+            agents.removeValue(forKey: agent.id)
+            if let connection = connections.removeValue(forKey: agent.id) {
+                await connection.disconnect()
+            }
             throw error
         }
     }
@@ -166,10 +167,8 @@ public final class AgentManager {
         agents[agent.id] = agent
         
         do {
-            // Create and connect ACP connection
             let connection = ACPConnection()
             
-            // Create session update handler
             let agentId = agent.id
             let sessionUpdateHandler: @Sendable (SessionUpdate) async -> Void = { [weak self] update in
                 await MainActor.run {
@@ -184,18 +183,20 @@ public final class AgentManager {
             )
             connections[agent.id] = connection
             
-            // Load existing session
             _ = try await connection.loadSession(
                 sessionId: sessionIdValue,
                 cwd: workspace.path.path
             )
             
-            agent.status = .active
+            agent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
+            agent.status = .idle
             
             return agent
         } catch {
-            agent.status = .error
-            agent.errorMessage = error.localizedDescription
+            agents.removeValue(forKey: agent.id)
+            if let connection = connections.removeValue(forKey: agent.id) {
+                await connection.disconnect()
+            }
             throw error
         }
     }
@@ -218,12 +219,30 @@ public final class AgentManager {
     }
     
     /// Stop all agents gracefully
-    /// Iterates through all agents and stops each one
     public func stopAllAgents() async {
         let agentIds = Array(agents.keys)
         for id in agentIds {
             await stopAgent(id: id)
         }
+    }
+
+    /// Synchronously kill all kiro-cli processes (for app quit)
+    public func killAllProcesses() {
+        for connection in connections.values {
+            Task { await connection.killProcess() }
+        }
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+
+    /// Collect PIDs of all running kiro-cli processes
+    public func collectProcessPids() async -> [Int32] {
+        var pids: [Int32] = []
+        for connection in connections.values {
+            if let pid = await connection.processId {
+                pids.append(pid)
+            }
+        }
+        return pids
     }
     
     /// Get an agent by ID
@@ -372,81 +391,75 @@ public final class AgentManager {
     ///   - update: The session update from the SDK
     ///   - agent: The agent to update
     public func handleSessionUpdate(_ update: SessionUpdate, for agent: Agent) {
+        // Log every update for debug panel
+        let entry: DebugLogEntry
         switch update {
         case .agentMessageChunk(let chunk):
+            if case .text(let t) = chunk.content {
+                entry = DebugLogEntry(type: "agent_message", summary: t.text.prefix(200).description)
+            } else {
+                entry = DebugLogEntry(type: "agent_message", summary: "(non-text content)")
+            }
             handleAgentMessageChunk(chunk, for: agent)
-            
-        case .toolCall(let toolCallUpdate):
-            handleToolCall(toolCallUpdate, for: agent)
-            
-        case .toolCallUpdate(let toolCallUpdateData):
-            handleToolCallUpdate(toolCallUpdateData, for: agent)
-            
+        case .toolCall(let tc):
+            entry = DebugLogEntry(type: "tool_call", summary: "id=\(tc.toolCallId.value) \(tc.title) [\(tc.status?.rawValue ?? "?")]")
+            handleToolCall(tc, for: agent)
+        case .toolCallUpdate(let tcu):
+            entry = DebugLogEntry(type: "tool_call_update", summary: "id=\(tcu.toolCallId.value) status=\(tcu.status?.rawValue ?? "?")")
+            handleToolCallUpdate(tcu, for: agent)
+        case .agentThoughtChunk(let chunk):
+            if case .text(let t) = chunk.content {
+                entry = DebugLogEntry(type: "thought", summary: t.text.prefix(200).description)
+            } else {
+                entry = DebugLogEntry(type: "thought", summary: "(non-text)")
+            }
         case .userMessageChunk:
-            // Echo of user message, ignore
-            break
-            
-        case .agentThoughtChunk:
-            // Internal reasoning, could log or display separately
-            break
-            
+            entry = DebugLogEntry(type: "user_echo", summary: "")
         case .planUpdate:
-            // Execution plan, could display if desired
-            break
-            
-        case .availableCommandsUpdate(let commandsUpdate):
-            let commandNames = commandsUpdate.availableCommands.map { $0.name }.joined(separator: ", ")
-            print("[ACP] Available commands: \(commandNames)")
-            
+            entry = DebugLogEntry(type: "plan", summary: "")
+        case .availableCommandsUpdate(let c):
+            entry = DebugLogEntry(type: "commands", summary: c.availableCommands.map(\.name).joined(separator: ", "))
         case .currentModeUpdate:
-            // Mode change, could track if desired
-            break
-            
+            entry = DebugLogEntry(type: "mode_update", summary: "")
         case .configOptionUpdate:
-            // Config options updated
-            break
-            
+            entry = DebugLogEntry(type: "config_update", summary: "")
         case .sessionInfoUpdate:
-            // Session info updated
-            break
+            entry = DebugLogEntry(type: "session_info", summary: "")
         }
+        agent.debugLog.append(entry)
     }
     
     // MARK: - Private Session Update Handlers
     
     private func handleAgentMessageChunk(_ chunk: AgentMessageChunk, for agent: Agent) {
-        // Get text content from chunk
         guard case .text(let textContent) = chunk.content else { return }
         let text = textContent.text
         
         // Find or create assistant message
-        if let lastMessage = agent.messages.last, lastMessage.role == .assistant {
-            // Append to existing assistant message
-            let index = agent.messages.count - 1
-            agent.messages[index].content += text
+        let lastIndex = agent.messages.count - 1
+        if lastIndex >= 0, agent.messages[lastIndex].role == .assistant {
+            agent.messages[lastIndex].content += text
         } else {
-            // Create new assistant message
-            let message = ChatMessage(
-                role: .assistant,
-                content: text
-            )
-            agent.messages.append(message)
+            agent.messages.append(ChatMessage(role: .assistant, content: text))
         }
     }
     
     private func handleToolCall(_ toolCallUpdate: ToolCallUpdate, for agent: Agent) {
-        // Add to active tool calls
-        agent.activeToolCalls.append(toolCallUpdate)
-        
-        // Associate with current assistant message
-        if let lastMessage = agent.messages.last, lastMessage.role == .assistant {
-            let index = agent.messages.count - 1
-            var toolCallIds = agent.messages[index].toolCallIds ?? []
-            toolCallIds.append(toolCallUpdate.toolCallId.value)
-            agent.messages[index].toolCallIds = toolCallIds
+        let id = toolCallUpdate.toolCallId.value
+        if let index = agent.activeToolCalls.firstIndex(where: { $0.toolCallId.value == id }),
+           index < agent.activeToolCalls.count {
+            agent.activeToolCalls[index] = toolCallUpdate
+        } else {
+            agent.activeToolCalls.append(toolCallUpdate)
+            // Only insert a chat marker for genuinely new tool calls
+            agent.messages.append(ChatMessage(
+                role: .system,
+                content: "",
+                toolCallIds: [id]
+            ))
         }
-        
-        // Add activity event for tool call
+        agent.toolCallHistory[id] = toolCallUpdate
+
         addActivityEvent(ActivityEvent(
             agentId: agent.id,
             agentName: agent.name,
@@ -456,8 +469,8 @@ public final class AgentManager {
     }
     
     private func handleToolCallUpdate(_ updateData: ToolCallUpdateData, for agent: Agent) {
-        // Find and update the existing tool call
-        if let index = agent.activeToolCalls.firstIndex(where: { $0.toolCallId == updateData.toolCallId }) {
+        if let index = agent.activeToolCalls.firstIndex(where: { $0.toolCallId == updateData.toolCallId }),
+           index < agent.activeToolCalls.count {
             let existing = agent.activeToolCalls[index]
             
             // Create updated tool call with merged data
@@ -472,6 +485,7 @@ public final class AgentManager {
                 rawOutput: updateData.rawOutput ?? existing.rawOutput
             )
             agent.activeToolCalls[index] = updated
+            agent.toolCallHistory[updated.toolCallId.value] = updated
         }
         
         // Extract file changes from diff content
@@ -496,6 +510,25 @@ public final class AgentManager {
                     )
                     agent.fileChanges.append(fileChange)
                 }
+            }
+        }
+
+        // Extract file changes from edit/write tool calls via rawInput
+        if updateData.status == .completed,
+           let existing = agent.toolCallHistory[updateData.toolCallId.value],
+           (existing.kind == .edit || existing.kind == .delete),
+           let input = (updateData.rawInput ?? existing.rawInput)?.objectValue,
+           let path = input["path"]?.stringValue {
+            let alreadyTracked = agent.fileChanges.contains { $0.toolCallId == updateData.toolCallId.value && $0.path == path }
+            if !alreadyTracked {
+                let changeType: FileChangeType = existing.kind == .delete ? .deleted : .modified
+                agent.fileChanges.append(FileChange(
+                    path: path,
+                    oldContent: input["oldStr"]?.stringValue,
+                    newContent: input["newStr"]?.stringValue ?? "",
+                    changeType: changeType,
+                    toolCallId: updateData.toolCallId.value
+                ))
             }
         }
     }

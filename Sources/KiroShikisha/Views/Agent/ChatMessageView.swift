@@ -40,6 +40,13 @@ public struct ChatMessageView: View {
     }
     
     public var body: some View {
+        if message.role == .system {
+            Text(message.content)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+        } else {
         HStack(alignment: .bottom, spacing: 8) {
             if isUser {
                 Spacer(minLength: 60)
@@ -62,6 +69,7 @@ public struct ChatMessageView: View {
             if !isUser {
                 Spacer(minLength: 60)
             }
+        }
         }
     }
 }

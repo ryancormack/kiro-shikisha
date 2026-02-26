@@ -42,6 +42,14 @@ public struct MainView: View {
                 },
                 onResumeSession: { workspace, sessionId in
                     appStateManager.updateSessionForWorkspace(workspace.id, sessionId: sessionId)
+                    appStateManager.selectedWorkspaceId = workspace.id
+                    Task {
+                        do {
+                            let _ = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
+                        } catch {
+                            print("[Resume] Failed to load session \(sessionId): \(error)")
+                        }
+                    }
                 }
             )
         } detail: {
@@ -133,8 +141,8 @@ public struct MainViewCommands: Commands {
             Divider()
             
             // Agent selection shortcuts (Cmd+1 through Cmd+9)
-            ForEach(0..<min(9, sortedAgents.count), id: \.self) { index in
-                Button("Select \(sortedAgents[index].name)") {
+            ForEach(Array(sortedAgents.prefix(9).enumerated()), id: \.element.id) { index, agent in
+                Button("Select \(agent.name)") {
                     onSelectAgent(index)
                 }
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)

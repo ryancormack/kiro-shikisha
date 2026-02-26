@@ -31,6 +31,8 @@ public struct CodePanel: View {
                 FilesChangedView(agent: agent)
             case .terminal:
                 TerminalOutputView(agent: agent)
+            case .debug:
+                DebugLogView(agent: agent)
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
@@ -41,13 +43,13 @@ public struct CodePanel: View {
 enum CodePanelTab: String, CaseIterable {
     case filesChanged
     case terminal
+    case debug
     
     var title: String {
         switch self {
-        case .filesChanged:
-            return "Files Changed"
-        case .terminal:
-            return "Terminal"
+        case .filesChanged: return "Files Changed"
+        case .terminal: return "Terminal"
+        case .debug: return "Debug"
         }
     }
 }

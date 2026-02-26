@@ -15,6 +15,9 @@ public final class AppStateManager {
     
     /// Maps workspace IDs to their last used session ID
     public private(set) var workspaceSessionAssociations: [UUID: String] = [:]
+
+    /// PIDs of kiro-cli processes spawned by this app (saved on quit, killed on next launch)
+    public var ownedProcessPids: [Int32] = []
     
     // MARK: - Private Properties
     
@@ -27,6 +30,7 @@ public final class AppStateManager {
         var workspaces: [Workspace]
         var selectedWorkspaceId: UUID?
         var workspaceSessionAssociations: [UUID: String]
+        var ownedProcessPids: [Int32]?
     }
     
     // MARK: - Initialization
@@ -43,7 +47,8 @@ public final class AppStateManager {
         let state = PersistedState(
             workspaces: workspaces,
             selectedWorkspaceId: selectedWorkspaceId,
-            workspaceSessionAssociations: workspaceSessionAssociations
+            workspaceSessionAssociations: workspaceSessionAssociations,
+            ownedProcessPids: ownedProcessPids
         )
         
         do {
@@ -69,6 +74,7 @@ public final class AppStateManager {
             workspaces = state.workspaces
             selectedWorkspaceId = state.selectedWorkspaceId
             workspaceSessionAssociations = state.workspaceSessionAssociations
+            ownedProcessPids = state.ownedProcessPids ?? []
         } catch {
             print("Failed to load app state: \(error)")
         }

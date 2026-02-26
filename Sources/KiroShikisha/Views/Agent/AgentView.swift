@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import ACPModel
 
 /// Main container view for a single agent with chat and tool calls panels
 public struct AgentView: View {
@@ -57,7 +58,7 @@ struct ToolCallsPanel: View {
 
 /// Row displaying a single tool call with status and details
 struct ToolCallRow: View {
-    let toolCall: ToolCall
+    let toolCall: ToolCallUpdate
     
     private var statusIcon: String {
         switch toolCall.status {
@@ -69,12 +70,14 @@ struct ToolCallRow: View {
             return "checkmark.circle.fill"
         case .failed:
             return "xmark.circle.fill"
+        case .none:
+            return "clock"
         }
     }
     
     private var statusColor: Color {
         switch toolCall.status {
-        case .pending:
+        case .pending, .none:
             return .secondary
         case .inProgress:
             return .blue
@@ -103,9 +106,18 @@ struct ToolCallRow: View {
             return "brain"
         case .fetch:
             return "arrow.down.circle"
-        case .other:
+        case .switchMode, .other, .none:
             return "questionmark.circle"
         }
+    }
+    
+    private var contentText: String? {
+        for item in toolCall.content {
+            if case .content(let c) = item, case .text(let t) = c.content {
+                return t.text
+            }
+        }
+        return nil
     }
     
     var body: some View {
@@ -125,8 +137,8 @@ struct ToolCallRow: View {
                     .foregroundColor(statusColor)
             }
             
-            if let content = toolCall.content, !content.isEmpty {
-                Text(content)
+            if let text = contentText, !text.isEmpty {
+                Text(text)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(3)
@@ -150,25 +162,23 @@ struct ToolCallRow: View {
             ChatMessage(role: .assistant, content: "Hi there!")
         ],
         activeToolCalls: [
-            ToolCall(
+            ToolCallUpdate(
                 toolCallId: "1",
                 title: "Reading file.swift",
                 kind: .read,
                 status: .completed
             ),
-            ToolCall(
+            ToolCallUpdate(
                 toolCallId: "2",
                 title: "Editing main.swift",
                 kind: .edit,
-                status: .inProgress,
-                content: "Adding new function..."
+                status: .inProgress
             ),
-            ToolCall(
+            ToolCallUpdate(
                 toolCallId: "3",
                 title: "swift build",
                 kind: .execute,
-                status: .completed,
-                content: "Build complete!"
+                status: .completed
             )
         ],
         fileChanges: [
@@ -182,7 +192,7 @@ struct ToolCallRow: View {
         ]
     )
     
-    return AgentView(agent: agent)
+    AgentView(agent: agent)
         .frame(width: 900, height: 600)
 }
 #endif

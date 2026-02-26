@@ -102,7 +102,7 @@ struct DiffView: View {
                 let (lcsOldIdx, lcsNewIdx) = lcs[lcsIndex]
                 
                 // Add deletions (lines in old but not in LCS)
-                while oldIndex < lcsOldIdx {
+                while oldIndex < lcsOldIdx && oldIndex < oldLines.count {
                     result.append(DiffLine(
                         type: .deletion,
                         content: oldLines[oldIndex],
@@ -113,7 +113,7 @@ struct DiffView: View {
                 }
                 
                 // Add additions (lines in new but not in LCS)
-                while newIndex < lcsNewIdx {
+                while newIndex < lcsNewIdx && newIndex < newLines.count {
                     result.append(DiffLine(
                         type: .addition,
                         content: newLines[newIndex],
@@ -124,12 +124,14 @@ struct DiffView: View {
                 }
                 
                 // Add context line (common line)
-                result.append(DiffLine(
-                    type: .context,
-                    content: oldLines[oldIndex],
-                    oldLineNumber: oldIndex + 1,
-                    newLineNumber: newIndex + 1
-                ))
+                if oldIndex < oldLines.count && newIndex < newLines.count {
+                    result.append(DiffLine(
+                        type: .context,
+                        content: oldLines[oldIndex],
+                        oldLineNumber: oldIndex + 1,
+                        newLineNumber: newIndex + 1
+                    ))
+                }
                 oldIndex += 1
                 newIndex += 1
                 lcsIndex += 1
