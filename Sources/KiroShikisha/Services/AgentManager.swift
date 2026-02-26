@@ -74,12 +74,37 @@ public final class AgentManager {
     
     // MARK: - Public Methods
     
+    /// Convert a branch name to a human-readable display name
+    /// - Parameter branch: The branch name (e.g., "feature/my-feature")
+    /// - Returns: A human-readable name (e.g., "My Feature")
+    private func branchNameToDisplayName(_ branch: String) -> String {
+        // Remove common prefixes
+        var name = branch
+        for prefix in ["feature/", "bugfix/", "hotfix/", "release/"] {
+            if name.hasPrefix(prefix) {
+                name = String(name.dropFirst(prefix.count))
+                break
+            }
+        }
+        // Replace separators with spaces and capitalize
+        return name
+            .replacingOccurrences(of: "/", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .split(separator: " ")
+            .map { $0.capitalized }
+            .joined(separator: " ")
+    }
+    
     /// Start a new agent for a workspace
-    /// - Parameter workspace: The workspace to create an agent for
+    /// - Parameters:
+    ///   - workspace: The workspace to create an agent for
+    ///   - sessionName: Optional custom session name
     /// - Returns: The newly created and connected agent
-    public func startAgent(workspace: Workspace) async throws -> Agent {
+    public func startAgent(workspace: Workspace, sessionName: String? = nil) async throws -> Agent {
         let agent = Agent(
             name: workspace.name,
+            sessionName: sessionName,
             workspace: workspace,
             status: .connecting
         )
@@ -325,8 +350,11 @@ public final class AgentManager {
         newWorkspace.gitWorktreePath = worktree.path
         newWorkspace.sourceWorkspaceId = sourceWorkspace.id
         
-        // 5. Start agent in new workspace
-        return try await startAgent(workspace: newWorkspace)
+        // 5. Auto-generate session name from branch name
+        let sessionName = branchNameToDisplayName(branchName)
+        
+        // 6. Start agent in new workspace with generated session name
+        return try await startAgent(workspace: newWorkspace, sessionName: sessionName)
     }
     
     /// Handle a session update for an agent
@@ -519,7 +547,7 @@ public final class AgentManager {
         // No-op on non-macOS
     }
     
-    public func startAgent(workspace: Workspace) async throws -> Agent {
+    public func startAgent(workspace: Workspace, sessionName: String? = nil) async throws -> Agent {
         throw AgentManagerError.platformNotSupported
     }
     
@@ -583,7 +611,7 @@ public final class AgentManager {
         // No-op on non-macOS
     }
     
-    public func startAgent(workspace: Workspace) async throws -> Agent {
+    public func startAgent(workspace: Workspace, sessionName: String? = nil) async throws -> Agent {
         throw AgentManagerError.platformNotSupported
     }
     

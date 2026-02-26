@@ -5,12 +5,16 @@ import SwiftUI
 public struct AgentCard: View {
     let agent: Agent
     let onSelect: () -> Void
+    let onRename: ((String) -> Void)?
     
     @State private var isHovered: Bool = false
+    @State private var isShowingRenameSheet: Bool = false
+    @State private var editingSessionName: String = ""
     
-    public init(agent: Agent, onSelect: @escaping () -> Void) {
+    public init(agent: Agent, onSelect: @escaping () -> Void, onRename: ((String) -> Void)? = nil) {
         self.agent = agent
         self.onSelect = onSelect
+        self.onRename = onRename
     }
     
     private var lastMessagePreview: String? {
@@ -32,17 +36,38 @@ public struct AgentCard: View {
     public var body: some View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 12) {
-                // Header: Agent name and status
+                // Header: Session name and status
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(agent.name)
-                            .font(.headline)
-                            .lineLimit(1)
+                        HStack(spacing: 4) {
+                            Text(agent.displayName)
+                                .font(.headline)
+                                .lineLimit(1)
+                            
+                            // Visual indicator for custom name
+                            if agent.hasCustomSessionName {
+                                Image(systemName: "pencil.circle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                         
-                        Text(agent.workspace.name)
+                        // Show workspace path as secondary info
+                        Text(agent.workspace.path.lastPathComponent)
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
+                        
+                        // Show git branch if available
+                        if let branch = agent.workspace.gitBranch {
+                            HStack(spacing: 2) {
+                                Image(systemName: "arrow.triangle.branch")
+                                    .font(.caption2)
+                                Text(branch)
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.secondary)
+                        }
                     }
                     
                     Spacer()
@@ -120,6 +145,29 @@ public struct AgentCard: View {
                 isHovered = hovering
             }
         }
+        .contextMenu {
+            if onRename != nil {
+                Button(action: {
+                    editingSessionName = agent.sessionName ?? ""
+                    isShowingRenameSheet = true
+                }) {
+                    Label("Rename Session", systemImage: "pencil")
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingRenameSheet) {
+            SessionNameEditor(
+                sessionName: $editingSessionName,
+                gitBranch: agent.workspace.gitBranch,
+                onSave: {
+                    onRename?(editingSessionName)
+                    isShowingRenameSheet = false
+                },
+                onCancel: {
+                    isShowingRenameSheet = false
+                }
+            )
+        }
     }
 }
 
@@ -131,19 +179,12 @@ public struct AgentCard: View {
     
     let activeAgent = Agent(
         name: "Active Agent",
+        sessionName: "Implement User Auth",
         workspace: workspace,
         status: .active,
         messages: [
             ChatMessage(role: .user, content: "Please add a new feature"),
             ChatMessage(role: .assistant, content: "I'll help you add that feature. Let me start by reading the existing code...")
-        ],
-        activeToolCalls: [
-            ToolCall(
-                toolCallId: "1",
-                title: "Reading main.swift",
-                kind: .read,
-                status: .inProgress
-            )
         ]
     )
     
@@ -164,9 +205,9 @@ public struct AgentCard: View {
     )
     
     return VStack(spacing: 16) {
-        AgentCard(agent: activeAgent) { print("Selected active") }
-        AgentCard(agent: idleAgent) { print("Selected idle") }
-        AgentCard(agent: errorAgent) { print("Selected error") }
+        AgentCard(agent: activeAgent, onSelect: { print("Selected active") }, onRename: { name in print("Renamed to: \(name)") })
+        AgentCard(agent: idleAgent, onSelect: { print("Selected idle") })
+        AgentCard(agent: errorAgent, onSelect: { print("Selected error") })
     }
     .padding()
     .frame(width: 350)

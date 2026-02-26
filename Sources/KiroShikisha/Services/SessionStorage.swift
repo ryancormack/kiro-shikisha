@@ -6,6 +6,8 @@ public struct SessionMetadata: Codable, Identifiable, Sendable {
     public let sessionId: String
     /// Working directory for the session
     public let cwd: String
+    /// User-provided session name (optional)
+    public var sessionName: String?
     /// When the session was created
     public let createdAt: Date?
     /// When the session was last modified
@@ -13,9 +15,23 @@ public struct SessionMetadata: Codable, Identifiable, Sendable {
     
     public var id: String { sessionId }
     
+    /// Display name for the session - returns sessionName if set, otherwise last path component of cwd
+    public var displayName: String {
+        if let name = sessionName, !name.isEmpty {
+            return name
+        }
+        return URL(fileURLWithPath: cwd).lastPathComponent
+    }
+    
+    /// Whether this session has a custom name
+    public var hasCustomName: Bool {
+        sessionName != nil && !(sessionName?.isEmpty ?? true)
+    }
+    
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
+        case sessionName = "session_name"
         case createdAt = "created_at"
         case lastModified = "last_modified"
     }
@@ -23,11 +39,13 @@ public struct SessionMetadata: Codable, Identifiable, Sendable {
     public init(
         sessionId: String,
         cwd: String,
+        sessionName: String? = nil,
         createdAt: Date? = nil,
         lastModified: Date? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
+        self.sessionName = sessionName
         self.createdAt = createdAt
         self.lastModified = lastModified
     }
@@ -37,6 +55,7 @@ public struct SessionMetadata: Codable, Identifiable, Sendable {
         
         sessionId = try container.decode(String.self, forKey: .sessionId)
         cwd = try container.decode(String.self, forKey: .cwd)
+        sessionName = try container.decodeIfPresent(String.self, forKey: .sessionName)
         
         // Handle date decoding with flexibility for different formats
         if let timestamp = try? container.decode(Double.self, forKey: .createdAt) {
