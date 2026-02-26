@@ -155,7 +155,7 @@ public final class AgentManager {
     /// - Parameters:
     ///   - workspace: The workspace for the agent
     ///   - sessionId: The session ID to load
-    /// - Returns: The agent with the loaded session
+    /// - Returns: The agent with the loaded session, or in error state if loading failed
     public func loadAgent(workspace: Workspace, sessionId: String) async throws -> Agent {
         let sessionIdValue = SessionId(value: sessionId)
         let agent = Agent(
@@ -193,11 +193,31 @@ public final class AgentManager {
             
             return agent
         } catch {
-            agents.removeValue(forKey: agent.id)
+            // Log detailed error
+            print("[AgentManager] Failed to load session \(sessionId) for workspace \(workspace.name): \(error)")
+            
+            // Clean up connection if it was created
             if let connection = connections.removeValue(forKey: agent.id) {
                 await connection.disconnect()
             }
-            throw error
+            
+            // Set agent to error state instead of throwing
+            agent.status = .error
+            agent.errorMessage = "Failed to load session: \(error.localizedDescription)"
+            agent.messages.append(ChatMessage(
+                role: .system,
+                content: "Failed to load session: \(error.localizedDescription)"
+            ))
+            
+            addActivityEvent(ActivityEvent(
+                agentId: agent.id,
+                agentName: agent.name,
+                eventType: .error,
+                description: "Session load failed: \(error.localizedDescription)"
+            ))
+            
+            // Return the agent in error state so UI can display the error
+            return agent
         }
     }
     

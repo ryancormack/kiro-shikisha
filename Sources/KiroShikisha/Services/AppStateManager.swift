@@ -75,8 +75,41 @@ public final class AppStateManager {
             selectedWorkspaceId = state.selectedWorkspaceId
             workspaceSessionAssociations = state.workspaceSessionAssociations
             ownedProcessPids = state.ownedProcessPids ?? []
+            
+            // Validate stored session associations
+            validateStoredSessionAssociations()
         } catch {
             print("Failed to load app state: \(error)")
+        }
+    }
+    
+    /// Validates stored session associations and removes invalid entries
+    /// Call this after loading state to clean up stale associations
+    public func validateStoredSessionAssociations() {
+        let sessionStorage = SessionStorage()
+        var invalidWorkspaceIds: [UUID] = []
+        
+        for (workspaceId, sessionId) in workspaceSessionAssociations {
+            let validationResult = sessionStorage.validateSession(sessionId: sessionId)
+            switch validationResult {
+            case .valid:
+                // Session is valid, keep the association
+                break
+            case .invalid(let reason):
+                print("[AppStateManager] Removing invalid session association for workspace \(workspaceId): session \(sessionId) is invalid - \(reason)")
+                invalidWorkspaceIds.append(workspaceId)
+            case .notFound:
+                print("[AppStateManager] Removing invalid session association for workspace \(workspaceId): session \(sessionId) not found")
+                invalidWorkspaceIds.append(workspaceId)
+            }
+        }
+        
+        // Remove invalid associations
+        if !invalidWorkspaceIds.isEmpty {
+            for workspaceId in invalidWorkspaceIds {
+                workspaceSessionAssociations.removeValue(forKey: workspaceId)
+            }
+            saveState()
         }
     }
     

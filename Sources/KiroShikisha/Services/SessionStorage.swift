@@ -147,7 +147,7 @@ public final class SessionStorage: Sendable {
     
     /// Load session events from a JSONL file
     /// - Parameter sessionId: The session ID to load events for
-    /// - Returns: Array of JSON data objects for each event line, or nil if file doesn't exist
+    /// - Returns: Array of JSON data objects for each valid event line, or nil if file doesn't exist
     public func loadSessionEvents(sessionId: String) -> [Data]? {
         let eventsFileURL = sessionsDirectory
             .appendingPathComponent("\(sessionId).jsonl")
@@ -161,17 +161,30 @@ public final class SessionStorage: Sendable {
             let lines = content.components(separatedBy: .newlines)
             
             var events: [Data] = []
+            var lineNumber = 0
             for line in lines {
+                lineNumber += 1
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.isEmpty else { continue }
                 
-                if let data = trimmed.data(using: .utf8) {
+                guard let data = trimmed.data(using: .utf8) else {
+                    print("[SessionStorage] Session \(sessionId) line \(lineNumber): Failed to convert to UTF-8 data, skipping")
+                    continue
+                }
+                
+                // Validate that the line is valid JSON before including it
+                do {
+                    _ = try JSONSerialization.jsonObject(with: data, options: [])
                     events.append(data)
+                } catch {
+                    print("[SessionStorage] Session \(sessionId) line \(lineNumber): Invalid JSON, skipping - \(error.localizedDescription)")
+                    continue
                 }
             }
             
             return events
         } catch {
+            print("[SessionStorage] Failed to read events file for session \(sessionId): \(error.localizedDescription)")
             return nil
         }
     }
@@ -199,14 +212,20 @@ public final class SessionStorage: Sendable {
             throw SessionStorageError.sessionNotFound(sessionId)
         }
         
+        // Handle empty events - return empty array
+        if eventsData.isEmpty {
+            return []
+        }
+        
         let decoder = JSONDecoder()
         var messages: [ChatMessage] = []
         var currentAssistantContent = ""
         var currentAssistantTimestamp: Date?
         var currentToolCallIds: [String] = []
         
-        for eventData in eventsData {
+        for (index, eventData) in eventsData.enumerated() {
             guard let event = try? decoder.decode(SessionEvent.self, from: eventData) else {
+                print("[SessionStorage] Session \(sessionId) event \(index): Failed to decode as SessionEvent, skipping")
                 continue // Skip malformed events
             }
             
@@ -225,8 +244,9 @@ public final class SessionStorage: Sendable {
                     currentToolCallIds = []
                 }
                 
-                // Add user message
-                if let content = event.content, !content.isEmpty {
+                // Add user message - handle nil or empty content gracefully
+                let content = event.content ?? ""
+                if !content.isEmpty {
                     messages.append(ChatMessage(
                         role: .user,
                         content: content,
@@ -236,6 +256,7 @@ public final class SessionStorage: Sendable {
                 
             case .agentMessage:
                 // Accumulate assistant content (may come in chunks)
+                // Handle nil content gracefully
                 if let content = event.content {
                     if currentAssistantTimestamp == nil {
                         currentAssistantTimestamp = event.timestamp
@@ -245,7 +266,7 @@ public final class SessionStorage: Sendable {
                 
             case .toolCall:
                 // Track tool call IDs for the current assistant message
-                if let toolCallId = event.toolCallId {
+                if let toolCallId = event.toolCallId, !toolCallId.isEmpty {
                     currentToolCallIds.append(toolCallId)
                 }
                 
@@ -265,6 +286,7 @@ public final class SessionStorage: Sendable {
                 
             case .toolResult, .sessionStart, .sessionEnd, .error, .unknown:
                 // These events don't directly contribute to chat messages
+                // Unknown event types are handled gracefully via the .unknown case
                 break
             }
         }
@@ -288,10 +310,86 @@ public final class SessionStorage: Sendable {
         do {
             let data = try Data(contentsOf: fileURL)
             let decoder = JSONDecoder()
-            return try decoder.decode(SessionMetadata.self, from: data)
+            let metadata = try decoder.decode(SessionMetadata.self, from: data)
+            
+            // Validate required fields
+            if metadata.sessionId.isEmpty {
+                print("[SessionStorage] Invalid metadata at \(fileURL.path): session_id is empty")
+                return nil
+            }
+            if metadata.cwd.isEmpty {
+                print("[SessionStorage] Invalid metadata at \(fileURL.path): cwd is empty")
+                return nil
+            }
+            
+            return metadata
+        } catch let error as DecodingError {
+            switch error {
+            case .keyNotFound(let key, _):
+                print("[SessionStorage] Missing required field '\(key.stringValue)' in metadata at \(fileURL.path)")
+            case .typeMismatch(let type, let context):
+                print("[SessionStorage] Type mismatch for \(type) at \(context.codingPath.map(\.stringValue).joined(separator: ".")) in \(fileURL.path)")
+            case .valueNotFound(let type, let context):
+                print("[SessionStorage] Missing value for \(type) at \(context.codingPath.map(\.stringValue).joined(separator: ".")) in \(fileURL.path)")
+            case .dataCorrupted(let context):
+                print("[SessionStorage] Corrupted data at \(context.codingPath.map(\.stringValue).joined(separator: ".")) in \(fileURL.path): \(context.debugDescription)")
+            @unknown default:
+                print("[SessionStorage] Unknown decoding error in \(fileURL.path): \(error)")
+            }
+            return nil
         } catch {
+            print("[SessionStorage] Failed to read metadata at \(fileURL.path): \(error.localizedDescription)")
             return nil
         }
+    }
+    
+    // MARK: - Session Validation
+    
+    /// Validate a session by checking its metadata and events files
+    /// - Parameter sessionId: The session ID to validate
+    /// - Returns: SessionValidationResult indicating if session is valid, invalid, or not found
+    public func validateSession(sessionId: String) -> SessionValidationResult {
+        let metadataFileURL = sessionsDirectory.appendingPathComponent("\(sessionId).json")
+        
+        // Check if metadata file exists
+        guard fileManager.fileExists(atPath: metadataFileURL.path) else {
+            return .notFound
+        }
+        
+        // Try to load and validate metadata
+        guard let metadata = loadSessionMetadata(from: metadataFileURL) else {
+            return .invalid(reason: "Failed to decode metadata JSON")
+        }
+        
+        // Validate session_id matches filename
+        if metadata.sessionId != sessionId {
+            return .invalid(reason: "session_id '\(metadata.sessionId)' does not match filename '\(sessionId)'")
+        }
+        
+        // Validate cwd is non-empty
+        if metadata.cwd.isEmpty {
+            return .invalid(reason: "cwd field is empty")
+        }
+        
+        // Check events file existence (optional - session may have no events yet)
+        let eventsFileURL = sessionsDirectory.appendingPathComponent("\(sessionId).jsonl")
+        if fileManager.fileExists(atPath: eventsFileURL.path) {
+            // Verify the events file is readable (basic check)
+            do {
+                _ = try Data(contentsOf: eventsFileURL)
+            } catch {
+                return .invalid(reason: "Events file exists but cannot be read: \(error.localizedDescription)")
+            }
+        }
+        
+        return .valid
+    }
+    
+    /// Check if a session exists and is valid
+    /// - Parameter sessionId: The session ID to check
+    /// - Returns: True if the session exists and passes basic validation
+    public func sessionExists(sessionId: String) -> Bool {
+        return validateSession(sessionId: sessionId) == .valid
     }
 }
 
@@ -308,4 +406,11 @@ public enum SessionStorageError: Error, LocalizedError {
             return "Invalid session data: \(reason)"
         }
     }
+}
+
+/// Result of session validation
+public enum SessionValidationResult: Sendable, Equatable {
+    case valid
+    case invalid(reason: String)
+    case notFound
 }
