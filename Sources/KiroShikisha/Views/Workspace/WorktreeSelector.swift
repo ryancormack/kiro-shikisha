@@ -3,6 +3,8 @@ import SwiftUI
 
 /// View shown when workspace is a git repository, allowing worktree creation
 public struct WorktreeSelector: View {
+    @Environment(AgentManager.self) var agentManager
+    
     /// The detected git repository
     let repository: GitRepository
     /// Existing worktrees in the repository
@@ -11,6 +13,8 @@ public struct WorktreeSelector: View {
     var onCreateWorktree: (String, URL) -> Void
     /// Callback when an existing worktree is selected
     var onSelectWorktree: ((GitWorktree) -> Void)?
+    /// Callback when starting an agent in a worktree
+    var onStartAgent: ((GitWorktree) -> Void)?
     
     @State private var newBranchName: String = ""
     @State private var selectedWorktree: GitWorktree?
@@ -20,12 +24,22 @@ public struct WorktreeSelector: View {
         repository: GitRepository,
         worktrees: [GitWorktree] = [],
         onCreateWorktree: @escaping (String, URL) -> Void,
-        onSelectWorktree: ((GitWorktree) -> Void)? = nil
+        onSelectWorktree: ((GitWorktree) -> Void)? = nil,
+        onStartAgent: ((GitWorktree) -> Void)? = nil
     ) {
         self.repository = repository
         self.worktrees = worktrees
         self.onCreateWorktree = onCreateWorktree
         self.onSelectWorktree = onSelectWorktree
+        self.onStartAgent = onStartAgent
+    }
+    
+    /// Check if a worktree has an active agent
+    private func hasActiveAgent(for worktree: GitWorktree) -> Bool {
+        agentManager.getAllAgents().contains { agent in
+            agent.workspace.path == worktree.path ||
+            agent.workspace.gitWorktreePath == worktree.path
+        }
     }
     
     public var body: some View {
@@ -37,6 +51,12 @@ public struct WorktreeSelector: View {
             
             // Worktree options
             worktreeOptions
+            
+            // Existing worktrees list with Start Agent buttons
+            if !worktrees.isEmpty {
+                Divider()
+                existingWorktreesList
+            }
         }
         .padding()
     }
@@ -152,6 +172,23 @@ public struct WorktreeSelector: View {
         }
     }
     
+    @ViewBuilder
+    private var existingWorktreesList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Existing Worktrees")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            
+            ForEach(worktrees) { worktree in
+                WorktreeRow(
+                    worktree: worktree,
+                    hasActiveAgent: hasActiveAgent(for: worktree),
+                    onStartAgent: onStartAgent
+                )
+            }
+        }
+    }
+    
     private var isValidBranchName: Bool {
         // Basic git branch name validation
         let invalidPatterns = ["..", " ", "~", "^", ":", "\\", "?", "*", "[", "@{"]
@@ -180,6 +217,89 @@ public struct WorktreeSelector: View {
             .appendingPathComponent("\(repository.rootPath.lastPathComponent)-\(newBranchName.replacingOccurrences(of: "/", with: "-"))")
         
         onCreateWorktree(newBranchName, worktreePath)
+    }
+}
+
+/// Row displaying a single worktree with optional Start Agent button
+struct WorktreeRow: View {
+    let worktree: GitWorktree
+    let hasActiveAgent: Bool
+    var onStartAgent: ((GitWorktree) -> Void)?
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icon with active indicator
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: worktree.isMain ? "folder.fill" : "arrow.triangle.branch")
+                    .foregroundColor(worktree.isMain ? .blue : .purple)
+                
+                if hasActiveAgent {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 8, height: 8)
+                        .overlay(Circle().stroke(Color.white, lineWidth: 1))
+                        .offset(x: 2, y: 2)
+                }
+            }
+            .frame(width: 24)
+            
+            // Worktree info
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(worktree.branch)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    if worktree.isMain {
+                        Text("main")
+                            .font(.caption2)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.blue.opacity(0.15))
+                            .foregroundColor(.blue)
+                            .cornerRadius(3)
+                    }
+                    
+                    if hasActiveAgent {
+                        Text("running")
+                            .font(.caption2)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.green.opacity(0.15))
+                            .foregroundColor(.green)
+                            .cornerRadius(3)
+                    }
+                }
+                
+                Text(worktree.path.lastPathComponent)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            // Start Agent button (only if callback provided and no active agent)
+            if let onStartAgent = onStartAgent, !hasActiveAgent {
+                Button {
+                    onStartAgent(worktree)
+                } label: {
+                    Label("Start", systemImage: "play.fill")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(hasActiveAgent ? Color.green.opacity(0.05) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(hasActiveAgent ? Color.green.opacity(0.2) : Color.clear, lineWidth: 1)
+        )
     }
 }
 
@@ -213,8 +333,12 @@ public struct WorktreeSelector: View {
         },
         onSelectWorktree: { worktree in
             print("Selected worktree: \(worktree.branch)")
+        },
+        onStartAgent: { worktree in
+            print("Start agent in: \(worktree.branch)")
         }
     )
+    .environment(AgentManager())
     .frame(width: 400)
 }
 #endif

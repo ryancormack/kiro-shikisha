@@ -3,6 +3,8 @@ import SwiftUI
 
 /// A row displaying workspace information with optional agent status
 public struct WorkspaceRow: View {
+    @Environment(AgentManager.self) var agentManager
+    
     let workspace: Workspace
     let agent: Agent?
     
@@ -37,6 +39,11 @@ public struct WorkspaceRow: View {
     /// Whether this workspace is a worktree child (created from another workspace)
     private var isWorktreeChild: Bool {
         workspace.sourceWorkspaceId != nil || workspace.gitWorktreePath != nil
+    }
+    
+    /// Count of active agents in this workspace and its worktrees
+    private var activeAgentCount: Int {
+        agentManager.getAgentsForWorkspace(workspace.id).count
     }
     
     public var body: some View {
@@ -84,8 +91,13 @@ public struct WorkspaceRow: View {
             
             Spacer()
             
+            // Active agent count badge (for workspaces with worktree agents)
+            if activeAgentCount > 0 && agent == nil {
+                activeAgentsBadge
+            }
+            
             // Session count badge
-            if let count = sessionCount, count > 0, agent == nil {
+            if let count = sessionCount, count > 0, agent == nil, activeAgentCount == 0 {
                 Button(action: { onShowSessionHistory?() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "clock.arrow.circlepath")
@@ -110,6 +122,23 @@ public struct WorkspaceRow: View {
         .padding(.vertical, 4)
         // Indent worktree children slightly
         .padding(.leading, isWorktreeChild ? 8 : 0)
+    }
+    
+    /// Badge showing count of active agents in this workspace tree
+    private var activeAgentsBadge: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "person.fill")
+                .font(.system(size: 9))
+            Text("\(activeAgentCount)")
+                .font(.caption2)
+                .fontWeight(.semibold)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.blue)
+        .foregroundColor(.white)
+        .cornerRadius(8)
+        .help("\(activeAgentCount) active agent\(activeAgentCount == 1 ? "" : "s") in workspace")
     }
 }
 
@@ -150,5 +179,6 @@ public struct WorkspaceRow: View {
     }
     .padding()
     .frame(width: 350)
+    .environment(AgentManager())
 }
 #endif

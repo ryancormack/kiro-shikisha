@@ -26,6 +26,10 @@ public struct ActivityEvent: Identifiable, Sendable {
     public let description: String
     /// When the event occurred
     public let timestamp: Date
+    /// Git branch associated with this event (for worktree context)
+    public let branch: String?
+    /// Whether this event is from a worktree agent
+    public let isWorktree: Bool
     
     public init(
         id: UUID = UUID(),
@@ -33,7 +37,9 @@ public struct ActivityEvent: Identifiable, Sendable {
         agentName: String,
         eventType: ActivityEventType,
         description: String,
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
+        branch: String? = nil,
+        isWorktree: Bool = false
     ) {
         self.id = id
         self.agentId = agentId
@@ -41,6 +47,8 @@ public struct ActivityEvent: Identifiable, Sendable {
         self.eventType = eventType
         self.description = description
         self.timestamp = timestamp
+        self.branch = branch
+        self.isWorktree = isWorktree
     }
 }
 

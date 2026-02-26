@@ -6,13 +6,18 @@ public struct DashboardView: View {
     @Environment(AgentManager.self) var agentManager
     
     let onSelectAgent: (Agent) -> Void
+    var onNewWorktreeAgent: (() -> Void)?
     
     private let columns = [
         GridItem(.adaptive(minimum: 300, maximum: 450), spacing: 16)
     ]
     
-    public init(onSelectAgent: @escaping (Agent) -> Void) {
+    public init(
+        onSelectAgent: @escaping (Agent) -> Void,
+        onNewWorktreeAgent: (() -> Void)? = nil
+    ) {
         self.onSelectAgent = onSelectAgent
+        self.onNewWorktreeAgent = onNewWorktreeAgent
     }
     
     private var activeAgents: [Agent] {
@@ -31,7 +36,8 @@ public struct DashboardView: View {
                 
                 QuickActionsView(
                     onStopAll: stopAllAgents,
-                    onRefreshAll: refreshAllAgents
+                    onRefreshAll: refreshAllAgents,
+                    onNewWorktreeAgent: onNewWorktreeAgent
                 )
             }
             .padding()
@@ -84,6 +90,15 @@ public struct DashboardView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 300)
             
+            // Add button for new worktree agent in empty state
+            if let onNewWorktreeAgent = onNewWorktreeAgent {
+                Button(action: onNewWorktreeAgent) {
+                    Label("New Worktree Agent", systemImage: "plus.circle")
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 8)
+            }
+            
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -107,9 +122,14 @@ public struct DashboardView: View {
 }
 
 #Preview {
-    DashboardView { agent in
-        print("Selected agent: \(agent.name)")
-    }
+    DashboardView(
+        onSelectAgent: { agent in
+            print("Selected agent: \(agent.name)")
+        },
+        onNewWorktreeAgent: {
+            print("New worktree agent requested")
+        }
+    )
     .environment(AgentManager())
     .frame(width: 800, height: 600)
 }

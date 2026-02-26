@@ -45,10 +45,20 @@ public struct SessionRow: View {
                 .frame(width: 28)
             
             VStack(alignment: .leading, spacing: 4) {
-                // Date header
+                // Session name header (prioritized)
                 HStack {
-                    Text(formattedDate)
-                        .font(.headline)
+                    HStack(spacing: 4) {
+                        Text(session.displayName)
+                            .font(.headline)
+                            .lineLimit(1)
+                        
+                        // Visual indicator for custom name
+                        if session.hasCustomName {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                     
                     Spacer()
                     
@@ -60,6 +70,22 @@ public struct SessionRow: View {
                             .padding(.vertical, 2)
                             .background(Color.secondary.opacity(0.15))
                             .cornerRadius(4)
+                    }
+                }
+                
+                // Date and path as secondary info
+                HStack(spacing: 8) {
+                    Text(formattedDate)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    if !session.hasCustomName {
+                        // Only show path if no custom name (since displayName shows workspace name)
+                    } else {
+                        // Show path as additional context when there's a custom name
+                        Text(URL(fileURLWithPath: session.cwd).lastPathComponent)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
                 
@@ -188,8 +214,16 @@ public struct SessionRow: View {
     let session = SessionMetadata(
         sessionId: "test-session-123",
         cwd: "/Users/developer/Projects/MyProject",
+        sessionName: "Implement User Auth",
         createdAt: Date().addingTimeInterval(-3600),
         lastModified: Date()
+    )
+    
+    let sessionWithoutName = SessionMetadata(
+        sessionId: "test-session-456",
+        cwd: "/Users/developer/Projects/AnotherProject",
+        createdAt: Date().addingTimeInterval(-7200),
+        lastModified: Date().addingTimeInterval(-3600)
     )
     
     return List {
@@ -202,7 +236,16 @@ public struct SessionRow: View {
                 print("Delete tapped")
             }
         )
+        SessionRow(
+            session: sessionWithoutName,
+            onResume: {
+                print("Resume tapped")
+            },
+            onDelete: {
+                print("Delete tapped")
+            }
+        )
     }
-    .frame(width: 350, height: 200)
+    .frame(width: 350, height: 300)
 }
 #endif

@@ -125,6 +125,14 @@ struct ActivityEventRow: View {
         return formatter.localizedString(for: event.timestamp, relativeTo: Date())
     }
     
+    /// Agent name with branch context if available
+    private var agentDisplayName: String {
+        if let branch = event.branch {
+            return "\(event.agentName) (\(branch))"
+        }
+        return event.agentName
+    }
+    
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             // Event type icon
@@ -136,10 +144,28 @@ struct ActivityEventRow: View {
             // Content
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(event.agentName)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                    // Agent name with optional worktree indicator
+                    HStack(spacing: 4) {
+                        Text(event.agentName)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        // Show branch badge for worktree agents
+                        if let branch = event.branch {
+                            HStack(spacing: 2) {
+                                Image(systemName: "arrow.triangle.branch")
+                                    .font(.system(size: 8))
+                                Text(shortenedBranch(branch))
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.purple)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.purple.opacity(0.1))
+                            .cornerRadius(3)
+                        }
+                    }
                     
                     Spacer()
                     
@@ -158,6 +184,23 @@ struct ActivityEventRow: View {
         .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
+    
+    /// Shorten long branch names
+    private func shortenedBranch(_ branch: String) -> String {
+        // Remove common prefixes for display
+        var name = branch
+        for prefix in ["feature/", "bugfix/", "hotfix/", "release/"] {
+            if name.hasPrefix(prefix) {
+                name = String(name.dropFirst(prefix.count))
+                break
+            }
+        }
+        // Truncate if still too long
+        if name.count > 15 {
+            return String(name.prefix(12)) + "..."
+        }
+        return name
+    }
 }
 
 #Preview {
@@ -167,7 +210,9 @@ struct ActivityEventRow: View {
             agentName: "Agent 1",
             eventType: .message,
             description: "Started working on the feature implementation",
-            timestamp: Date().addingTimeInterval(-60)
+            timestamp: Date().addingTimeInterval(-60),
+            branch: "feature/new-ui",
+            isWorktree: true
         ),
         ActivityEvent(
             agentId: UUID(),
@@ -181,7 +226,9 @@ struct ActivityEventRow: View {
             agentName: "Agent 1",
             eventType: .toolCall,
             description: "Writing new file: Feature.swift",
-            timestamp: Date().addingTimeInterval(-180)
+            timestamp: Date().addingTimeInterval(-180),
+            branch: "feature/new-ui",
+            isWorktree: true
         ),
         ActivityEvent(
             agentId: UUID(),
@@ -195,7 +242,9 @@ struct ActivityEventRow: View {
             agentName: "Agent 3",
             eventType: .complete,
             description: "Task completed successfully",
-            timestamp: Date().addingTimeInterval(-300)
+            timestamp: Date().addingTimeInterval(-300),
+            branch: "bugfix/login-issue",
+            isWorktree: true
         )
     ]
     

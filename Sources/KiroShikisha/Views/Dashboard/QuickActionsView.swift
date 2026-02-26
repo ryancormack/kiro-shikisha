@@ -9,16 +9,20 @@ public struct QuickActionsView: View {
     let onStopAll: () async -> Void
     /// Callback when refresh all is triggered
     let onRefreshAll: () async -> Void
+    /// Callback when new worktree agent is requested
+    let onNewWorktreeAgent: (() -> Void)?
     
     @State private var isStoppingAll: Bool = false
     @State private var isRefreshingAll: Bool = false
     
     public init(
         onStopAll: @escaping () async -> Void,
-        onRefreshAll: @escaping () async -> Void
+        onRefreshAll: @escaping () async -> Void,
+        onNewWorktreeAgent: (() -> Void)? = nil
     ) {
         self.onStopAll = onStopAll
         self.onRefreshAll = onRefreshAll
+        self.onNewWorktreeAgent = onNewWorktreeAgent
     }
     
     private var activeAgentCount: Int {
@@ -36,6 +40,11 @@ public struct QuickActionsView: View {
             
             Divider()
                 .frame(height: 24)
+            
+            // New Worktree Agent button
+            if let onNewWorktreeAgent = onNewWorktreeAgent {
+                newWorktreeAgentButton(action: onNewWorktreeAgent)
+            }
             
             // Stop All Agents button
             stopAllButton
@@ -62,6 +71,21 @@ public struct QuickActionsView: View {
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
         }
+    }
+    
+    private func newWorktreeAgentButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 12))
+                Text("New Worktree Agent")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundColor(.accentColor)
+        }
+        .buttonStyle(.plain)
+        .help("Start a new agent in a git worktree (⇧⌘N)")
+        .keyboardShortcut("n", modifiers: [.command, .shift])
     }
     
     private var stopAllButton: some View {
@@ -130,10 +154,13 @@ public struct QuickActionsView: View {
         },
         onRefreshAll: {
             try? await Task.sleep(for: .seconds(1))
+        },
+        onNewWorktreeAgent: {
+            print("New worktree agent requested")
         }
     )
     .environment(AgentManager())
     .padding()
-    .frame(width: 400)
+    .frame(width: 500)
 }
 #endif
