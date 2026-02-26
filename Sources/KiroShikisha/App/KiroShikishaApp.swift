@@ -39,16 +39,18 @@ struct KiroShikishaApp: App {
                 agentManager.kirocliPath = appSettings.expandedKirocliPath
                 // Kill only our own kiro-cli processes from previous runs
                 killOwnedProcesses()
-                // Auto-reconnect saved sessions (with path verification)
-                for workspace in appStateManager.workspaces {
-                    if let sessionId = appStateManager.getValidSessionForWorkspace(workspace.id, workspacePath: workspace.path) {
-                        Task {
-                            do {
-                                let _ = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
-                            } catch {
-                                print("[AutoReconnect] Failed for \(workspace.name): \(error)")
-                                appStateManager.clearSessionForWorkspace(workspace.id)
-                            }
+                // Auto-reconnect saved sessions sequentially (with path verification)
+                Task {
+                    let sessionsToRestore = appStateManager.getWorkspacesWithValidSessions()
+                    for (workspace, sessionId) in sessionsToRestore {
+                        appStateManager.setRestorationStatus(workspace.id, .restoring)
+                        do {
+                            let _ = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
+                            appStateManager.setRestorationStatus(workspace.id, .restored)
+                        } catch {
+                            print("[AutoReconnect] Failed for \(workspace.name): \(error)")
+                            appStateManager.setRestorationStatus(workspace.id, .failed(error.localizedDescription))
+                            appStateManager.clearSessionForWorkspace(workspace.id)
                         }
                     }
                 }

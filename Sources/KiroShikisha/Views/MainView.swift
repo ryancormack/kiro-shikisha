@@ -271,11 +271,22 @@ struct NewWorktreeAgentSheet: View {
 struct WorkspaceReadyView: View {
     let workspace: Workspace
     let agentManager: AgentManager
+    @Environment(AppStateManager.self) var appStateManager
     @State private var isStarting = false
     @State private var errorMessage: String?
     
+    /// Get the current restoration status for this workspace
+    private var restorationStatus: SessionRestorationStatus? {
+        appStateManager.getRestorationStatus(workspace.id)
+    }
+    
     var body: some View {
         VStack(spacing: 16) {
+            // Session restoration banner
+            if let status = restorationStatus {
+                sessionRestorationBanner(status: status)
+            }
+            
             Image(systemName: "play.circle")
                 .font(.system(size: 64))
                 .foregroundColor(.accentColor)
@@ -287,8 +298,10 @@ struct WorkspaceReadyView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             
-            if isStarting {
-                ProgressView("Connecting…")
+            if case .restoring = restorationStatus {
+                ProgressView("Restoring session...")
+            } else if isStarting {
+                ProgressView("Connecting...")
             } else {
                 Button("Start Agent") {
                     isStarting = true
@@ -315,6 +328,65 @@ struct WorkspaceReadyView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    @ViewBuilder
+    private func sessionRestorationBanner(status: SessionRestorationStatus) -> some View {
+        switch status {
+        case .failed(let reason):
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text("Session restoration failed")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+                
+                Text(reason)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 400)
+                
+                Button("Retry Session") {
+                    retrySessionRestoration()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding()
+            .background(Color.orange.opacity(0.1))
+            .cornerRadius(8)
+            .padding(.bottom, 8)
+            
+        case .restoring:
+            // Handled in the main content area
+            EmptyView()
+            
+        case .pending, .restored, .skipped:
+            // No banner needed for these states
+            EmptyView()
+        }
+    }
+    
+    private func retrySessionRestoration() {
+        guard let sessionId = appStateManager.getLastSessionForWorkspace(workspace.id) else {
+            return
+        }
+        
+        appStateManager.clearRestorationStatus(workspace.id)
+        appStateManager.setRestorationStatus(workspace.id, .restoring)
+        
+        Task {
+            do {
+                let _ = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
+                appStateManager.setRestorationStatus(workspace.id, .restored)
+            } catch {
+                appStateManager.setRestorationStatus(workspace.id, .failed(error.localizedDescription))
+                appStateManager.clearSessionForWorkspace(workspace.id)
+            }
+        }
     }
 }
 

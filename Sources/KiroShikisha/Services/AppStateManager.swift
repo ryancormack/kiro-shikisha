@@ -1,5 +1,13 @@
-#if os(macOS)
 import Foundation
+
+/// Status of session restoration for a workspace
+public enum SessionRestorationStatus: Sendable, Equatable {
+    case pending
+    case restoring
+    case restored
+    case failed(String)
+    case skipped // No valid session to restore
+}
 
 /// Represents a workspace-session association with path verification
 public struct SessionAssociation: Codable, Sendable, Equatable {
@@ -13,6 +21,8 @@ public struct SessionAssociation: Codable, Sendable, Equatable {
         self.cwd = cwd
     }
 }
+
+#if os(macOS)
 
 /// Manages persistent application state including workspaces and session associations
 @Observable
@@ -31,6 +41,9 @@ public final class AppStateManager {
 
     /// PIDs of kiro-cli processes spawned by this app (saved on quit, killed on next launch)
     public var ownedProcessPids: [Int32] = []
+    
+    /// Tracks session restoration status for each workspace
+    public private(set) var sessionRestorationStatus: [UUID: SessionRestorationStatus] = [:]
     
     // MARK: - Private Properties
     
@@ -281,6 +294,59 @@ public final class AppStateManager {
             touchWorkspace(id: id)
         }
         saveState()
+    }
+    
+    // MARK: - Session Restoration Status Management
+    
+    /// Sets the restoration status for a workspace
+    /// - Parameters:
+    ///   - workspaceId: The workspace UUID
+    ///   - status: The restoration status
+    public func setRestorationStatus(_ workspaceId: UUID, _ status: SessionRestorationStatus) {
+        sessionRestorationStatus[workspaceId] = status
+    }
+    
+    /// Gets the restoration status for a workspace
+    /// - Parameter workspaceId: The workspace UUID
+    /// - Returns: The restoration status, or nil if not set
+    public func getRestorationStatus(_ workspaceId: UUID) -> SessionRestorationStatus? {
+        return sessionRestorationStatus[workspaceId]
+    }
+    
+    /// Clears the restoration status for a workspace
+    /// - Parameter workspaceId: The workspace UUID
+    public func clearRestorationStatus(_ workspaceId: UUID) {
+        sessionRestorationStatus.removeValue(forKey: workspaceId)
+    }
+    
+    /// Gets workspaces that have valid sessions to restore
+    /// - Returns: Array of tuples containing workspace and valid sessionId
+    public func getWorkspacesWithValidSessions() -> [(workspace: Workspace, sessionId: String)] {
+        var result: [(workspace: Workspace, sessionId: String)] = []
+        let sessionStorage = SessionStorage()
+        
+        for workspace in workspaces {
+            guard let association = workspaceSessionAssociations[workspace.id] else {
+                continue
+            }
+            
+            // Validate the session exists and is valid
+            let validationResult = sessionStorage.validateSession(sessionId: association.sessionId)
+            guard validationResult == .valid else {
+                print("[AppStateManager] Skipping workspace \(workspace.name): session \(association.sessionId) is not valid - \(validationResult)")
+                continue
+            }
+            
+            // Verify the session's cwd matches the workspace path
+            if !sessionStorage.sessionMatchesWorkspacePath(sessionId: association.sessionId, workspacePath: workspace.path) {
+                print("[AppStateManager] Skipping workspace \(workspace.name): session cwd does not match workspace path")
+                continue
+            }
+            
+            result.append((workspace: workspace, sessionId: association.sessionId))
+        }
+        
+        return result
     }
 }
 #endif
