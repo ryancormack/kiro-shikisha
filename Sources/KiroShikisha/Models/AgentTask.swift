@@ -20,6 +20,10 @@ public final class AgentTask: Identifiable {
     public var workspacePath: URL
     /// Branch being worked on
     public var gitBranch: String?
+    /// Whether to use a git worktree for isolated development
+    public var useWorktree: Bool
+    /// The branch name for the worktree
+    public var worktreeBranchName: String?
     /// If task runs in a worktree, reference to the source workspace
     public var sourceWorkspaceId: UUID?
     /// Reference to the Agent running this task (nil if not started yet)
@@ -47,6 +51,8 @@ public final class AgentTask: Identifiable {
         status: TaskStatus = .pending,
         workspacePath: URL,
         gitBranch: String? = nil,
+        useWorktree: Bool = false,
+        worktreeBranchName: String? = nil,
         sourceWorkspaceId: UUID? = nil,
         agentId: UUID? = nil,
         sessionId: String? = nil,
@@ -63,6 +69,8 @@ public final class AgentTask: Identifiable {
         self.status = status
         self.workspacePath = workspacePath
         self.gitBranch = gitBranch
+        self.useWorktree = useWorktree
+        self.worktreeBranchName = worktreeBranchName
         self.sourceWorkspaceId = sourceWorkspaceId
         self.agentId = agentId
         self.sessionId = sessionId
@@ -83,6 +91,8 @@ public final class AgentTask: Identifiable {
     public var status: TaskStatus
     public var workspacePath: URL
     public var gitBranch: String?
+    public var useWorktree: Bool
+    public var worktreeBranchName: String?
     public var sourceWorkspaceId: UUID?
     public var agentId: UUID?
     public var sessionId: String?
@@ -100,6 +110,8 @@ public final class AgentTask: Identifiable {
         status: TaskStatus = .pending,
         workspacePath: URL,
         gitBranch: String? = nil,
+        useWorktree: Bool = false,
+        worktreeBranchName: String? = nil,
         sourceWorkspaceId: UUID? = nil,
         agentId: UUID? = nil,
         sessionId: String? = nil,
@@ -116,6 +128,8 @@ public final class AgentTask: Identifiable {
         self.status = status
         self.workspacePath = workspacePath
         self.gitBranch = gitBranch
+        self.useWorktree = useWorktree
+        self.worktreeBranchName = worktreeBranchName
         self.sourceWorkspaceId = sourceWorkspaceId
         self.agentId = agentId
         self.sessionId = sessionId
@@ -140,16 +154,20 @@ public struct TaskCreationRequest: Sendable {
     public let gitBranch: String?
     /// Whether to use a git worktree for isolated development
     public let useWorktree: Bool
+    /// The branch name for the worktree
+    public let worktreeBranchName: String?
 
     public init(
         name: String,
         workspacePath: URL,
         gitBranch: String? = nil,
-        useWorktree: Bool = false
+        useWorktree: Bool = false,
+        worktreeBranchName: String? = nil
     ) {
         self.name = name
         self.workspacePath = workspacePath
         self.gitBranch = gitBranch
         self.useWorktree = useWorktree
+        self.worktreeBranchName = worktreeBranchName
     }
 }

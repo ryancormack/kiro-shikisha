@@ -26,6 +26,8 @@ final class TaskTests: XCTestCase {
             XCTAssertNil(task.lastActivityAt)
             XCTAssertNil(task.attentionReason)
             XCTAssertTrue(task.messages.isEmpty)
+            XCTAssertFalse(task.useWorktree)
+            XCTAssertNil(task.worktreeBranchName)
         }
     }
 
@@ -160,6 +162,7 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(request.workspacePath, path)
         XCTAssertEqual(request.gitBranch, "feature/new")
         XCTAssertTrue(request.useWorktree)
+        XCTAssertNil(request.worktreeBranchName)
     }
 
     func testTaskCreationRequestDefaults() throws {
@@ -174,5 +177,40 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(request.workspacePath, path)
         XCTAssertNil(request.gitBranch)
         XCTAssertFalse(request.useWorktree)
+        XCTAssertNil(request.worktreeBranchName)
+    }
+
+    func testTaskCreationRequestWithWorktree() throws {
+        let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+
+        let request = TaskCreationRequest(
+            name: "Feature task",
+            workspacePath: path,
+            gitBranch: "feature/new-thing",
+            useWorktree: true,
+            worktreeBranchName: "feature/new-thing"
+        )
+
+        XCTAssertEqual(request.name, "Feature task")
+        XCTAssertEqual(request.workspacePath, path)
+        XCTAssertEqual(request.gitBranch, "feature/new-thing")
+        XCTAssertTrue(request.useWorktree)
+        XCTAssertEqual(request.worktreeBranchName, "feature/new-thing")
+    }
+
+    func testAgentTaskWithWorktreeProperties() async throws {
+        await MainActor.run {
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let task = AgentTask(
+                name: "Worktree Task",
+                workspacePath: path,
+                gitBranch: "feature/wt",
+                useWorktree: true,
+                worktreeBranchName: "feature/wt"
+            )
+            XCTAssertTrue(task.useWorktree)
+            XCTAssertEqual(task.worktreeBranchName, "feature/wt")
+            XCTAssertEqual(task.gitBranch, "feature/wt")
+        }
     }
 }

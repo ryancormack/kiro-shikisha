@@ -51,7 +51,9 @@ public final class TaskManager {
             name: request.name,
             status: .pending,
             workspacePath: request.workspacePath,
-            gitBranch: request.gitBranch
+            gitBranch: request.gitBranch,
+            useWorktree: request.useWorktree,
+            worktreeBranchName: request.worktreeBranchName
         )
         tasks[task.id] = task
         return task
@@ -67,6 +69,29 @@ public final class TaskManager {
 
         task.status = .starting
         task.startedAt = Date()
+
+        // If worktree requested, create it and update the task's workspace path
+        if task.useWorktree, let branchName = task.worktreeBranchName {
+            let gitService = GitService()
+            guard let repo = try await gitService.detectGitRepository(at: task.workspacePath) else {
+                task.status = .failed
+                throw AgentManagerError.notAGitRepository
+            }
+
+            let worktreePath = task.workspacePath
+                .deletingLastPathComponent()
+                .appendingPathComponent("\(task.workspacePath.lastPathComponent)-\(branchName)")
+
+            let worktree = try await gitService.createWorktree(
+                repository: repo,
+                branch: branchName,
+                path: worktreePath
+            )
+
+            // Update task to use the worktree directory
+            task.workspacePath = worktree.path
+            task.gitBranch = branchName
+        }
 
         let workspace = Workspace(
             name: task.name,
@@ -189,7 +214,9 @@ public final class TaskManager {
             name: request.name,
             status: .pending,
             workspacePath: request.workspacePath,
-            gitBranch: request.gitBranch
+            gitBranch: request.gitBranch,
+            useWorktree: request.useWorktree,
+            worktreeBranchName: request.worktreeBranchName
         )
         return task
     }
@@ -253,7 +280,9 @@ public final class TaskManager {
             name: request.name,
             status: .pending,
             workspacePath: request.workspacePath,
-            gitBranch: request.gitBranch
+            gitBranch: request.gitBranch,
+            useWorktree: request.useWorktree,
+            worktreeBranchName: request.worktreeBranchName
         )
         return task
     }

@@ -237,13 +237,22 @@ public struct NewTaskSheet: View {
     private func createTask() {
         guard let directory = selectedDirectory else { return }
 
-        let branch: String? = gitBranch.isEmpty ? detectedRepository?.currentBranch : gitBranch
+        let branch: String?
+        let worktreeBranch: String?
+        if createWorktree {
+            branch = newBranchName
+            worktreeBranch = newBranchName
+        } else {
+            branch = gitBranch.isEmpty ? detectedRepository?.currentBranch : gitBranch
+            worktreeBranch = nil
+        }
 
         let request = TaskCreationRequest(
             name: taskName,
             workspacePath: directory,
             gitBranch: branch,
-            useWorktree: createWorktree
+            useWorktree: createWorktree,
+            worktreeBranchName: worktreeBranch
         )
 
         onCreate(request)
