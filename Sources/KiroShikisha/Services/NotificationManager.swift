@@ -122,5 +122,41 @@ public final class NotificationManager {
         center.removeAllDeliveredNotifications()
         center.removeAllPendingNotificationRequests()
     }
+    
+    // MARK: - Task Notifications
+    
+    /// Notify when a task needs user attention
+    /// - Parameters:
+    ///   - taskName: Name of the task
+    ///   - reason: Why the task needs attention
+    public func notifyTaskNeedsAttention(taskName: String, reason: String) {
+        sendNotification(
+            title: "Task Needs Attention: \(taskName)",
+            body: reason,
+            identifier: "task-attention-\(taskName)-\(Date().timeIntervalSince1970)"
+        )
+    }
+    
+    /// Notify when a task completes successfully
+    /// - Parameter taskName: Name of the task
+    public func notifyTaskCompleted(taskName: String) {
+        sendNotification(
+            title: "Task Completed: \(taskName)",
+            body: "The task has been completed successfully.",
+            identifier: "task-completed-\(taskName)-\(Date().timeIntervalSince1970)"
+        )
+    }
+    
+    /// Notify when a task fails
+    /// - Parameters:
+    ///   - taskName: Name of the task
+    ///   - error: Error description
+    public func notifyTaskFailed(taskName: String, error: String) {
+        sendNotification(
+            title: "Task Failed: \(taskName)",
+            body: error,
+            identifier: "task-failed-\(taskName)-\(Date().timeIntervalSince1970)"
+        )
+    }
 }
 #endif

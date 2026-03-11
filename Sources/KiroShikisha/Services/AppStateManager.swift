@@ -13,6 +13,9 @@ public final class AppStateManager {
     /// Currently selected workspace ID
     public var selectedWorkspaceId: UUID?
     
+    /// Currently selected task ID
+    public var selectedTaskId: UUID?
+    
     /// Maps workspace IDs to their last used session ID
     public private(set) var workspaceSessionAssociations: [UUID: String] = [:]
 
@@ -26,11 +29,25 @@ public final class AppStateManager {
     
     // MARK: - Codable State Container
     
+    /// Serializable entry for persisting task metadata
+    public struct TaskPersistenceEntry: Codable {
+        public var id: UUID
+        public var name: String
+        public var statusRawValue: String
+        public var workspacePath: String
+        public var gitBranch: String?
+        public var createdAt: Date
+        public var completedAt: Date?
+        public var lastActivityAt: Date?
+    }
+    
     private struct PersistedState: Codable {
         var workspaces: [Workspace]
         var selectedWorkspaceId: UUID?
         var workspaceSessionAssociations: [UUID: String]
         var ownedProcessPids: [Int32]?
+        var selectedTaskId: UUID?
+        var taskEntries: [TaskPersistenceEntry]?
     }
     
     // MARK: - Initialization
@@ -48,7 +65,8 @@ public final class AppStateManager {
             workspaces: workspaces,
             selectedWorkspaceId: selectedWorkspaceId,
             workspaceSessionAssociations: workspaceSessionAssociations,
-            ownedProcessPids: ownedProcessPids
+            ownedProcessPids: ownedProcessPids,
+            selectedTaskId: selectedTaskId
         )
         
         do {
@@ -75,6 +93,7 @@ public final class AppStateManager {
             selectedWorkspaceId = state.selectedWorkspaceId
             workspaceSessionAssociations = state.workspaceSessionAssociations
             ownedProcessPids = state.ownedProcessPids ?? []
+            selectedTaskId = state.selectedTaskId
         } catch {
             print("Failed to load app state: \(error)")
         }
@@ -149,5 +168,74 @@ public final class AppStateManager {
         }
         saveState()
     }
+    
+    // MARK: - Task Selection Management
+    
+    /// Selects a task by ID and persists state
+    public func selectTask(_ id: UUID?) {
+        selectedTaskId = id
+        saveState()
+    }
 }
+
+#else
+
+import Foundation
+
+// Stub implementation for non-macOS platforms (Linux)
+#if canImport(Observation)
+import Observation
+
+@Observable
+@MainActor
+public final class AppStateManager {
+    public private(set) var workspaces: [Workspace] = []
+    public var selectedWorkspaceId: UUID?
+    public var selectedTaskId: UUID?
+    public private(set) var workspaceSessionAssociations: [UUID: String] = [:]
+    public var ownedProcessPids: [Int32] = []
+
+    public init(userDefaults: Any? = nil) {}
+
+    public func saveState() {}
+    public func loadState() {}
+
+    @discardableResult
+    public func addWorkspace(_ workspace: Workspace) -> Bool { return false }
+    public func removeWorkspace(id: UUID) {}
+    public func updateWorkspace(_ workspace: Workspace) {}
+    public func touchWorkspace(id: UUID) {}
+    public func updateSessionForWorkspace(_ workspaceId: UUID, sessionId: String) {}
+    public func getLastSessionForWorkspace(_ workspaceId: UUID) -> String? { return nil }
+    public func clearSessionForWorkspace(_ workspaceId: UUID) {}
+    public func selectWorkspace(_ id: UUID?) {}
+    public func selectTask(_ id: UUID?) {}
+}
+#else
+@MainActor
+public final class AppStateManager {
+    public private(set) var workspaces: [Workspace] = []
+    public var selectedWorkspaceId: UUID?
+    public var selectedTaskId: UUID?
+    public private(set) var workspaceSessionAssociations: [UUID: String] = [:]
+    public var ownedProcessPids: [Int32] = []
+
+    public init(userDefaults: Any? = nil) {}
+
+    public func saveState() {}
+    public func loadState() {}
+
+    @discardableResult
+    public func addWorkspace(_ workspace: Workspace) -> Bool { return false }
+    public func removeWorkspace(id: UUID) {}
+    public func updateWorkspace(_ workspace: Workspace) {}
+    public func touchWorkspace(id: UUID) {}
+    public func updateSessionForWorkspace(_ workspaceId: UUID, sessionId: String) {}
+    public func getLastSessionForWorkspace(_ workspaceId: UUID) -> String? { return nil }
+    public func clearSessionForWorkspace(_ workspaceId: UUID) {}
+    public func selectWorkspace(_ id: UUID?) {}
+    public func selectTask(_ id: UUID?) {}
+}
+#endif
+
 #endif
