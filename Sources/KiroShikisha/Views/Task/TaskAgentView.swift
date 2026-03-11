@@ -159,6 +159,16 @@ public struct TaskAgentView: View {
                 .controlSize(.small)
             }
 
+            if task.status == .working || task.status == .needsAttention || task.status == .paused {
+                Button {
+                    taskManager.completeTask(id: task.id)
+                } label: {
+                    Label("Complete", systemImage: "checkmark.circle")
+                }
+                .controlSize(.small)
+                .tint(.green)
+            }
+
             if task.status.isActive || task.status == .paused {
                 Button("Cancel") {
                     Task { await taskManager.cancelTask(id: task.id) }
@@ -260,6 +270,19 @@ struct TaskCompletedView: View {
                 Text("Completed: \(completedAt, style: .relative) ago")
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+
+            if let startDate = task.startedAt ?? task.createdAt as Date?,
+               let endDate = task.completedAt {
+                let duration = endDate.timeIntervalSince(startDate)
+                let formatter = DateComponentsFormatter()
+                formatter.allowedUnits = [.hour, .minute, .second]
+                formatter.unitsStyle = .abbreviated
+                if let durationString = formatter.string(from: duration) {
+                    Text("Duration: \(durationString)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

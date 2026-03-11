@@ -190,6 +190,31 @@ public final class TaskManager {
         }
         tasks.removeValue(forKey: id)
     }
+
+    /// Restores tasks from persisted entries
+    /// Active tasks are restored as paused; terminal tasks remain as-is
+    public func restoreTasks(from entries: [AppStateManager.TaskPersistenceEntry]) {
+        for entry in entries {
+            let status = TaskStatus(rawValue: entry.statusRawValue) ?? .pending
+            let restoredStatus: TaskStatus
+            if status.isActive {
+                restoredStatus = .paused
+            } else {
+                restoredStatus = status
+            }
+            let task = AgentTask(
+                id: entry.id,
+                name: entry.name,
+                status: restoredStatus,
+                workspacePath: URL(fileURLWithPath: entry.workspacePath),
+                gitBranch: entry.gitBranch,
+                createdAt: entry.createdAt,
+                completedAt: entry.completedAt,
+                lastActivityAt: entry.lastActivityAt
+            )
+            tasks[task.id] = task
+        }
+    }
 }
 
 #else
@@ -202,10 +227,18 @@ public final class TaskManager {
     public private(set) var tasks: [UUID: AgentTask] = [:]
     public var agentManager: AgentManager?
 
-    public var activeTasks: [AgentTask] { [] }
-    public var tasksNeedingAttention: [AgentTask] { [] }
-    public var completedTasks: [AgentTask] { [] }
-    public var allTasks: [AgentTask] { [] }
+    public var activeTasks: [AgentTask] {
+        tasks.values.filter { $0.status.isActive }
+    }
+    public var tasksNeedingAttention: [AgentTask] {
+        tasks.values.filter { $0.status == .needsAttention }
+    }
+    public var completedTasks: [AgentTask] {
+        tasks.values.filter { $0.status.isTerminal }
+    }
+    public var allTasks: [AgentTask] {
+        Array(tasks.values)
+    }
 
     public init() {}
 
@@ -218,6 +251,7 @@ public final class TaskManager {
             useWorktree: request.useWorktree,
             worktreeBranchName: request.worktreeBranchName
         )
+        tasks[task.id] = task
         return task
     }
 
@@ -238,7 +272,10 @@ public final class TaskManager {
     }
 
     public func completeTask(id: UUID) {
-        // No-op on non-macOS
+        guard let task = tasks[id] else { return }
+        task.status = .completed
+        task.completedAt = Date()
+        task.lastActivityAt = Date()
     }
 
     public func markNeedsAttention(id: UUID, reason: String) {
@@ -254,11 +291,34 @@ public final class TaskManager {
     }
 
     public func getTask(id: UUID) -> AgentTask? {
-        return nil
+        return tasks[id]
     }
 
     public func deleteTask(id: UUID) async {
-        // No-op on non-macOS
+        tasks.removeValue(forKey: id)
+    }
+
+    public func restoreTasks(from entries: [AppStateManager.TaskPersistenceEntry]) {
+        for entry in entries {
+            let status = TaskStatus(rawValue: entry.statusRawValue) ?? .pending
+            let restoredStatus: TaskStatus
+            if status.isActive {
+                restoredStatus = .paused
+            } else {
+                restoredStatus = status
+            }
+            let task = AgentTask(
+                id: entry.id,
+                name: entry.name,
+                status: restoredStatus,
+                workspacePath: URL(fileURLWithPath: entry.workspacePath),
+                gitBranch: entry.gitBranch,
+                createdAt: entry.createdAt,
+                completedAt: entry.completedAt,
+                lastActivityAt: entry.lastActivityAt
+            )
+            tasks[task.id] = task
+        }
     }
 }
 #else
@@ -268,10 +328,18 @@ public final class TaskManager {
     public private(set) var tasks: [UUID: AgentTask] = [:]
     public var agentManager: AgentManager?
 
-    public var activeTasks: [AgentTask] { [] }
-    public var tasksNeedingAttention: [AgentTask] { [] }
-    public var completedTasks: [AgentTask] { [] }
-    public var allTasks: [AgentTask] { [] }
+    public var activeTasks: [AgentTask] {
+        tasks.values.filter { $0.status.isActive }
+    }
+    public var tasksNeedingAttention: [AgentTask] {
+        tasks.values.filter { $0.status == .needsAttention }
+    }
+    public var completedTasks: [AgentTask] {
+        tasks.values.filter { $0.status.isTerminal }
+    }
+    public var allTasks: [AgentTask] {
+        Array(tasks.values)
+    }
 
     public init() {}
 
@@ -284,6 +352,7 @@ public final class TaskManager {
             useWorktree: request.useWorktree,
             worktreeBranchName: request.worktreeBranchName
         )
+        tasks[task.id] = task
         return task
     }
 
@@ -304,7 +373,10 @@ public final class TaskManager {
     }
 
     public func completeTask(id: UUID) {
-        // No-op on non-macOS
+        guard let task = tasks[id] else { return }
+        task.status = .completed
+        task.completedAt = Date()
+        task.lastActivityAt = Date()
     }
 
     public func markNeedsAttention(id: UUID, reason: String) {
@@ -320,11 +392,34 @@ public final class TaskManager {
     }
 
     public func getTask(id: UUID) -> AgentTask? {
-        return nil
+        return tasks[id]
     }
 
     public func deleteTask(id: UUID) async {
-        // No-op on non-macOS
+        tasks.removeValue(forKey: id)
+    }
+
+    public func restoreTasks(from entries: [AppStateManager.TaskPersistenceEntry]) {
+        for entry in entries {
+            let status = TaskStatus(rawValue: entry.statusRawValue) ?? .pending
+            let restoredStatus: TaskStatus
+            if status.isActive {
+                restoredStatus = .paused
+            } else {
+                restoredStatus = status
+            }
+            let task = AgentTask(
+                id: entry.id,
+                name: entry.name,
+                status: restoredStatus,
+                workspacePath: URL(fileURLWithPath: entry.workspacePath),
+                gitBranch: entry.gitBranch,
+                createdAt: entry.createdAt,
+                completedAt: entry.completedAt,
+                lastActivityAt: entry.lastActivityAt
+            )
+            tasks[task.id] = task
+        }
     }
 }
 #endif

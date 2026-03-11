@@ -213,4 +213,150 @@ final class TaskTests: XCTestCase {
             XCTAssertEqual(task.gitBranch, "feature/wt")
         }
     }
+
+    // MARK: - Task Persistence Tests
+
+    func testTaskPersistenceEntryRoundTrip() throws {
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+        let completedDate = Date(timeIntervalSinceReferenceDate: 700003600)
+        let activityDate = Date(timeIntervalSinceReferenceDate: 700003500)
+        let entryId = UUID()
+
+        let entry = AppStateManager.TaskPersistenceEntry(
+            id: entryId,
+            name: "Test persistence task",
+            statusRawValue: "completed",
+            workspacePath: "/Users/test/projects/repo",
+            gitBranch: "feature/persist",
+            createdAt: fixedDate,
+            completedAt: completedDate,
+            lastActivityAt: activityDate
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(entry)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AppStateManager.TaskPersistenceEntry.self, from: data)
+
+        XCTAssertEqual(decoded.id, entryId)
+        XCTAssertEqual(decoded.name, "Test persistence task")
+        XCTAssertEqual(decoded.statusRawValue, "completed")
+        XCTAssertEqual(decoded.workspacePath, "/Users/test/projects/repo")
+        XCTAssertEqual(decoded.gitBranch, "feature/persist")
+        XCTAssertEqual(decoded.createdAt, fixedDate)
+        XCTAssertEqual(decoded.completedAt, completedDate)
+        XCTAssertEqual(decoded.lastActivityAt, activityDate)
+    }
+
+    func testTaskManagerRestoreTasks() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+            let completedDate = Date(timeIntervalSinceReferenceDate: 700003600)
+
+            let workingEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Working task",
+                statusRawValue: "working",
+                workspacePath: "/Users/test/projects/repo1",
+                gitBranch: "feature/a",
+                createdAt: fixedDate
+            )
+
+            let completedEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Completed task",
+                statusRawValue: "completed",
+                workspacePath: "/Users/test/projects/repo2",
+                createdAt: fixedDate,
+                completedAt: completedDate
+            )
+
+            let pendingEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Pending task",
+                statusRawValue: "pending",
+                workspacePath: "/Users/test/projects/repo3",
+                createdAt: fixedDate
+            )
+
+            taskManager.restoreTasks(from: [workingEntry, completedEntry, pendingEntry])
+
+            XCTAssertEqual(taskManager.tasks.count, 3)
+
+            // Working task should be restored as paused
+            let restoredWorking = taskManager.tasks[workingEntry.id]
+            XCTAssertNotNil(restoredWorking)
+            XCTAssertEqual(restoredWorking?.status, .paused)
+            XCTAssertEqual(restoredWorking?.name, "Working task")
+            XCTAssertEqual(restoredWorking?.gitBranch, "feature/a")
+
+            // Completed task should remain completed
+            let restoredCompleted = taskManager.tasks[completedEntry.id]
+            XCTAssertNotNil(restoredCompleted)
+            XCTAssertEqual(restoredCompleted?.status, .completed)
+            XCTAssertEqual(restoredCompleted?.completedAt, completedDate)
+
+            // Pending task should remain pending
+            let restoredPending = taskManager.tasks[pendingEntry.id]
+            XCTAssertNotNil(restoredPending)
+            XCTAssertEqual(restoredPending?.status, .pending)
+        }
+    }
+
+    func testCompleteTaskSetsStatusAndDate() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let request = TaskCreationRequest(name: "Task to complete", workspacePath: path)
+            let task = taskManager.createTask(from: request)
+
+            XCTAssertEqual(task.status, .pending)
+            XCTAssertNil(task.completedAt)
+
+            taskManager.completeTask(id: task.id)
+
+            XCTAssertEqual(task.status, .completed)
+            XCTAssertNotNil(task.completedAt)
+            XCTAssertNotNil(task.lastActivityAt)
+        }
+    }
+
+    func testTaskManagerRestorePreservesTerminalStatus() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+            let completedDate = Date(timeIntervalSinceReferenceDate: 700003600)
+
+            let completedEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Completed task",
+                statusRawValue: "completed",
+                workspacePath: "/Users/test/projects/repo1",
+                createdAt: fixedDate,
+                completedAt: completedDate
+            )
+
+            let cancelledEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Cancelled task",
+                statusRawValue: "cancelled",
+                workspacePath: "/Users/test/projects/repo2",
+                createdAt: fixedDate
+            )
+
+            taskManager.restoreTasks(from: [completedEntry, cancelledEntry])
+
+            XCTAssertEqual(taskManager.tasks.count, 2)
+
+            let restoredCompleted = taskManager.tasks[completedEntry.id]
+            XCTAssertEqual(restoredCompleted?.status, .completed)
+
+            let restoredCancelled = taskManager.tasks[cancelledEntry.id]
+            XCTAssertEqual(restoredCancelled?.status, .cancelled)
+        }
+    }
 }
