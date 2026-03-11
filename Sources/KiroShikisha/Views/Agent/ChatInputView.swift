@@ -25,8 +25,7 @@ public struct ChatInputView: View {
                 .padding(8)
                 .background(Color(nsColor: .controlBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .frame(minHeight: 36, maxHeight: 120)
-                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 36, idealHeight: 36, maxHeight: 120)
             
             Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill")

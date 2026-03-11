@@ -5,22 +5,23 @@ import AppKit
 
 @main
 struct KiroShikishaApp: App {
-    
+
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
     }
-    
+
     @State private var agentManager = AgentManager()
     @State private var appStateManager = AppStateManager()
     @State private var appSettings = AppSettings()
-    
+    @State private var taskManager = TaskManager()
+
     // State for commands
     @State private var showDashboard: Bool = false
-    @State private var showNewWorkspaceSheet: Bool = false
-    
+    @State private var showNewTaskSheet: Bool = false
+
     // Environment for scene lifecycle
     @Environment(\.scenePhase) var scenePhase
-    
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -33,10 +34,13 @@ struct KiroShikishaApp: App {
             .environment(agentManager)
             .environment(appStateManager)
             .environment(appSettings)
+            .environment(taskManager)
             .preferredColorScheme(appSettings.colorScheme)
             .onAppear {
                 // Sync kiro-cli path from settings to agent manager
                 agentManager.kirocliPath = appSettings.expandedKirocliPath
+                // Wire TaskManager to AgentManager
+                taskManager.agentManager = agentManager
                 // Kill only our own kiro-cli processes from previous runs
                 killOwnedProcesses()
                 // Auto-reconnect saved sessions
@@ -82,12 +86,13 @@ struct KiroShikishaApp: App {
         .commands {
             AppCommands(
                 showDashboard: $showDashboard,
-                showNewWorkspaceSheet: $showNewWorkspaceSheet,
+                showNewTaskSheet: $showNewTaskSheet,
                 agentManager: agentManager,
-                appStateManager: appStateManager
+                appStateManager: appStateManager,
+                taskManager: taskManager
             )
         }
-        
+
         // Settings window (Cmd+,)
         Settings {
             SettingsView()
@@ -117,32 +122,33 @@ struct KiroShikishaApp: App {
 /// App-wide commands for menus and keyboard shortcuts
 struct AppCommands: Commands {
     @Binding var showDashboard: Bool
-    @Binding var showNewWorkspaceSheet: Bool
+    @Binding var showNewTaskSheet: Bool
     let agentManager: AgentManager
     let appStateManager: AppStateManager
-    
+    let taskManager: TaskManager
+
     var sortedAgents: [Agent] {
         agentManager.getAllAgents().sorted { $0.name < $1.name }
     }
-    
+
     var body: some Commands {
         // File menu additions
         CommandGroup(after: .newItem) {
-            Button("New Workspace...") {
-                showNewWorkspaceSheet = true
+            Button("New Task...") {
+                showNewTaskSheet = true
             }
-            .keyboardShortcut("n", modifiers: [.command, .shift])
+            .keyboardShortcut("t", modifiers: [.command, .shift])
         }
-        
+
         // View menu additions
         CommandGroup(after: .sidebar) {
             Button("Toggle Dashboard") {
                 showDashboard.toggle()
             }
             .keyboardShortcut("d", modifiers: .command)
-            
+
             Divider()
-            
+
             // Agent selection shortcuts (Cmd+1 through Cmd+9)
             ForEach(Array(sortedAgents.prefix(9).enumerated()), id: \.element.id) { index, agent in
                 Button("Select \(agent.name)") {
@@ -151,41 +157,56 @@ struct AppCommands: Commands {
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
             }
         }
-        
-        // Agent menu
+
+        // Agent menu (kept for backward compatibility)
         CommandMenu("Agent") {
             Button("Send Prompt") {
                 // Focus on prompt input - handled by responder chain
             }
             .keyboardShortcut(.return, modifiers: .command)
-            
+
             Button("Cancel Current Task") {
-                cancelCurrentTask()
+                cancelCurrentAgentTask()
             }
             .keyboardShortcut(".", modifiers: .command)
-            
+
             Divider()
-            
+
             Button("Clear Chat History") {
                 // Would clear current agent's history
             }
             .keyboardShortcut("k", modifiers: [.command, .shift])
         }
-        
+
+        // Task menu
+        CommandMenu("Task") {
+            Button("Pause Task") {
+                pauseSelectedTask()
+            }
+
+            Button("Resume Task") {
+                resumeSelectedTask()
+            }
+
+            Button("Cancel Task") {
+                cancelSelectedTask()
+            }
+        }
+
         // Help menu additions
         CommandGroup(replacing: .help) {
             Button("Kiro Shikisha Help") {
                 // Would open help documentation
             }
-            
+
             Divider()
-            
+
             Button("Report an Issue...") {
                 // Would open issue tracker
             }
         }
     }
-    
+
     private func selectAgent(at index: Int) {
         guard index >= 0 && index < sortedAgents.count else { return }
         let agent = sortedAgents[index]
@@ -193,13 +214,45 @@ struct AppCommands: Commands {
             appStateManager.selectedWorkspaceId = agent.workspace.id
         }
     }
-    
-    private func cancelCurrentTask() {
+
+    private func cancelCurrentAgentTask() {
+        // Try task-based cancellation first
+        if let selectedTaskId = appStateManager.selectedTaskId,
+           let task = taskManager.getTask(id: selectedTaskId),
+           let agentId = task.agentId {
+            Task {
+                try? await agentManager.cancelPrompt(agentId: agentId)
+            }
+            return
+        }
+
+        // Legacy: workspace-based cancellation
         guard let selectedId = appStateManager.selectedWorkspaceId else { return }
         guard let agent = agentManager.getAllAgents().first(where: { $0.workspace.id == selectedId }) else { return }
-        
+
         Task {
             try? await agentManager.cancelPrompt(agentId: agent.id)
+        }
+    }
+
+    private func pauseSelectedTask() {
+        guard let selectedTaskId = appStateManager.selectedTaskId else { return }
+        Task { @MainActor in
+            taskManager.pauseTask(id: selectedTaskId)
+        }
+    }
+
+    private func resumeSelectedTask() {
+        guard let selectedTaskId = appStateManager.selectedTaskId else { return }
+        Task {
+            try? await taskManager.resumeTask(id: selectedTaskId)
+        }
+    }
+
+    private func cancelSelectedTask() {
+        guard let selectedTaskId = appStateManager.selectedTaskId else { return }
+        Task {
+            await taskManager.cancelTask(id: selectedTaskId)
         }
     }
 }
