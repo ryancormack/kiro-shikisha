@@ -98,7 +98,7 @@ struct InlineToolCallView: View {
                     Text(detail)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .frame(maxHeight: 200)
                 .padding(8)

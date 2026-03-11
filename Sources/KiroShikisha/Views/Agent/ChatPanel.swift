@@ -14,7 +14,7 @@ public struct ChatPanel: View {
     public var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
-                ScrollView {
+                ScrollView(.vertical) {
                     LazyVStack(spacing: 12) {
                         ForEach(agent.messages) { message in
                             if message.role == .system, let tcIds = message.toolCallIds {
@@ -50,7 +50,9 @@ public struct ChatPanel: View {
                         }
                     }
                     .padding()
+                    .frame(maxWidth: .infinity)
                 }
+                .scrollContentBackground(.hidden)
                 .onChange(of: agent.messages.count) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
@@ -121,7 +123,7 @@ public struct ChatPanel: View {
 /// Typing indicator showing the agent is processing
 struct TypingIndicator: View {
     var label: String? = nil
-    @State private var animationOffset: CGFloat = 0
+    @State private var isAnimating = false
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
@@ -130,7 +132,13 @@ struct TypingIndicator: View {
                     Circle()
                         .fill(Color.secondary)
                         .frame(width: 6, height: 6)
-                        .offset(y: animationOffset(for: index))
+                        .offset(y: isAnimating ? -4 * cos(Double(index) * 0.15 * .pi) : 0)
+                        .animation(
+                            .easeInOut(duration: 0.6)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(index) * 0.15),
+                            value: isAnimating
+                        )
                 }
                 if let label {
                     Text(label)
@@ -148,15 +156,8 @@ struct TypingIndicator: View {
         }
         .frame(height: 26)
         .onAppear {
-            withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                animationOffset = -4
-            }
+            isAnimating = true
         }
-    }
-    
-    private func animationOffset(for index: Int) -> CGFloat {
-        let delay = Double(index) * 0.15
-        return animationOffset * cos(delay * .pi)
     }
 }
 
