@@ -56,6 +56,9 @@ public struct SidebarView: View {
                         TaskRow(task: task)
                             .tag(task.id)
                             .contextMenu {
+                                Button("Mark Complete") {
+                                    taskManager.completeTask(id: task.id)
+                                }
                                 Button("Pause Task") {
                                     taskManager.pauseTask(id: task.id)
                                 }
@@ -73,6 +76,9 @@ public struct SidebarView: View {
                         TaskRow(task: task)
                             .tag(task.id)
                             .contextMenu {
+                                Button("Mark Complete") {
+                                    taskManager.completeTask(id: task.id)
+                                }
                                 Button("Pause Task") {
                                     taskManager.pauseTask(id: task.id)
                                 }

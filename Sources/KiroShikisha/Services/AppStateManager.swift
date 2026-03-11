@@ -30,7 +30,7 @@ public final class AppStateManager {
     // MARK: - Codable State Container
     
     /// Serializable entry for persisting task metadata
-    public struct TaskPersistenceEntry: Codable {
+    public struct TaskPersistenceEntry: Codable, Sendable {
         public var id: UUID
         public var name: String
         public var statusRawValue: String
@@ -39,7 +39,33 @@ public final class AppStateManager {
         public var createdAt: Date
         public var completedAt: Date?
         public var lastActivityAt: Date?
+
+        public init(
+            id: UUID,
+            name: String,
+            statusRawValue: String,
+            workspacePath: String,
+            gitBranch: String? = nil,
+            createdAt: Date,
+            completedAt: Date? = nil,
+            lastActivityAt: Date? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.statusRawValue = statusRawValue
+            self.workspacePath = workspacePath
+            self.gitBranch = gitBranch
+            self.createdAt = createdAt
+            self.completedAt = completedAt
+            self.lastActivityAt = lastActivityAt
+        }
     }
+    
+    /// Task entries to be included in the next save
+    public var taskEntriesToPersist: [TaskPersistenceEntry] = []
+    
+    /// Task entries loaded from the last persisted state
+    public private(set) var persistedTaskEntries: [TaskPersistenceEntry] = []
     
     private struct PersistedState: Codable {
         var workspaces: [Workspace]
@@ -66,7 +92,8 @@ public final class AppStateManager {
             selectedWorkspaceId: selectedWorkspaceId,
             workspaceSessionAssociations: workspaceSessionAssociations,
             ownedProcessPids: ownedProcessPids,
-            selectedTaskId: selectedTaskId
+            selectedTaskId: selectedTaskId,
+            taskEntries: taskEntriesToPersist.isEmpty ? nil : taskEntriesToPersist
         )
         
         do {
@@ -94,6 +121,7 @@ public final class AppStateManager {
             workspaceSessionAssociations = state.workspaceSessionAssociations
             ownedProcessPids = state.ownedProcessPids ?? []
             selectedTaskId = state.selectedTaskId
+            persistedTaskEntries = state.taskEntries ?? []
         } catch {
             print("Failed to load app state: \(error)")
         }
@@ -189,11 +217,44 @@ import Observation
 @Observable
 @MainActor
 public final class AppStateManager {
+    public struct TaskPersistenceEntry: Codable, Sendable {
+        public var id: UUID
+        public var name: String
+        public var statusRawValue: String
+        public var workspacePath: String
+        public var gitBranch: String?
+        public var createdAt: Date
+        public var completedAt: Date?
+        public var lastActivityAt: Date?
+
+        public init(
+            id: UUID,
+            name: String,
+            statusRawValue: String,
+            workspacePath: String,
+            gitBranch: String? = nil,
+            createdAt: Date,
+            completedAt: Date? = nil,
+            lastActivityAt: Date? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.statusRawValue = statusRawValue
+            self.workspacePath = workspacePath
+            self.gitBranch = gitBranch
+            self.createdAt = createdAt
+            self.completedAt = completedAt
+            self.lastActivityAt = lastActivityAt
+        }
+    }
+
     public private(set) var workspaces: [Workspace] = []
     public var selectedWorkspaceId: UUID?
     public var selectedTaskId: UUID?
     public private(set) var workspaceSessionAssociations: [UUID: String] = [:]
     public var ownedProcessPids: [Int32] = []
+    public var taskEntriesToPersist: [TaskPersistenceEntry] = []
+    public private(set) var persistedTaskEntries: [TaskPersistenceEntry] = []
 
     public init(userDefaults: Any? = nil) {}
 
@@ -214,11 +275,44 @@ public final class AppStateManager {
 #else
 @MainActor
 public final class AppStateManager {
+    public struct TaskPersistenceEntry: Codable, Sendable {
+        public var id: UUID
+        public var name: String
+        public var statusRawValue: String
+        public var workspacePath: String
+        public var gitBranch: String?
+        public var createdAt: Date
+        public var completedAt: Date?
+        public var lastActivityAt: Date?
+
+        public init(
+            id: UUID,
+            name: String,
+            statusRawValue: String,
+            workspacePath: String,
+            gitBranch: String? = nil,
+            createdAt: Date,
+            completedAt: Date? = nil,
+            lastActivityAt: Date? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.statusRawValue = statusRawValue
+            self.workspacePath = workspacePath
+            self.gitBranch = gitBranch
+            self.createdAt = createdAt
+            self.completedAt = completedAt
+            self.lastActivityAt = lastActivityAt
+        }
+    }
+
     public private(set) var workspaces: [Workspace] = []
     public var selectedWorkspaceId: UUID?
     public var selectedTaskId: UUID?
     public private(set) var workspaceSessionAssociations: [UUID: String] = [:]
     public var ownedProcessPids: [Int32] = []
+    public var taskEntriesToPersist: [TaskPersistenceEntry] = []
+    public private(set) var persistedTaskEntries: [TaskPersistenceEntry] = []
 
     public init(userDefaults: Any? = nil) {}
 
