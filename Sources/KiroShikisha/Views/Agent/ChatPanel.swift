@@ -61,31 +61,35 @@ public struct ChatPanel: View {
                     scrollToBottom(proxy: proxy)
                 }
             }
+            .layoutPriority(1)
             
-            Divider()
-            
-            if agent.sessionId == nil {
-                HStack {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Connecting…")
-                        .foregroundColor(.secondary)
+            VStack(spacing: 0) {
+                Divider()
+                
+                if agent.sessionId == nil {
+                    HStack {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Connecting…")
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                } else {
+                    ChatInputView { message in
+                        sendMessage(message)
+                    }
+                    .padding()
                 }
-                .padding()
-            } else {
-                ChatInputView { message in
-                    sendMessage(message)
+                
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                        .padding(.bottom, 4)
                 }
-                .padding()
             }
-            
-            if let error = errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .padding(.horizontal)
-                    .padding(.bottom, 4)
-            }
+            .fixedSize(horizontal: false, vertical: true)
         }
         .background(Color(nsColor: .textBackgroundColor))
     }
@@ -142,6 +146,7 @@ struct TypingIndicator: View {
             
             Spacer()
         }
+        .frame(height: 26)
         .onAppear {
             withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
                 animationOffset = -4

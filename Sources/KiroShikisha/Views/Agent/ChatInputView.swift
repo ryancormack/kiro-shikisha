@@ -25,7 +25,7 @@ public struct ChatInputView: View {
                 .padding(8)
                 .background(Color(nsColor: .controlBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .frame(minHeight: 36, idealHeight: 36, maxHeight: 120)
+                .frame(minHeight: 36, maxHeight: 100)
             
             Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill")
@@ -35,7 +35,10 @@ public struct ChatInputView: View {
             .buttonStyle(.plain)
             .disabled(!canSend)
             .keyboardShortcut(.return, modifiers: .command)
+            .frame(width: 36, height: 36)
         }
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
     }
     
     private func send() {
