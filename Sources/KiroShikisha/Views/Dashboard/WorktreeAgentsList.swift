@@ -1,73 +1,66 @@
 #if os(macOS)
 import SwiftUI
 
-/// List view showing all agents grouped by their source workspace
-/// Useful for overview of multi-worktree workflows
+/// List view showing all tasks grouped by their workspace path
 public struct WorktreeAgentsList: View {
-    @Environment(AgentManager.self) var agentManager
-    
-    let onSelectAgent: (Agent) -> Void
-    
-    public init(onSelectAgent: @escaping (Agent) -> Void) {
-        self.onSelectAgent = onSelectAgent
+    @Environment(TaskManager.self) var taskManager
+
+    let onSelectTask: (AgentTask) -> Void
+
+    public init(onSelectTask: @escaping (AgentTask) -> Void) {
+        self.onSelectTask = onSelectTask
     }
-    
-    /// All agents grouped by their source workspace ID
-    private var groupedAgents: [UUID: [Agent]] {
-        let allAgents = agentManager.getAllAgents()
-        var groups: [UUID: [Agent]] = [:]
-        
-        for agent in allAgents {
-            // Get the source workspace ID (either the workspace ID if main, or sourceWorkspaceId if worktree)
-            let sourceId = agent.workspace.sourceWorkspaceId ?? agent.workspace.id
-            
-            if groups[sourceId] == nil {
-                groups[sourceId] = []
+
+    /// All tasks grouped by workspace path
+    private var groupedTasks: [String: [AgentTask]] {
+        var groups: [String: [AgentTask]] = [:]
+
+        for task in taskManager.allTasks {
+            let key = task.workspacePath.path
+
+            if groups[key] == nil {
+                groups[key] = []
             }
-            groups[sourceId]?.append(agent)
+            groups[key]?.append(task)
         }
-        
+
         return groups
     }
-    
-    /// Sorted list of source workspace IDs for consistent ordering
-    private var sortedWorkspaceIds: [UUID] {
-        groupedAgents.keys.sorted { id1, id2 in
-            // Sort by the first agent's name in each group
-            let name1 = groupedAgents[id1]?.first?.workspace.name ?? ""
-            let name2 = groupedAgents[id2]?.first?.workspace.name ?? ""
-            return name1 < name2
-        }
+
+    /// Sorted list of workspace paths for consistent ordering
+    private var sortedWorkspacePaths: [String] {
+        groupedTasks.keys.sorted()
     }
-    
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
-                Text("All Agents by Workspace")
+                Text("All Tasks by Workspace")
                     .font(.headline)
-                
+
                 Spacer()
-                
-                Text("\(agentManager.getAllAgents().count) total")
+
+                Text("\(taskManager.allTasks.count) total")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal)
             .padding(.vertical, 12)
-            
+
             Divider()
-            
-            if groupedAgents.isEmpty {
+
+            if groupedTasks.isEmpty {
                 emptyStateView
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
-                        ForEach(sortedWorkspaceIds, id: \.self) { workspaceId in
-                            if let agents = groupedAgents[workspaceId] {
-                                WorkspaceAgentGroup(
-                                    agents: agents,
-                                    onSelectAgent: onSelectAgent
+                        ForEach(sortedWorkspacePaths, id: \.self) { workspacePath in
+                            if let tasks = groupedTasks[workspacePath] {
+                                WorkspaceTaskGroup(
+                                    workspacePath: workspacePath,
+                                    tasks: tasks,
+                                    onSelectTask: onSelectTask
                                 )
                             }
                         }
@@ -79,54 +72,41 @@ public struct WorktreeAgentsList: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .controlBackgroundColor))
     }
-    
+
     private var emptyStateView: some View {
         VStack(spacing: 12) {
             Spacer()
-            
-            Image(systemName: "person.2.slash")
+
+            Image(systemName: "checklist")
                 .font(.system(size: 40))
                 .foregroundColor(.secondary)
-            
-            Text("No Agents Running")
+
+            Text("No Tasks")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-            
-            Text("Start agents from a workspace to see them here")
+
+            Text("Create a task to see it here")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-            
+
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
-/// Group of agents belonging to the same source workspace
-struct WorkspaceAgentGroup: View {
-    let agents: [Agent]
-    let onSelectAgent: (Agent) -> Void
-    
-    /// Name of the source workspace
+/// Group of tasks belonging to the same workspace path
+struct WorkspaceTaskGroup: View {
+    let workspacePath: String
+    let tasks: [AgentTask]
+    let onSelectTask: (AgentTask) -> Void
+
+    /// Display name from the workspace path
     private var workspaceName: String {
-        // Find the main workspace agent or use the first agent's workspace name
-        if let mainAgent = agents.first(where: { $0.workspace.sourceWorkspaceId == nil }) {
-            return mainAgent.workspace.name
-        }
-        return agents.first?.workspace.name ?? "Unknown"
+        URL(fileURLWithPath: workspacePath).lastPathComponent
     }
-    
-    /// Main workspace agent (if any)
-    private var mainAgent: Agent? {
-        agents.first { $0.workspace.sourceWorkspaceId == nil }
-    }
-    
-    /// Worktree agents
-    private var worktreeAgents: [Agent] {
-        agents.filter { $0.workspace.sourceWorkspaceId != nil }
-    }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Workspace header
@@ -134,32 +114,21 @@ struct WorkspaceAgentGroup: View {
                 Image(systemName: "folder.fill")
                     .font(.caption)
                     .foregroundColor(.blue)
-                
+
                 Text(workspaceName)
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                
-                Text("(\(agents.count) agent\(agents.count == 1 ? "" : "s"))")
+
+                Text("(\(tasks.count) task\(tasks.count == 1 ? "" : "s"))")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            
+
             VStack(alignment: .leading, spacing: 4) {
-                // Main workspace agent
-                if let main = mainAgent {
-                    AgentListRow(
-                        agent: main,
-                        isWorktree: false,
-                        onSelect: { onSelectAgent(main) }
-                    )
-                }
-                
-                // Worktree agents
-                ForEach(worktreeAgents, id: \.id) { agent in
-                    AgentListRow(
-                        agent: agent,
-                        isWorktree: true,
-                        onSelect: { onSelectAgent(agent) }
+                ForEach(tasks, id: \.id) { task in
+                    TaskListRow(
+                        task: task,
+                        onSelect: { onSelectTask(task) }
                     )
                 }
             }
@@ -172,56 +141,47 @@ struct WorkspaceAgentGroup: View {
     }
 }
 
-/// Single row for an agent in the list
-struct AgentListRow: View {
-    let agent: Agent
-    let isWorktree: Bool
+/// Single row for a task in the workspace-grouped list
+struct TaskListRow: View {
+    let task: AgentTask
     let onSelect: () -> Void
-    
+
     @State private var isHovered: Bool = false
-    
+
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 10) {
-                // Indent worktrees
-                if isWorktree {
-                    Spacer()
-                        .frame(width: 16)
-                }
-                
-                // Status dot
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 6, height: 6)
-                
-                // Worktree icon
-                if isWorktree {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.caption)
-                        .foregroundColor(.purple)
-                }
-                
-                // Agent info
+                // Status icon
+                Image(systemName: task.status.iconName)
+                    .foregroundColor(task.status.displayColor)
+                    .font(.caption)
+                    .frame(width: 16)
+
+                // Task info
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(agent.displayName)
+                    Text(task.name)
                         .font(.caption)
                         .fontWeight(.medium)
-                    
+
                     HStack(spacing: 6) {
-                        if let branch = agent.workspace.gitBranch {
-                            Text(branch)
-                                .font(.caption2)
-                                .foregroundColor(.purple)
+                        if let branch = task.gitBranch {
+                            HStack(spacing: 2) {
+                                Image(systemName: "arrow.triangle.branch")
+                                    .font(.system(size: 8))
+                                Text(branch)
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.purple)
                         }
-                        
-                        Text(statusText)
+
+                        Text(task.status.rawValue.capitalized)
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .foregroundColor(.secondary)
@@ -240,33 +200,15 @@ struct AgentListRow: View {
             }
         }
     }
-    
-    private var statusColor: Color {
-        switch agent.status {
-        case .active: return .green
-        case .connecting: return .orange
-        case .idle: return .gray
-        case .error: return .red
-        }
-    }
-    
-    private var statusText: String {
-        switch agent.status {
-        case .active: return "Active"
-        case .connecting: return "Connecting..."
-        case .idle: return "Idle"
-        case .error: return "Error"
-        }
-    }
 }
 
 #Preview {
     WorktreeAgentsList(
-        onSelectAgent: { agent in
-            print("Selected: \(agent.name)")
+        onSelectTask: { task in
+            print("Selected: \(task.name)")
         }
     )
-    .environment(AgentManager())
+    .environment(TaskManager())
     .frame(width: 400, height: 500)
 }
 #endif

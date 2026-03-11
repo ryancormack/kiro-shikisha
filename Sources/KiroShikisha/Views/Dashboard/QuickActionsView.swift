@@ -1,54 +1,58 @@
 #if os(macOS)
 import SwiftUI
 
-/// Floating panel with bulk actions for managing all agents
+/// Floating panel with bulk actions for managing all tasks
 public struct QuickActionsView: View {
-    @Environment(AgentManager.self) var agentManager
-    
-    /// Callback when stop all is triggered
-    let onStopAll: () async -> Void
+    @Environment(TaskManager.self) var taskManager
+
+    /// Callback when cancel all is triggered
+    let onCancelAll: () async -> Void
     /// Callback when refresh all is triggered
     let onRefreshAll: () async -> Void
-    /// Callback when new worktree agent is requested
-    let onNewWorktreeAgent: (() -> Void)?
-    
-    @State private var isStoppingAll: Bool = false
+    /// Callback when new task is requested
+    let onNewTask: (() -> Void)?
+
+    @State private var isCancellingAll: Bool = false
     @State private var isRefreshingAll: Bool = false
-    
+
     public init(
-        onStopAll: @escaping () async -> Void,
+        onCancelAll: @escaping () async -> Void,
         onRefreshAll: @escaping () async -> Void,
-        onNewWorktreeAgent: (() -> Void)? = nil
+        onNewTask: (() -> Void)? = nil
     ) {
-        self.onStopAll = onStopAll
+        self.onCancelAll = onCancelAll
         self.onRefreshAll = onRefreshAll
-        self.onNewWorktreeAgent = onNewWorktreeAgent
+        self.onNewTask = onNewTask
     }
-    
-    private var activeAgentCount: Int {
-        agentManager.getAllAgents().count
+
+    private var activeTaskCount: Int {
+        taskManager.activeTasks.count
     }
-    
-    private var hasActiveAgents: Bool {
-        activeAgentCount > 0
+
+    private var attentionCount: Int {
+        taskManager.tasksNeedingAttention.count
     }
-    
+
+    private var hasActiveTasks: Bool {
+        activeTaskCount > 0
+    }
+
     public var body: some View {
         HStack(spacing: 16) {
-            // Agent count display
-            agentCountDisplay
-            
+            // Task count display
+            taskCountDisplay
+
             Divider()
                 .frame(height: 24)
-            
-            // New Worktree Agent button
-            if let onNewWorktreeAgent = onNewWorktreeAgent {
-                newWorktreeAgentButton(action: onNewWorktreeAgent)
+
+            // New Task button
+            if let onNewTask = onNewTask {
+                newTaskButton(action: onNewTask)
             }
-            
-            // Stop All Agents button
-            stopAllButton
-            
+
+            // Cancel All Tasks button
+            cancelAllButton
+
             // Refresh All button
             refreshAllButton
         }
@@ -56,64 +60,69 @@ public struct QuickActionsView: View {
         .padding(.vertical, 10)
         .background(backgroundView)
     }
-    
-    private var agentCountDisplay: some View {
+
+    private var taskCountDisplay: some View {
         HStack(spacing: 6) {
-            Image(systemName: "person.2.fill")
+            Image(systemName: "checklist")
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
-            
-            Text("\(activeAgentCount)")
+
+            Text("\(activeTaskCount)")
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundColor(.primary)
-            
-            Text("agent\(activeAgentCount == 1 ? "" : "s")")
+
+            Text("task\(activeTaskCount == 1 ? "" : "s")")
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
+
+            if attentionCount > 0 {
+                Text("\(attentionCount) needs attention")
+                    .font(.system(size: 11))
+                    .foregroundColor(.orange)
+            }
         }
     }
-    
-    private func newWorktreeAgentButton(action: @escaping () -> Void) -> some View {
+
+    private func newTaskButton(action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: "plus.circle")
                     .font(.system(size: 12))
-                Text("New Worktree Agent")
+                Text("New Task")
                     .font(.system(size: 12, weight: .medium))
             }
             .foregroundColor(.accentColor)
         }
         .buttonStyle(.plain)
-        .help("Start a new agent in a git worktree (⇧⌘N)")
-        .keyboardShortcut("n", modifiers: [.command, .shift])
+        .help("Create a new task")
     }
-    
-    private var stopAllButton: some View {
+
+    private var cancelAllButton: some View {
         Button {
             Task {
-                isStoppingAll = true
-                await onStopAll()
-                isStoppingAll = false
+                isCancellingAll = true
+                await onCancelAll()
+                isCancellingAll = false
             }
         } label: {
             HStack(spacing: 4) {
-                if isStoppingAll {
+                if isCancellingAll {
                     ProgressView()
                         .controlSize(.small)
                 } else {
-                    Image(systemName: "stop.circle")
+                    Image(systemName: "xmark.circle")
                         .font(.system(size: 12))
                 }
-                Text("Stop All")
+                Text("Cancel All Tasks")
                     .font(.system(size: 12, weight: .medium))
             }
-            .foregroundColor(hasActiveAgents ? .red : .secondary)
+            .foregroundColor(hasActiveTasks ? .red : .secondary)
         }
         .buttonStyle(.plain)
-        .disabled(!hasActiveAgents || isStoppingAll)
-        .help("Stop all active agents")
+        .disabled(!hasActiveTasks || isCancellingAll)
+        .help("Cancel all active tasks")
     }
-    
+
     private var refreshAllButton: some View {
         Button {
             Task {
@@ -139,7 +148,7 @@ public struct QuickActionsView: View {
         .disabled(isRefreshingAll)
         .help("Reconnect all agents")
     }
-    
+
     private var backgroundView: some View {
         RoundedRectangle(cornerRadius: 8)
             .fill(Color(nsColor: .controlBackgroundColor))
@@ -149,17 +158,17 @@ public struct QuickActionsView: View {
 
 #Preview {
     QuickActionsView(
-        onStopAll: { 
+        onCancelAll: {
             try? await Task.sleep(for: .seconds(1))
         },
         onRefreshAll: {
             try? await Task.sleep(for: .seconds(1))
         },
-        onNewWorktreeAgent: {
-            print("New worktree agent requested")
+        onNewTask: {
+            print("New task requested")
         }
     )
-    .environment(AgentManager())
+    .environment(TaskManager())
     .padding()
     .frame(width: 500)
 }

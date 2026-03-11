@@ -112,4 +112,58 @@ public struct AgentStatusIndicator: View {
     }
     .padding()
 }
+
+/// Visual status indicator for task state
+public struct TaskStatusIndicator: View {
+    let status: TaskStatus
+    let showLabel: Bool
+
+    @State private var isAnimating: Bool = false
+
+    public init(status: TaskStatus, showLabel: Bool = false) {
+        self.status = status
+        self.showLabel = showLabel
+    }
+
+    public var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: status.iconName)
+                .foregroundColor(status.displayColor)
+                .font(.system(size: 12))
+                .opacity(status == .working ? (isAnimating ? 0.5 : 1.0) : 1.0)
+                .onAppear {
+                    if status == .working {
+                        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                            isAnimating = true
+                        }
+                    }
+                }
+
+            if showLabel {
+                Text(status.rawValue.capitalized)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+}
+
+#Preview("TaskStatusIndicator") {
+    VStack(spacing: 20) {
+        HStack(spacing: 30) {
+            TaskStatusIndicator(status: .pending, showLabel: true)
+            TaskStatusIndicator(status: .starting, showLabel: true)
+            TaskStatusIndicator(status: .working, showLabel: true)
+            TaskStatusIndicator(status: .needsAttention, showLabel: true)
+        }
+
+        HStack(spacing: 30) {
+            TaskStatusIndicator(status: .paused, showLabel: true)
+            TaskStatusIndicator(status: .completed, showLabel: true)
+            TaskStatusIndicator(status: .failed, showLabel: true)
+            TaskStatusIndicator(status: .cancelled, showLabel: true)
+        }
+    }
+    .padding()
+}
 #endif

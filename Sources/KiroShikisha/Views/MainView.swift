@@ -43,13 +43,13 @@ public struct MainView: View {
         } detail: {
             if showDashboard {
                 DashboardView(
-                    onSelectAgent: { agent in
-                        // Switch to agent detail view when selecting from dashboard
-                        stateManager.selectedWorkspaceId = agent.workspace.id
+                    onSelectTask: { task in
+                        // Switch to task when selecting from dashboard
+                        stateManager.selectedTaskId = task.id
                         showDashboard = false
                     },
-                    onNewWorktreeAgent: {
-                        showNewWorktreeAgentSheet = true
+                    onNewTask: {
+                        showNewWorkspaceSheet = true
                     }
                 )
             } else if let agent = selectedAgent {
@@ -324,5 +324,6 @@ struct PlaceholderView: View {
     MainView()
         .environment(AgentManager())
         .environment(AppStateManager())
+        .environment(TaskManager())
 }
 #endif

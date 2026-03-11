@@ -1,4 +1,5 @@
 #if os(macOS)
+// DEPRECATED: Being replaced by TaskCard as part of the task-centric architecture refactor.
 import SwiftUI
 
 /// Compact card showing an agent's current state in the dashboard
