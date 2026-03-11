@@ -252,7 +252,8 @@ public struct NewTaskSheet: View {
             workspacePath: directory,
             gitBranch: branch,
             useWorktree: createWorktree,
-            worktreeBranchName: worktreeBranch
+            worktreeBranchName: worktreeBranch,
+            startImmediately: startImmediately
         )
 
         onCreate(request)
