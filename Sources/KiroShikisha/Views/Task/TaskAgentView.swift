@@ -243,6 +243,16 @@ struct TaskPendingView: View {
 struct TaskCompletedView: View {
     let task: AgentTask
 
+    private var formattedDuration: String? {
+        guard let startDate = task.startedAt ?? task.createdAt as Date?,
+              let endDate = task.completedAt else { return nil }
+        let duration = endDate.timeIntervalSince(startDate)
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .abbreviated
+        return formatter.string(from: duration)
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: task.status.iconName)
@@ -272,17 +282,10 @@ struct TaskCompletedView: View {
                     .foregroundColor(.secondary)
             }
 
-            if let startDate = task.startedAt ?? task.createdAt as Date?,
-               let endDate = task.completedAt {
-                let duration = endDate.timeIntervalSince(startDate)
-                let formatter = DateComponentsFormatter()
-                formatter.allowedUnits = [.hour, .minute, .second]
-                formatter.unitsStyle = .abbreviated
-                if let durationString = formatter.string(from: duration) {
-                    Text("Duration: \(durationString)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+            if let durationString = formattedDuration {
+                Text("Duration: \(durationString)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
