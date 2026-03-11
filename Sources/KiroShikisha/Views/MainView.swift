@@ -32,24 +32,12 @@ public struct MainView: View {
         
         NavigationSplitView {
             SidebarView(
-                selectedWorkspaceId: $stateManager.selectedWorkspaceId,
-                workspaces: appStateManager.workspaces,
-                onAddWorkspace: { workspace in
-                    appStateManager.addWorkspace(workspace)
+                selectedTaskId: $stateManager.selectedTaskId,
+                onCreateTask: {
+                    showNewWorkspaceSheet = true
                 },
-                onRemoveWorkspace: { id in
-                    appStateManager.removeWorkspace(id: id)
-                },
-                onResumeSession: { workspace, sessionId in
-                    appStateManager.updateSessionForWorkspace(workspace.id, sessionId: sessionId)
-                    appStateManager.selectedWorkspaceId = workspace.id
-                    Task {
-                        do {
-                            let _ = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
-                        } catch {
-                            print("[Resume] Failed to load session \(sessionId): \(error)")
-                        }
-                    }
+                onDeleteTask: { id in
+                    // Task deletion will be handled in FEAT-004
                 }
             )
         } detail: {

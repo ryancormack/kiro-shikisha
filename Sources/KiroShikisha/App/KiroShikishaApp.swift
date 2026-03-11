@@ -13,6 +13,7 @@ struct KiroShikishaApp: App {
     @State private var agentManager = AgentManager()
     @State private var appStateManager = AppStateManager()
     @State private var appSettings = AppSettings()
+    @State private var taskManager = TaskManager()
     
     // State for commands
     @State private var showDashboard: Bool = false
@@ -33,6 +34,7 @@ struct KiroShikishaApp: App {
             .environment(agentManager)
             .environment(appStateManager)
             .environment(appSettings)
+            .environment(taskManager)
             .preferredColorScheme(appSettings.colorScheme)
             .onAppear {
                 // Sync kiro-cli path from settings to agent manager

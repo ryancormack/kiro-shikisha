@@ -1,7 +1,7 @@
 #if os(macOS)
+// DEPRECATED: This view is being replaced by TaskRow as part of the task-centric architecture refactor.
+// Kept for backward compatibility with workspace settings views.
 import SwiftUI
-
-/// A row displaying workspace information with optional agent status
 public struct WorkspaceRow: View {
     @Environment(AgentManager.self) var agentManager
     

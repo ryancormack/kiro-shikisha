@@ -1,7 +1,7 @@
 #if os(macOS)
+// DEPRECATED: This view is being replaced by NewTaskButton as part of the task-centric architecture refactor.
+// Kept for backward compatibility with workspace settings views.
 import SwiftUI
-
-/// Button component that shows a sheet for creating a new workspace
 public struct NewWorkspaceButton: View {
     @Binding var showingSheet: Bool
     

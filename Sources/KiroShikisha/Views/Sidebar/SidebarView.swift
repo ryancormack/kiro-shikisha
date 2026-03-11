@@ -1,108 +1,106 @@
 #if os(macOS)
 import SwiftUI
 
-/// Sidebar view showing active agents and recent workspaces
+/// Sidebar view showing active tasks, tasks needing attention, and task history
 public struct SidebarView: View {
-    @Binding var selectedWorkspaceId: UUID?
+    @Binding var selectedTaskId: UUID?
     @Environment(AgentManager.self) var agentManager
-    
-    /// Workspaces from AppStateManager
-    let workspaces: [Workspace]
-    
-    /// Callback when a workspace is created
-    var onAddWorkspace: ((Workspace) -> Void)?
-    
-    /// Callback when a workspace should be removed
-    var onRemoveWorkspace: ((UUID) -> Void)?
-    
-    /// Workspace pending delete confirmation
-    @State private var workspaceToDelete: Workspace?
-    
-    /// Whether the new workspace sheet is showing
-    @State private var showingNewWorkspace: Bool = false
-    
-    /// Workspace currently showing session history
-    @State private var sessionHistoryWorkspace: Workspace?
-    
-    /// Session counts for each workspace path
-    @State private var sessionCounts: [String: Int] = [:]
-    
-    /// Session storage for loading session data
-    private let sessionStorage = SessionStorage()
-    
-    /// Callback when a session should be resumed
-    var onResumeSession: ((Workspace, String) -> Void)?
-    
-    private var activeAgents: [Agent] {
-        agentManager.agents.values.filter { $0.status == .active || $0.status == .connecting || $0.status == .idle }
+    @Environment(TaskManager.self) var taskManager
+
+    /// Callback when a task should be created
+    var onCreateTask: (() -> Void)?
+
+    /// Callback when a task should be deleted
+    var onDeleteTask: ((UUID) -> Void)?
+
+    /// Task pending delete confirmation
+    @State private var taskToDelete: AgentTask?
+
+    /// Whether the new task sheet is showing
+    @State private var showingNewTask: Bool = false
+
+    private var sortedActiveTasks: [AgentTask] {
+        taskManager.activeTasks.sorted {
+            ($0.lastActivityAt ?? $0.createdAt) > ($1.lastActivityAt ?? $1.createdAt)
+        }
     }
-    
-    private var recentWorkspaces: [Workspace] {
-        // Filter out workspaces that have active agents
-        let activeWorkspaceIds = Set(activeAgents.map { $0.workspace.id })
-        return workspaces.filter { !activeWorkspaceIds.contains($0.id) }
-            .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
+
+    private var sortedTaskHistory: [AgentTask] {
+        Array(
+            taskManager.completedTasks.sorted {
+                ($0.completedAt ?? $0.createdAt) > ($1.completedAt ?? $1.createdAt)
+            }
+            .prefix(20)
+        )
     }
-    
+
     public init(
-        selectedWorkspaceId: Binding<UUID?>,
-        workspaces: [Workspace] = [],
-        onAddWorkspace: ((Workspace) -> Void)? = nil,
-        onRemoveWorkspace: ((UUID) -> Void)? = nil,
-        onResumeSession: ((Workspace, String) -> Void)? = nil
+        selectedTaskId: Binding<UUID?>,
+        onCreateTask: (() -> Void)? = nil,
+        onDeleteTask: ((UUID) -> Void)? = nil
     ) {
-        self._selectedWorkspaceId = selectedWorkspaceId
-        self.workspaces = workspaces
-        self.onAddWorkspace = onAddWorkspace
-        self.onRemoveWorkspace = onRemoveWorkspace
-        self.onResumeSession = onResumeSession
+        self._selectedTaskId = selectedTaskId
+        self.onCreateTask = onCreateTask
+        self.onDeleteTask = onDeleteTask
     }
-    
+
     public var body: some View {
-        List(selection: $selectedWorkspaceId) {
-            Section("Active Agents") {
-                if activeAgents.isEmpty {
-                    Text("No active agents")
+        List(selection: $selectedTaskId) {
+            Section("Active Tasks") {
+                if sortedActiveTasks.isEmpty {
+                    Text("No active tasks")
                         .foregroundColor(.secondary)
                         .font(.caption)
                 } else {
-                    ForEach(activeAgents) { agent in
-                        WorkspaceRow(workspace: agent.workspace, agent: agent)
-                            .tag(agent.workspace.id)
+                    ForEach(sortedActiveTasks) { task in
+                        TaskRow(task: task)
+                            .tag(task.id)
                             .contextMenu {
-                                Button("Stop Agent") {
-                                    Task { await agentManager.stopAgent(id: agent.id) }
+                                Button("Pause Task") {
+                                    taskManager.pauseTask(id: task.id)
                                 }
-                                Divider()
-                                Button("Delete Workspace", role: .destructive) {
-                                    workspaceToDelete = agent.workspace
+                                Button("Cancel Task", role: .destructive) {
+                                    Task { await taskManager.cancelTask(id: task.id) }
                                 }
                             }
                     }
                 }
             }
-            
-            Section("Recent Workspaces") {
-                if recentWorkspaces.isEmpty {
-                    Text("No recent workspaces")
+
+            if !taskManager.tasksNeedingAttention.isEmpty {
+                Section {
+                    ForEach(taskManager.tasksNeedingAttention) { task in
+                        TaskRow(task: task)
+                            .tag(task.id)
+                            .contextMenu {
+                                Button("Pause Task") {
+                                    taskManager.pauseTask(id: task.id)
+                                }
+                                Button("Cancel Task", role: .destructive) {
+                                    Task { await taskManager.cancelTask(id: task.id) }
+                                }
+                            }
+                    }
+                } header: {
+                    Label("Needs Attention", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                }
+            }
+
+            Section("Task History") {
+                if sortedTaskHistory.isEmpty {
+                    Text("No completed tasks")
                         .foregroundColor(.secondary)
                         .font(.caption)
                 } else {
-                    ForEach(recentWorkspaces) { workspace in
-                        WorkspaceRow(
-                            workspace: workspace,
-                            agent: nil,
-                            sessionCount: sessionCounts[workspace.path.path],
-                            onShowSessionHistory: {
-                                sessionHistoryWorkspace = workspace
+                    ForEach(sortedTaskHistory) { task in
+                        TaskRow(task: task)
+                            .tag(task.id)
+                            .contextMenu {
+                                Button("Delete Task", role: .destructive) {
+                                    taskToDelete = task
+                                }
                             }
-                        )
-                        .tag(workspace.id)
-                        .contextMenu {
-                            Button("Delete Workspace", role: .destructive) {
-                                workspaceToDelete = workspace
-                            }
-                        }
                     }
                 }
             }
@@ -110,101 +108,40 @@ public struct SidebarView: View {
         .listStyle(.sidebar)
         .toolbar {
             ToolbarItem {
-                NewWorkspaceButton(showingSheet: $showingNewWorkspace)
+                NewTaskButton(showingSheet: $showingNewTask)
             }
         }
-        .sheet(isPresented: $showingNewWorkspace) {
-            NewWorkspaceSheet { workspace in
-                onAddWorkspace?(workspace)
-                selectedWorkspaceId = workspace.id
-                // Refresh session counts after adding workspace
-                refreshSessionCounts()
+        .onChange(of: showingNewTask) { _, newValue in
+            if newValue {
+                onCreateTask?()
+                showingNewTask = false
             }
         }
-        .sheet(item: $sessionHistoryWorkspace) { workspace in
-            SessionHistorySheet(
-                workspace: workspace,
-                sessionStorage: sessionStorage,
-                onResumeSession: { sessionId in
-                    sessionHistoryWorkspace = nil
-                    onResumeSession?(workspace, sessionId)
-                }
-            )
-        }
-        .onAppear {
-            refreshSessionCounts()
-        }
-        .onChange(of: workspaces) { _, _ in
-            refreshSessionCounts()
-        }
-        .alert("Delete Workspace?", isPresented: Binding(
-            get: { workspaceToDelete != nil },
-            set: { if !$0 { workspaceToDelete = nil } }
+        .alert("Delete Task?", isPresented: Binding(
+            get: { taskToDelete != nil },
+            set: { if !$0 { taskToDelete = nil } }
         )) {
-            Button("Cancel", role: .cancel) { workspaceToDelete = nil }
+            Button("Cancel", role: .cancel) { taskToDelete = nil }
             Button("Delete", role: .destructive) {
-                if let ws = workspaceToDelete {
-                    onRemoveWorkspace?(ws.id)
-                    workspaceToDelete = nil
+                if let task = taskToDelete {
+                    onDeleteTask?(task.id)
+                    taskToDelete = nil
                 }
             }
         } message: {
-            if let ws = workspaceToDelete {
-                Text("Remove \"\(ws.name)\" from the sidebar? This won't delete any files on disk.")
+            if let task = taskToDelete {
+                Text("Delete \"\(task.name)\"? This action cannot be undone.")
             }
         }
-    }
-    
-    /// Refresh session counts for all workspaces
-    private func refreshSessionCounts() {
-        Task {
-            var counts: [String: Int] = [:]
-            for workspace in workspaces {
-                let sessions = sessionStorage.getSessionsForWorkspace(path: workspace.path)
-                counts[workspace.path.path] = sessions.count
-            }
-            await MainActor.run {
-                sessionCounts = counts
-            }
-        }
-    }
-}
-
-/// Sheet wrapper for SessionHistoryView
-private struct SessionHistorySheet: View {
-    let workspace: Workspace
-    let sessionStorage: SessionStorage
-    let onResumeSession: (String) -> Void
-    
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationStack {
-            SessionHistoryView(
-                workspacePath: workspace.path,
-                sessionStorage: sessionStorage,
-                onSelectSession: onResumeSession
-            )
-            .navigationTitle("Session History")
-            .navigationSubtitle(workspace.name)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-        .frame(minWidth: 400, minHeight: 300)
     }
 }
 
 #Preview {
     SidebarView(
-        selectedWorkspaceId: .constant(nil),
-        workspaces: []
+        selectedTaskId: .constant(nil)
     )
     .environment(AgentManager())
+    .environment(TaskManager())
     .frame(width: 250)
 }
 #endif
