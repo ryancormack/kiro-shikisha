@@ -163,6 +163,37 @@ public final class SessionStorage: Sendable {
     
     // MARK: - Path Helpers
     
+    /// Remove stale lock files for sessions whose owning process is no longer running.
+    /// - Parameter sessionId: Optional specific session ID to check. If nil, checks all sessions.
+    /// - Returns: List of session IDs whose stale locks were removed.
+    @discardableResult
+    public func cleanStaleLocks(sessionId: String? = nil) -> [String] {
+        var cleaned: [String] = []
+        
+        let lockFiles: [URL]
+        if let sessionId = sessionId {
+            let lockURL = sessionsDirectory.appendingPathComponent("\(sessionId).lock")
+            lockFiles = fileManager.fileExists(atPath: lockURL.path) ? [lockURL] : []
+        } else {
+            lockFiles = (try? fileManager.contentsOfDirectory(at: sessionsDirectory, includingPropertiesForKeys: nil))?.filter { $0.pathExtension == "lock" } ?? []
+        }
+        
+        for lockURL in lockFiles {
+            guard let data = try? Data(contentsOf: lockURL),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let pid = json["pid"] as? Int32 else { continue }
+            
+            // kill(pid, 0) returns 0 if process exists, -1 if not
+            if kill(pid, 0) != 0 {
+                try? fileManager.removeItem(at: lockURL)
+                let sid = lockURL.deletingPathExtension().lastPathComponent
+                cleaned.append(sid)
+                print("[SessionStorage] Removed stale lock for session \(sid) (PID \(pid) no longer running)")
+            }
+        }
+        return cleaned
+    }
+    
     /// Convert a path string to its canonical form (resolved symlinks and standardized)
     /// - Parameter path: The path string to canonicalize
     /// - Returns: The canonical path string
@@ -242,17 +273,25 @@ public final class SessionStorage: Sendable {
             return []
         }
         
-        let decoder = JSONDecoder()
         var messages: [ChatMessage] = []
         var currentAssistantContent = ""
         var currentAssistantTimestamp: Date?
         var currentToolCallIds: [String] = []
         
-        for (index, eventData) in eventsData.enumerated() {
-            guard let event = try? decoder.decode(SessionEvent.self, from: eventData) else {
-                print("[SessionStorage] Session \(sessionId) event \(index): Failed to decode as SessionEvent, skipping")
-                continue // Skip malformed events
-            }
+        // Parse all JSONL lines into SessionEvents, handling both Kiro CLI v1 envelope
+        // format and legacy flat format
+        let decoder = JSONDecoder()
+        let allEvents: [SessionEvent] = eventsData.enumerated().flatMap { (index, eventData) -> [SessionEvent] in
+            // Try Kiro CLI v1 envelope format first ({"version":"v1","kind":...,"data":...})
+            let kiroEvents = SessionEvent.parseKiroEvent(from: eventData)
+            if !kiroEvents.isEmpty { return kiroEvents }
+            // Fall back to legacy flat format
+            if let event = try? decoder.decode(SessionEvent.self, from: eventData) { return [event] }
+            print("[SessionStorage] Session \(sessionId) event \(index): Failed to decode, skipping")
+            return []
+        }
+        
+        for event in allEvents {
             
             switch event.type {
             case .userMessage:

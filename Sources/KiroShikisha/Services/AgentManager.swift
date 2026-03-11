@@ -167,6 +167,9 @@ public final class AgentManager {
         agents[agent.id] = agent
         
         do {
+            // Clean stale lock for this session before attempting to load
+            SessionStorage().cleanStaleLocks(sessionId: sessionId)
+            
             let connection = ACPConnection()
             
             let agentId = agent.id
@@ -201,13 +204,19 @@ public final class AgentManager {
                 await connection.disconnect()
             }
             
+            // Provide a user-friendly error message
+            let errorDesc = "\(error)"
+            let userMessage: String
+            if errorDesc.contains("active in another process") {
+                userMessage = "Session is in use by another Kiro process. Try closing it first, or start a new session."
+            } else {
+                userMessage = "Failed to load session: \(error.localizedDescription)"
+            }
+            
             // Set agent to error state instead of throwing
             agent.status = .error
-            agent.errorMessage = "Failed to load session: \(error.localizedDescription)"
-            agent.messages.append(ChatMessage(
-                role: .system,
-                content: "Failed to load session: \(error.localizedDescription)"
-            ))
+            agent.errorMessage = userMessage
+            agent.messages.append(ChatMessage(role: .system, content: userMessage))
             
             addActivityEvent(ActivityEvent(
                 agentId: agent.id,

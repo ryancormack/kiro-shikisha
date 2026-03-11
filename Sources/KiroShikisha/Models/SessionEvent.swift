@@ -95,4 +95,73 @@ public struct SessionEvent: Codable, Sendable {
             timestamp = nil
         }
     }
+    
+    /// Parse a Kiro CLI JSONL event (v1 envelope format) into SessionEvent(s).
+    /// One JSONL line can produce multiple events (e.g., AssistantMessage with text + toolUse).
+    public static func parseKiroEvent(from data: Data) -> [SessionEvent] {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let kind = json["kind"] as? String,
+              let eventData = json["data"] as? [String: Any] else {
+            return []
+        }
+        
+        let contentItems = eventData["content"] as? [[String: Any]] ?? []
+        
+        switch kind {
+        case "Prompt":
+            let text = contentItems.compactMap { item -> String? in
+                guard item["kind"] as? String == "text" else { return nil }
+                return item["data"] as? String
+            }.joined()
+            return [SessionEvent(type: .userMessage, content: text)]
+            
+        case "AssistantMessage":
+            var events: [SessionEvent] = []
+            for item in contentItems {
+                switch item["kind"] as? String {
+                case "text":
+                    if let text = item["data"] as? String {
+                        events.append(SessionEvent(type: .agentMessage, content: text))
+                    }
+                case "toolUse":
+                    if let toolData = item["data"] as? [String: Any] {
+                        events.append(SessionEvent(
+                            type: .toolCall,
+                            toolCallId: toolData["toolUseId"] as? String,
+                            toolName: toolData["name"] as? String
+                        ))
+                    }
+                default:
+                    break
+                }
+            }
+            return events
+            
+        case "ToolResults":
+            return contentItems.compactMap { item -> SessionEvent? in
+                guard item["kind"] as? String == "toolResult",
+                      let toolData = item["data"] as? [String: Any] else { return nil }
+                return SessionEvent(type: .toolResult, toolCallId: toolData["toolUseId"] as? String)
+            }
+            
+        case "TurnEnd":
+            return [SessionEvent(type: .turnEnd)]
+            
+        case "SessionStart":
+            return [SessionEvent(type: .sessionStart)]
+            
+        case "SessionEnd":
+            return [SessionEvent(type: .sessionEnd)]
+            
+        case "Error":
+            let msg = contentItems.compactMap { item -> String? in
+                guard item["kind"] as? String == "text" else { return nil }
+                return item["data"] as? String
+            }.joined()
+            return [SessionEvent(type: .error, error: msg.isEmpty ? nil : msg)]
+            
+        default:
+            return [SessionEvent(type: .unknown)]
+        }
+    }
 }
