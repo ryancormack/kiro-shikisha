@@ -156,18 +156,22 @@ public struct TaskCreationRequest: Sendable {
     public let useWorktree: Bool
     /// The branch name for the worktree
     public let worktreeBranchName: String?
+    /// Whether to start the task immediately after creation
+    public let startImmediately: Bool
 
     public init(
         name: String,
         workspacePath: URL,
         gitBranch: String? = nil,
         useWorktree: Bool = false,
-        worktreeBranchName: String? = nil
+        worktreeBranchName: String? = nil,
+        startImmediately: Bool = true
     ) {
         self.name = name
         self.workspacePath = workspacePath
         self.gitBranch = gitBranch
         self.useWorktree = useWorktree
         self.worktreeBranchName = worktreeBranchName
+        self.startImmediately = startImmediately
     }
 }

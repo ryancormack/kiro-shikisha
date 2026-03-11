@@ -163,6 +163,7 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(request.gitBranch, "feature/new")
         XCTAssertTrue(request.useWorktree)
         XCTAssertNil(request.worktreeBranchName)
+        XCTAssertTrue(request.startImmediately)
     }
 
     func testTaskCreationRequestDefaults() throws {
@@ -178,6 +179,7 @@ final class TaskTests: XCTestCase {
         XCTAssertNil(request.gitBranch)
         XCTAssertFalse(request.useWorktree)
         XCTAssertNil(request.worktreeBranchName)
+        XCTAssertTrue(request.startImmediately)
     }
 
     func testTaskCreationRequestWithWorktree() throws {
@@ -196,6 +198,24 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(request.gitBranch, "feature/new-thing")
         XCTAssertTrue(request.useWorktree)
         XCTAssertEqual(request.worktreeBranchName, "feature/new-thing")
+        XCTAssertTrue(request.startImmediately)
+    }
+
+    func testTaskCreationRequestStartImmediatelyFalse() throws {
+        let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+
+        let request = TaskCreationRequest(
+            name: "Deferred task",
+            workspacePath: path,
+            startImmediately: false
+        )
+
+        XCTAssertEqual(request.name, "Deferred task")
+        XCTAssertEqual(request.workspacePath, path)
+        XCTAssertFalse(request.startImmediately)
+        XCTAssertNil(request.gitBranch)
+        XCTAssertFalse(request.useWorktree)
+        XCTAssertNil(request.worktreeBranchName)
     }
 
     func testAgentTaskWithWorktreeProperties() async throws {
