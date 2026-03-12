@@ -15,6 +15,9 @@ public final class TaskManager {
     /// Reference to the agent manager for starting/stopping agents
     public var agentManager: AgentManager?
 
+    /// Reference to the app state manager for reactive persistence
+    public var appStateManager: AppStateManager?
+
     // MARK: - Computed Properties
 
     /// Tasks that are currently active (starting, working, or needs attention)
@@ -41,6 +44,13 @@ public final class TaskManager {
 
     public init() {}
 
+    // MARK: - Persistence Helper
+
+    /// Persists the current task state via the app state manager
+    private func persistCurrentState() {
+        appStateManager?.persistTasks(allTasks)
+    }
+
     // MARK: - Task Lifecycle
 
     /// Creates a new task from a creation request
@@ -56,6 +66,7 @@ public final class TaskManager {
             worktreeBranchName: request.worktreeBranchName
         )
         tasks[task.id] = task
+        persistCurrentState()
         return task
     }
 
@@ -104,6 +115,7 @@ public final class TaskManager {
         task.sessionId = agent.sessionId?.value
         task.status = .working
         task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     /// Pauses a task
@@ -112,6 +124,7 @@ public final class TaskManager {
         guard let task = tasks[id] else { return }
         task.status = .paused
         task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     /// Resumes a paused task
@@ -120,6 +133,7 @@ public final class TaskManager {
         guard let task = tasks[id] else { return }
         task.status = .working
         task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     /// Cancels a task and stops its agent if running
@@ -132,6 +146,7 @@ public final class TaskManager {
         if let agentId = task.agentId {
             await agentManager?.stopAgent(id: agentId)
         }
+        persistCurrentState()
     }
 
     /// Marks a task as completed
@@ -141,6 +156,7 @@ public final class TaskManager {
         task.status = .completed
         task.completedAt = Date()
         task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     /// Marks a task as needing user attention
@@ -152,6 +168,7 @@ public final class TaskManager {
         task.status = .needsAttention
         task.attentionReason = reason
         task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     /// Clears the attention state and returns to working
@@ -161,6 +178,7 @@ public final class TaskManager {
         task.attentionReason = nil
         task.status = .working
         task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     /// Syncs task state from the agent's current state
@@ -189,6 +207,7 @@ public final class TaskManager {
             await agentManager?.stopAgent(id: agentId)
         }
         tasks.removeValue(forKey: id)
+        persistCurrentState()
     }
 
     /// Restores tasks from persisted entries
@@ -214,6 +233,7 @@ public final class TaskManager {
             )
             tasks[task.id] = task
         }
+        persistCurrentState()
     }
 }
 
@@ -226,6 +246,7 @@ public final class TaskManager {
 public final class TaskManager {
     public private(set) var tasks: [UUID: AgentTask] = [:]
     public var agentManager: AgentManager?
+    public var appStateManager: AppStateManager?
 
     public var activeTasks: [AgentTask] {
         tasks.values.filter { $0.status.isActive }
@@ -242,6 +263,10 @@ public final class TaskManager {
 
     public init() {}
 
+    private func persistCurrentState() {
+        appStateManager?.persistTasks(allTasks)
+    }
+
     public func createTask(from request: TaskCreationRequest) -> AgentTask {
         let task = AgentTask(
             name: request.name,
@@ -252,6 +277,7 @@ public final class TaskManager {
             worktreeBranchName: request.worktreeBranchName
         )
         tasks[task.id] = task
+        persistCurrentState()
         return task
     }
 
@@ -260,7 +286,10 @@ public final class TaskManager {
     }
 
     public func pauseTask(id: UUID) {
-        // No-op on non-macOS
+        guard let task = tasks[id] else { return }
+        task.status = .paused
+        task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     public func resumeTask(id: UUID) async throws {
@@ -268,7 +297,10 @@ public final class TaskManager {
     }
 
     public func cancelTask(id: UUID) async {
-        // No-op on non-macOS
+        guard let task = tasks[id] else { return }
+        task.status = .cancelled
+        task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     public func completeTask(id: UUID) {
@@ -276,14 +308,23 @@ public final class TaskManager {
         task.status = .completed
         task.completedAt = Date()
         task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     public func markNeedsAttention(id: UUID, reason: String) {
-        // No-op on non-macOS
+        guard let task = tasks[id] else { return }
+        task.status = .needsAttention
+        task.attentionReason = reason
+        task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     public func clearAttention(id: UUID) {
-        // No-op on non-macOS
+        guard let task = tasks[id] else { return }
+        task.attentionReason = nil
+        task.status = .working
+        task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     public func syncFromAgent(taskId: UUID) {
@@ -296,6 +337,7 @@ public final class TaskManager {
 
     public func deleteTask(id: UUID) async {
         tasks.removeValue(forKey: id)
+        persistCurrentState()
     }
 
     public func restoreTasks(from entries: [AppStateManager.TaskPersistenceEntry]) {
@@ -319,6 +361,7 @@ public final class TaskManager {
             )
             tasks[task.id] = task
         }
+        persistCurrentState()
     }
 }
 #else
@@ -327,6 +370,7 @@ public final class TaskManager {
 public final class TaskManager {
     public private(set) var tasks: [UUID: AgentTask] = [:]
     public var agentManager: AgentManager?
+    public var appStateManager: AppStateManager?
 
     public var activeTasks: [AgentTask] {
         tasks.values.filter { $0.status.isActive }
@@ -343,6 +387,10 @@ public final class TaskManager {
 
     public init() {}
 
+    private func persistCurrentState() {
+        appStateManager?.persistTasks(allTasks)
+    }
+
     public func createTask(from request: TaskCreationRequest) -> AgentTask {
         let task = AgentTask(
             name: request.name,
@@ -353,6 +401,7 @@ public final class TaskManager {
             worktreeBranchName: request.worktreeBranchName
         )
         tasks[task.id] = task
+        persistCurrentState()
         return task
     }
 
@@ -361,7 +410,10 @@ public final class TaskManager {
     }
 
     public func pauseTask(id: UUID) {
-        // No-op on non-macOS
+        guard let task = tasks[id] else { return }
+        task.status = .paused
+        task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     public func resumeTask(id: UUID) async throws {
@@ -369,7 +421,10 @@ public final class TaskManager {
     }
 
     public func cancelTask(id: UUID) async {
-        // No-op on non-macOS
+        guard let task = tasks[id] else { return }
+        task.status = .cancelled
+        task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     public func completeTask(id: UUID) {
@@ -377,14 +432,23 @@ public final class TaskManager {
         task.status = .completed
         task.completedAt = Date()
         task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     public func markNeedsAttention(id: UUID, reason: String) {
-        // No-op on non-macOS
+        guard let task = tasks[id] else { return }
+        task.status = .needsAttention
+        task.attentionReason = reason
+        task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     public func clearAttention(id: UUID) {
-        // No-op on non-macOS
+        guard let task = tasks[id] else { return }
+        task.attentionReason = nil
+        task.status = .working
+        task.lastActivityAt = Date()
+        persistCurrentState()
     }
 
     public func syncFromAgent(taskId: UUID) {
@@ -397,6 +461,7 @@ public final class TaskManager {
 
     public func deleteTask(id: UUID) async {
         tasks.removeValue(forKey: id)
+        persistCurrentState()
     }
 
     public func restoreTasks(from entries: [AppStateManager.TaskPersistenceEntry]) {
@@ -420,6 +485,7 @@ public final class TaskManager {
             )
             tasks[task.id] = task
         }
+        persistCurrentState()
     }
 }
 #endif

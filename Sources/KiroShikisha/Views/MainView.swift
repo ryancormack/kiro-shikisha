@@ -78,9 +78,6 @@ public struct MainView: View {
                 }
             }
         }
-        .onChange(of: appStateManager.selectedTaskId) { _, _ in
-            appStateManager.saveState()
-        }
         .sheet(isPresented: $showNewTaskSheet) {
             NewTaskSheet { request in
                 let task = taskManager.createTask(from: request)

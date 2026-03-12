@@ -19,9 +19,6 @@ struct KiroShikishaApp: App {
     @State private var showDashboard: Bool = false
     @State private var showNewTaskSheet: Bool = false
 
-    // Environment for scene lifecycle
-    @Environment(\.scenePhase) var scenePhase
-
     var body: some Scene {
         WindowGroup {
             Group {
@@ -41,6 +38,8 @@ struct KiroShikishaApp: App {
                 agentManager.kirocliPath = appSettings.expandedKirocliPath
                 // Wire TaskManager to AgentManager
                 taskManager.agentManager = agentManager
+                // Wire TaskManager to AppStateManager for reactive persistence
+                taskManager.appStateManager = appStateManager
                 // Kill only our own kiro-cli processes from previous runs
                 killOwnedProcesses()
                 // Restore persisted tasks
@@ -64,32 +63,15 @@ struct KiroShikishaApp: App {
                 // Update agent manager when settings change
                 agentManager.kirocliPath = appSettings.expandedKirocliPath
             }
-            .onChange(of: scenePhase) { oldPhase, newPhase in
-                if newPhase == .background {
-                    // App going to background - save task state
-                    saveTaskState()
-                }
-            }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-                // Save active sessions and PIDs for reconnect on next launch
+                // Save active sessions for reconnect on next launch
                 for agent in agentManager.getAllAgents() {
                     if let sessionId = agent.sessionId?.value {
                         appStateManager.updateSessionForWorkspace(agent.workspace.id, sessionId: sessionId)
                     }
                 }
-                // Save tasks for persistence
-                appStateManager.taskEntriesToPersist = taskManager.allTasks.map { task in
-                    AppStateManager.TaskPersistenceEntry(
-                        id: task.id,
-                        name: task.name,
-                        statusRawValue: task.status.rawValue,
-                        workspacePath: task.workspacePath.path,
-                        gitBranch: task.gitBranch,
-                        createdAt: task.createdAt,
-                        completedAt: task.completedAt,
-                        lastActivityAt: task.lastActivityAt
-                    )
-                }
+                // Flush any pending debounced task save synchronously
+                appStateManager.saveImmediately()
                 // Save PIDs so we can kill only our processes on next launch
                 Task {
                     appStateManager.ownedProcessPids = await agentManager.collectProcessPids()
@@ -114,23 +96,6 @@ struct KiroShikishaApp: App {
             SettingsView()
                 .environment(appSettings)
         }
-    }
-
-    /// Saves current task state to AppStateManager for persistence
-    private func saveTaskState() {
-        appStateManager.taskEntriesToPersist = taskManager.allTasks.map { task in
-            AppStateManager.TaskPersistenceEntry(
-                id: task.id,
-                name: task.name,
-                statusRawValue: task.status.rawValue,
-                workspacePath: task.workspacePath.path,
-                gitBranch: task.gitBranch,
-                createdAt: task.createdAt,
-                completedAt: task.completedAt,
-                lastActivityAt: task.lastActivityAt
-            )
-        }
-        appStateManager.saveState()
     }
 
     /// Kill only kiro-cli processes that this app previously spawned (by saved PID)
