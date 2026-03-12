@@ -37,6 +37,7 @@ public final class AppStateManager {
         public var statusRawValue: String
         public var workspacePath: String
         public var gitBranch: String?
+        public var sessionId: String?
         public var createdAt: Date
         public var completedAt: Date?
         public var lastActivityAt: Date?
@@ -47,6 +48,7 @@ public final class AppStateManager {
             statusRawValue: String,
             workspacePath: String,
             gitBranch: String? = nil,
+            sessionId: String? = nil,
             createdAt: Date,
             completedAt: Date? = nil,
             lastActivityAt: Date? = nil
@@ -56,6 +58,7 @@ public final class AppStateManager {
             self.statusRawValue = statusRawValue
             self.workspacePath = workspacePath
             self.gitBranch = gitBranch
+            self.sessionId = sessionId
             self.createdAt = createdAt
             self.completedAt = completedAt
             self.lastActivityAt = lastActivityAt
@@ -95,6 +98,7 @@ public final class AppStateManager {
                 statusRawValue: task.status.rawValue,
                 workspacePath: task.workspacePath.path,
                 gitBranch: task.gitBranch,
+                sessionId: task.sessionId,
                 createdAt: task.createdAt,
                 completedAt: task.completedAt,
                 lastActivityAt: task.lastActivityAt
@@ -258,6 +262,7 @@ public final class AppStateManager {
         public var statusRawValue: String
         public var workspacePath: String
         public var gitBranch: String?
+        public var sessionId: String?
         public var createdAt: Date
         public var completedAt: Date?
         public var lastActivityAt: Date?
@@ -268,6 +273,7 @@ public final class AppStateManager {
             statusRawValue: String,
             workspacePath: String,
             gitBranch: String? = nil,
+            sessionId: String? = nil,
             createdAt: Date,
             completedAt: Date? = nil,
             lastActivityAt: Date? = nil
@@ -277,6 +283,7 @@ public final class AppStateManager {
             self.statusRawValue = statusRawValue
             self.workspacePath = workspacePath
             self.gitBranch = gitBranch
+            self.sessionId = sessionId
             self.createdAt = createdAt
             self.completedAt = completedAt
             self.lastActivityAt = lastActivityAt
@@ -318,6 +325,7 @@ public final class AppStateManager {
         public var statusRawValue: String
         public var workspacePath: String
         public var gitBranch: String?
+        public var sessionId: String?
         public var createdAt: Date
         public var completedAt: Date?
         public var lastActivityAt: Date?
@@ -328,6 +336,7 @@ public final class AppStateManager {
             statusRawValue: String,
             workspacePath: String,
             gitBranch: String? = nil,
+            sessionId: String? = nil,
             createdAt: Date,
             completedAt: Date? = nil,
             lastActivityAt: Date? = nil
@@ -337,6 +346,7 @@ public final class AppStateManager {
             self.statusRawValue = statusRawValue
             self.workspacePath = workspacePath
             self.gitBranch = gitBranch
+            self.sessionId = sessionId
             self.createdAt = createdAt
             self.completedAt = completedAt
             self.lastActivityAt = lastActivityAt

@@ -152,11 +152,19 @@ public struct TaskAgentView: View {
             }
 
             if task.status == .paused {
-                Button("Resume") {
-                    Task { try? await taskManager.resumeTask(id: task.id) }
+                if task.agentId == nil && task.sessionId != nil {
+                    Button("Re-open") {
+                        Task { try? await taskManager.reopenTask(id: task.id) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                } else {
+                    Button("Resume") {
+                        Task { try? await taskManager.resumeTask(id: task.id) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
             }
 
             if task.status == .working || task.status == .needsAttention || task.status == .paused {
@@ -242,6 +250,9 @@ struct TaskPendingView: View {
 /// View shown when a task has completed/failed/cancelled
 struct TaskCompletedView: View {
     let task: AgentTask
+    @Environment(TaskManager.self) var taskManager
+    @State private var isReopening: Bool = false
+    @State private var reopenError: String?
 
     private var formattedDuration: String? {
         guard let startDate = task.startedAt ?? task.createdAt as Date?,
@@ -286,6 +297,35 @@ struct TaskCompletedView: View {
                 Text("Duration: \(durationString)")
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+
+            if task.sessionId != nil {
+                if isReopening {
+                    ProgressView("Re-opening task...")
+                } else {
+                    Button("Re-open Task") {
+                        isReopening = true
+                        reopenError = nil
+                        Task {
+                            do {
+                                try await taskManager.reopenTask(id: task.id)
+                            } catch {
+                                reopenError = error.localizedDescription
+                            }
+                            isReopening = false
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+            }
+
+            if let error = reopenError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .frame(maxWidth: 400)
+                    .textSelection(.enabled)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
