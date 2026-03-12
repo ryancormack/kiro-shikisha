@@ -1,185 +1,162 @@
 #if os(macOS)
 import SwiftUI
-import ACPModel
 
-/// View showing list of files changed by the agent
+/// View showing list of files changed in the worktree via git diff
 struct FilesChangedView: View {
-    let agent: Agent
-    
-    @State private var selectedFileId: UUID?
-    @State private var selectedFileChange: FileChange?
-    
-    private var selectedFile: FileChange? {
-        selectedFileChange
-    }
-    
-    var body: some View {
-        if agent.fileChanges.isEmpty {
-            VStack {
-                Spacer()
-                Image(systemName: "doc.text")
-                    .font(.largeTitle)
-                    .foregroundColor(.secondary)
-                Text("No files changed yet")
-                    .foregroundColor(.secondary)
-                    .font(.caption)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            VStack(spacing: 0) {
-                List(selection: $selectedFileId) {
-                    ForEach(groupedFileChanges, id: \.0) { group in
-                        Section(header: sectionHeader(for: group.0)) {
-                            ForEach(group.1) { fileChange in
-                                FileChangeRow(fileChange: fileChange, isSelected: selectedFileId == fileChange.id)
-                                    .tag(fileChange.id)
-                            }
-                        }
-                    }
-                }
-                .listStyle(.sidebar)
-                .frame(maxHeight: selectedFile != nil ? 150 : .infinity)
-                .onChange(of: selectedFileId) { _, newId in
-                    selectedFileChange = newId.flatMap { id in agent.fileChanges.first { $0.id == id } }
-                }
+    let workspacePath: URL
 
-                if let file = selectedFile {
-                    Divider()
-                    DiffView(fileChange: file)
-                }
-            }
-        }
-    }
-    
-    /// Group file changes by tool call ID (or "Other" for nil)
-    private var groupedFileChanges: [(String, [FileChange])] {
-        var groups: [String: [FileChange]] = [:]
-        
-        for change in agent.fileChanges {
-            let key = change.toolCallId ?? "Other"
-            groups[key, default: []].append(change)
-        }
-        
-        // Sort by timestamp of first item in each group
-        return groups.sorted { group1, group2 in
-            let time1 = group1.value.first?.timestamp ?? Date.distantPast
-            let time2 = group2.value.first?.timestamp ?? Date.distantPast
-            return time1 > time2  // Most recent first
-        }
-    }
-    
-    @ViewBuilder
-    private func sectionHeader(for toolCallId: String) -> some View {
-        if toolCallId == "Other" {
-            Text("Other Changes")
-                .font(.caption)
-                .foregroundColor(.secondary)
-        } else {
-            // Try to find the tool call title
-            if let toolCall = agent.toolCallHistory[toolCallId] {
-                HStack {
-                    Image(systemName: iconForKind(toolCall.kind))
-                        .foregroundColor(.secondary)
-                    Text(toolCall.title)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                Text("Tool: \(toolCallId.prefix(8))...")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-    
-    private func iconForKind(_ kind: ToolKind?) -> String {
-        switch kind {
-        case .read:
-            return "doc.text"
-        case .edit:
-            return "pencil"
-        case .delete:
-            return "trash"
-        case .move:
-            return "arrow.right.arrow.left"
-        case .search:
-            return "magnifyingglass"
-        case .execute:
-            return "terminal"
-        case .think:
-            return "brain"
-        case .fetch:
-            return "arrow.down.circle"
-        case .switchMode, .other, .none:
-            return "questionmark.circle"
-        }
-    }
-}
+    @State private var fileDiffs: [GitFileDiff] = []
+    @State private var selectedFileDiff: GitFileDiff?
+    @State private var isLoading: Bool = false
+    @State private var errorMessage: String?
 
-/// Sheet view for displaying file diff
-struct DiffSheet: View {
-    let fileChange: FileChange
-    @Binding var isPresented: Bool
-    
     var body: some View {
         VStack(spacing: 0) {
-            // Title bar with close button
-            HStack {
-                Text("Changes: \(fileChange.fileName)")
-                    .font(.headline)
-                Spacer()
-                Button(action: { isPresented = false }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+            if isLoading {
+                VStack {
+                    Spacer()
+                    ProgressView("Loading diff...")
+                    Spacer()
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error = errorMessage {
+                VStack(spacing: 8) {
+                    Spacer()
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundColor(.orange)
+                    Text("Error loading diff")
+                        .font(.headline)
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    Button("Retry") {
+                        Task { await loadDiff() }
+                    }
+                    .buttonStyle(.bordered)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if fileDiffs.isEmpty {
+                VStack {
+                    Spacer()
+                    Image(systemName: "doc.text")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary)
+                    Text("No changes detected")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                // Summary header
+                HStack {
+                    Text("\(fileDiffs.count) file\(fileDiffs.count == 1 ? "" : "s") changed")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    HStack(spacing: 8) {
+                        let totalAdded = fileDiffs.reduce(0) { $0 + $1.linesAdded }
+                        let totalRemoved = fileDiffs.reduce(0) { $0 + $1.linesRemoved }
+                        if totalAdded > 0 {
+                            Text("+\(totalAdded)")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        }
+                        if totalRemoved > 0 {
+                            Text("-\(totalRemoved)")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                    }
+                    Button {
+                        Task { await loadDiff() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color(nsColor: .controlBackgroundColor))
+
+                Divider()
+
+                // File list and diff detail
+                HSplitView {
+                    List(fileDiffs, selection: Binding<UUID?>(
+                        get: { selectedFileDiff?.id },
+                        set: { newId in
+                            selectedFileDiff = newId.flatMap { id in fileDiffs.first { $0.id == id } }
+                        }
+                    )) { fileDiff in
+                        FileChangeRow(fileDiff: fileDiff, isSelected: selectedFileDiff?.id == fileDiff.id)
+                            .tag(fileDiff.id)
+                    }
+                    .listStyle(.sidebar)
+                    .frame(minWidth: 200)
+
+                    if let selected = selectedFileDiff {
+                        DiffView(fileDiff: selected)
+                            .frame(minWidth: 300)
+                    } else {
+                        VStack {
+                            Spacer()
+                            Text("Select a file to view changes")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
             }
-            .padding()
-            .background(Color(nsColor: .windowBackgroundColor))
-            
-            Divider()
-            
-            // Diff view
-            DiffView(fileChange: fileChange)
         }
-        .frame(minWidth: 600, idealWidth: 800, minHeight: 400, idealHeight: 600)
+        .onAppear {
+            Task { await loadDiff() }
+        }
+    }
+
+    private func loadDiff() async {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let gitService = GitService()
+            let rawDiff = try await gitService.getWorktreeDiff(at: workspacePath)
+            let untrackedFiles = try await gitService.getUntrackedFiles(at: workspacePath)
+
+            var diffs = GitDiffParser.parse(rawDiff)
+
+            for untrackedFile in untrackedFiles {
+                do {
+                    let content = try await gitService.getFileContent(filePath: untrackedFile, in: workspacePath)
+                    let diff = GitDiffParser.createUntrackedFileDiff(path: untrackedFile, content: content)
+                    diffs.append(diff)
+                } catch {
+                    // Skip files we cannot read
+                }
+            }
+
+            fileDiffs = diffs
+            // Clear selection if selected file no longer exists
+            if let selected = selectedFileDiff, !diffs.contains(where: { $0.filePath == selected.filePath }) {
+                selectedFileDiff = nil
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isLoading = false
     }
 }
 
 #Preview {
-    let workspace = Workspace(
-        name: "Test Project",
-        path: URL(fileURLWithPath: "/Users/test/Projects/test-project")
-    )
-    let agent = Agent(
-        name: "Test Agent",
-        workspace: workspace,
-        fileChanges: [
-            FileChange(
-                path: "Sources/main.swift",
-                oldContent: "let x = 1",
-                newContent: "let x = 2\nlet y = 3",
-                changeType: .modified,
-                toolCallId: "tool-1"
-            ),
-            FileChange(
-                path: "Sources/helper.swift",
-                newContent: "func helper() {}",
-                changeType: .created,
-                toolCallId: "tool-1"
-            ),
-            FileChange(
-                path: "README.md",
-                oldContent: "# Old",
-                newContent: "# New\n\nUpdated content",
-                changeType: .modified,
-                toolCallId: "tool-2"
-            )
-        ]
-    )
-    
-    FilesChangedView(agent: agent)
-        .frame(width: 300, height: 400)
+    FilesChangedView(workspacePath: URL(fileURLWithPath: "/Users/test/Projects/test-project"))
+        .frame(width: 600, height: 400)
 }
 #endif

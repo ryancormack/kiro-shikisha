@@ -31,7 +31,7 @@ public struct TaskAgentView: View {
                     ChatPanel(agent: agent)
                         .frame(minWidth: 300)
 
-                    CodePanel(agent: agent)
+                    CodePanel(agent: agent, workspacePath: task.workspacePath)
                         .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
                 }
             } else if task.status == .pending {
