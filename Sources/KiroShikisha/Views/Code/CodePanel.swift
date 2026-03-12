@@ -4,13 +4,15 @@ import SwiftUI
 /// Panel showing code changes and terminal output from agent activity
 public struct CodePanel: View {
     let agent: Agent
-    
+    let workspacePath: URL
+
     @State private var selectedTab: CodePanelTab = .filesChanged
-    
-    public init(agent: Agent) {
+
+    public init(agent: Agent, workspacePath: URL) {
         self.agent = agent
+        self.workspacePath = workspacePath
     }
-    
+
     public var body: some View {
         VStack(spacing: 0) {
             // Tab picker
@@ -22,13 +24,13 @@ public struct CodePanel: View {
             }
             .pickerStyle(.segmented)
             .padding()
-            
+
             Divider()
-            
+
             // Tab content
             switch selectedTab {
             case .filesChanged:
-                FilesChangedView(agent: agent)
+                FilesChangedView(workspacePath: workspacePath)
             case .terminal:
                 TerminalOutputView(agent: agent)
             case .debug:
@@ -44,7 +46,7 @@ enum CodePanelTab: String, CaseIterable {
     case filesChanged
     case terminal
     case debug
-    
+
     var title: String {
         switch self {
         case .filesChanged: return "Files Changed"
@@ -78,8 +80,8 @@ enum CodePanelTab: String, CaseIterable {
             )
         ]
     )
-    
-    return CodePanel(agent: agent)
+
+    return CodePanel(agent: agent, workspacePath: URL(fileURLWithPath: "/Users/test/Projects/test-project"))
         .frame(width: 300, height: 400)
 }
 #endif

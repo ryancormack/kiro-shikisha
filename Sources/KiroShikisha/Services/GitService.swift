@@ -125,6 +125,35 @@ public actor GitService {
         }
     }
     
+    // MARK: - Diff Operations
+    
+    /// Get the worktree diff against HEAD
+    /// - Parameter path: The worktree path
+    /// - Returns: Raw unified diff output
+    public func getWorktreeDiff(at path: URL) async throws -> String {
+        return try await runGitCommand(["diff", "HEAD"], at: path)
+    }
+    
+    /// Get list of untracked files
+    /// - Parameter path: The worktree path
+    /// - Returns: Array of untracked file paths relative to the worktree
+    public func getUntrackedFiles(at path: URL) async throws -> [String] {
+        let output = try await runGitCommand(["ls-files", "--others", "--exclude-standard"], at: path)
+        let files = output.components(separatedBy: "\n").filter { !$0.isEmpty }
+        return files
+    }
+    
+    /// Read the content of a file in the worktree
+    /// - Parameters:
+    ///   - filePath: Relative file path within the worktree
+    ///   - workspacePath: The worktree root path
+    /// - Returns: The file content as a string
+    public func getFileContent(filePath: String, in workspacePath: URL) async throws -> String {
+        let fullPath = workspacePath.appendingPathComponent(filePath)
+        let data = try Data(contentsOf: fullPath)
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+    
     // MARK: - Private Helpers
     
     /// Run a git command and capture output
@@ -251,6 +280,18 @@ public actor GitService {
     
     public func getRemoteURL(at path: URL) async throws -> URL? {
         return nil
+    }
+    
+    public func getWorktreeDiff(at path: URL) async throws -> String {
+        return ""
+    }
+    
+    public func getUntrackedFiles(at path: URL) async throws -> [String] {
+        return []
+    }
+    
+    public func getFileContent(filePath: String, in workspacePath: URL) async throws -> String {
+        return ""
     }
 }
 #endif

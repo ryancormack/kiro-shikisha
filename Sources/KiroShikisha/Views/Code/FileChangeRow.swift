@@ -3,51 +3,51 @@ import SwiftUI
 
 /// Row displaying a single file change with status and line counts
 struct FileChangeRow: View {
-    let fileChange: FileChange
+    let fileDiff: GitFileDiff
     let isSelected: Bool
-    
+
     var body: some View {
         HStack(spacing: 8) {
             // File icon
             Image(systemName: fileIcon)
                 .foregroundColor(iconColor)
                 .frame(width: 16)
-            
+
             // File path info
             VStack(alignment: .leading, spacing: 2) {
-                Text(fileChange.fileName)
+                Text(fileDiff.fileName)
                     .font(.subheadline)
                     .lineLimit(1)
-                
-                if !fileChange.directoryPath.isEmpty {
-                    Text(fileChange.directoryPath)
+
+                if !fileDiff.directoryPath.isEmpty {
+                    Text(fileDiff.directoryPath)
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
             }
-            
+
             Spacer()
-            
+
             // Line change indicators
             HStack(spacing: 4) {
-                if fileChange.linesAdded > 0 {
-                    Text("+\(fileChange.linesAdded)")
+                if fileDiff.linesAdded > 0 {
+                    Text("+\(fileDiff.linesAdded)")
                         .font(.caption)
                         .foregroundColor(.green)
                 }
-                if fileChange.linesRemoved > 0 {
-                    Text("-\(fileChange.linesRemoved)")
+                if fileDiff.linesRemoved > 0 {
+                    Text("-\(fileDiff.linesRemoved)")
                         .font(.caption)
                         .foregroundColor(.red)
                 }
             }
-            
+
             // Change type icon
             Image(systemName: changeTypeIcon)
                 .foregroundColor(changeTypeColor)
                 .font(.caption)
-            
+
             // Disclosure indicator
             Image(systemName: "chevron.right")
                 .font(.caption2)
@@ -56,11 +56,11 @@ struct FileChangeRow: View {
         .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
-    
+
     // MARK: - Private Helpers
-    
+
     private var fileIcon: String {
-        let ext = (fileChange.path as NSString).pathExtension.lowercased()
+        let ext = (fileDiff.filePath as NSString).pathExtension.lowercased()
         switch ext {
         case "swift":
             return "swift"
@@ -84,9 +84,9 @@ struct FileChangeRow: View {
             return "doc"
         }
     }
-    
+
     private var iconColor: Color {
-        let ext = (fileChange.path as NSString).pathExtension.lowercased()
+        let ext = (fileDiff.filePath as NSString).pathExtension.lowercased()
         switch ext {
         case "swift":
             return .orange
@@ -104,9 +104,9 @@ struct FileChangeRow: View {
             return .secondary
         }
     }
-    
+
     private var changeTypeIcon: String {
-        switch fileChange.changeType {
+        switch fileDiff.changeType {
         case .created:
             return "plus.circle.fill"
         case .modified:
@@ -115,9 +115,9 @@ struct FileChangeRow: View {
             return "minus.circle.fill"
         }
     }
-    
+
     private var changeTypeColor: Color {
-        switch fileChange.changeType {
+        switch fileDiff.changeType {
         case .created:
             return .green
         case .modified:
@@ -131,30 +131,31 @@ struct FileChangeRow: View {
 #Preview {
     VStack(spacing: 8) {
         FileChangeRow(
-            fileChange: FileChange(
-                path: "Sources/main.swift",
-                oldContent: "let x = 1",
-                newContent: "let x = 2\nlet y = 3",
-                changeType: .modified
+            fileDiff: GitFileDiff(
+                filePath: "Sources/main.swift",
+                changeType: .modified,
+                linesAdded: 2,
+                linesRemoved: 1
             ),
             isSelected: false
         )
-        
+
         FileChangeRow(
-            fileChange: FileChange(
-                path: "Sources/Helper/NewFile.swift",
-                newContent: "// New file\nfunc helper() {}",
-                changeType: .created
+            fileDiff: GitFileDiff(
+                filePath: "Sources/Helper/NewFile.swift",
+                changeType: .created,
+                linesAdded: 5,
+                linesRemoved: 0
             ),
             isSelected: true
         )
-        
+
         FileChangeRow(
-            fileChange: FileChange(
-                path: "README.md",
-                oldContent: "# Old content\nSome text here",
-                newContent: "",
-                changeType: .deleted
+            fileDiff: GitFileDiff(
+                filePath: "README.md",
+                changeType: .deleted,
+                linesAdded: 0,
+                linesRemoved: 10
             ),
             isSelected: false
         )
