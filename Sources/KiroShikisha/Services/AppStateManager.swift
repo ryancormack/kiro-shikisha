@@ -26,6 +26,7 @@ public final class AppStateManager {
     
     private let userDefaults: UserDefaults
     private let storageKey = "com.kiroshikisha.appState"
+    private var saveWorkItem: DispatchWorkItem?
     
     // MARK: - Codable State Container
     
@@ -85,6 +86,40 @@ public final class AppStateManager {
     
     // MARK: - Persistence
     
+    /// Converts tasks to persistence entries and schedules a debounced save
+    public func persistTasks(_ tasks: [AgentTask]) {
+        taskEntriesToPersist = tasks.map { task in
+            TaskPersistenceEntry(
+                id: task.id,
+                name: task.name,
+                statusRawValue: task.status.rawValue,
+                workspacePath: task.workspacePath.path,
+                gitBranch: task.gitBranch,
+                createdAt: task.createdAt,
+                completedAt: task.completedAt,
+                lastActivityAt: task.lastActivityAt
+            )
+        }
+        scheduleSave()
+    }
+
+    /// Cancels any pending debounced save and saves state synchronously
+    public func saveImmediately() {
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
+        saveState()
+    }
+
+    /// Schedules a debounced save after 0.5 seconds, cancelling any pending save
+    private func scheduleSave() {
+        saveWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.saveState()
+        }
+        saveWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+    }
+
     /// Saves the current state to UserDefaults
     public func saveState() {
         let state = PersistedState(
@@ -93,7 +128,7 @@ public final class AppStateManager {
             workspaceSessionAssociations: workspaceSessionAssociations,
             ownedProcessPids: ownedProcessPids,
             selectedTaskId: selectedTaskId,
-            taskEntries: taskEntriesToPersist.isEmpty ? nil : taskEntriesToPersist
+            taskEntries: taskEntriesToPersist
         )
         
         do {
@@ -260,6 +295,8 @@ public final class AppStateManager {
 
     public func saveState() {}
     public func loadState() {}
+    public func persistTasks(_ tasks: [AgentTask]) {}
+    public func saveImmediately() {}
 
     @discardableResult
     public func addWorkspace(_ workspace: Workspace) -> Bool { return false }
@@ -318,6 +355,8 @@ public final class AppStateManager {
 
     public func saveState() {}
     public func loadState() {}
+    public func persistTasks(_ tasks: [AgentTask]) {}
+    public func saveImmediately() {}
 
     @discardableResult
     public func addWorkspace(_ workspace: Workspace) -> Bool { return false }

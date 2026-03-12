@@ -379,4 +379,135 @@ final class TaskTests: XCTestCase {
             XCTAssertEqual(restoredCancelled?.status, .cancelled)
         }
     }
+
+    // MARK: - Reactive Persistence Tests
+
+    func testTaskPersistenceEntryFromAgentTask() async throws {
+        await MainActor.run {
+            let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+            let completedDate = Date(timeIntervalSinceReferenceDate: 700003600)
+            let activityDate = Date(timeIntervalSinceReferenceDate: 700003500)
+            let path = URL(fileURLWithPath: "/Users/test/projects/myproject")
+
+            let task = AgentTask(
+                name: "Test Task",
+                status: .completed,
+                workspacePath: path,
+                gitBranch: "feature/test",
+                createdAt: fixedDate,
+                completedAt: completedDate,
+                lastActivityAt: activityDate
+            )
+
+            let entry = AppStateManager.TaskPersistenceEntry(
+                id: task.id,
+                name: task.name,
+                statusRawValue: task.status.rawValue,
+                workspacePath: task.workspacePath.path,
+                gitBranch: task.gitBranch,
+                createdAt: task.createdAt,
+                completedAt: task.completedAt,
+                lastActivityAt: task.lastActivityAt
+            )
+
+            XCTAssertEqual(entry.id, task.id)
+            XCTAssertEqual(entry.name, "Test Task")
+            XCTAssertEqual(entry.statusRawValue, "completed")
+            XCTAssertEqual(entry.workspacePath, path.path)
+            XCTAssertEqual(entry.gitBranch, "feature/test")
+            XCTAssertEqual(entry.createdAt, fixedDate)
+            XCTAssertEqual(entry.completedAt, completedDate)
+            XCTAssertEqual(entry.lastActivityAt, activityDate)
+        }
+    }
+
+    func testTaskManagerPersistenceAfterCreate() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let appStateManager = AppStateManager()
+            taskManager.appStateManager = appStateManager
+
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let request = TaskCreationRequest(name: "Persisted task", workspacePath: path)
+            let task = taskManager.createTask(from: request)
+
+            // On Linux, persistTasks is a no-op on AppStateManager,
+            // but we can verify the task was created correctly
+            XCTAssertEqual(taskManager.tasks.count, 1)
+            XCTAssertEqual(taskManager.tasks[task.id]?.name, "Persisted task")
+            XCTAssertEqual(taskManager.tasks[task.id]?.status, .pending)
+        }
+    }
+
+    func testTaskPersistenceEntryNilOptionals() throws {
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+        let entry = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Minimal task",
+            statusRawValue: "pending",
+            workspacePath: "/Users/test/projects/repo",
+            gitBranch: nil,
+            createdAt: fixedDate,
+            completedAt: nil,
+            lastActivityAt: nil
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(entry)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AppStateManager.TaskPersistenceEntry.self, from: data)
+
+        XCTAssertEqual(decoded.id, entry.id)
+        XCTAssertEqual(decoded.name, "Minimal task")
+        XCTAssertEqual(decoded.statusRawValue, "pending")
+        XCTAssertEqual(decoded.workspacePath, "/Users/test/projects/repo")
+        XCTAssertNil(decoded.gitBranch)
+        XCTAssertEqual(decoded.createdAt, fixedDate)
+        XCTAssertNil(decoded.completedAt)
+        XCTAssertNil(decoded.lastActivityAt)
+    }
+
+    func testTaskManagerRestoreAndMutate() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+            let workingEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Active task",
+                statusRawValue: "working",
+                workspacePath: "/Users/test/projects/repo1",
+                gitBranch: "feature/a",
+                createdAt: fixedDate
+            )
+
+            let pendingEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Pending task",
+                statusRawValue: "pending",
+                workspacePath: "/Users/test/projects/repo2",
+                createdAt: fixedDate
+            )
+
+            taskManager.restoreTasks(from: [workingEntry, pendingEntry])
+
+            // Working task should be restored as paused
+            XCTAssertEqual(taskManager.tasks[workingEntry.id]?.status, .paused)
+            XCTAssertEqual(taskManager.tasks[pendingEntry.id]?.status, .pending)
+
+            // Mutate: complete the paused task
+            taskManager.completeTask(id: workingEntry.id)
+            XCTAssertEqual(taskManager.tasks[workingEntry.id]?.status, .completed)
+            XCTAssertNotNil(taskManager.tasks[workingEntry.id]?.completedAt)
+
+            // Mutate: pause the pending task (which sets it to paused with activity date)
+            taskManager.pauseTask(id: pendingEntry.id)
+            XCTAssertEqual(taskManager.tasks[pendingEntry.id]?.status, .paused)
+            XCTAssertNotNil(taskManager.tasks[pendingEntry.id]?.lastActivityAt)
+        }
+    }
 }
