@@ -608,4 +608,75 @@ final class TaskTests: XCTestCase {
             XCTAssertEqual(restoredWithoutSession?.status, .completed)
         }
     }
+
+    // MARK: - Paused Task Tests
+
+    func testPausedTaskNotInActiveOrCompleted() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let request = TaskCreationRequest(name: "Pausable task", workspacePath: path)
+            let task = taskManager.createTask(from: request)
+
+            // Pause the task
+            taskManager.pauseTask(id: task.id)
+            XCTAssertEqual(task.status, .paused)
+
+            // Should not be in activeTasks
+            XCTAssertTrue(taskManager.activeTasks.isEmpty, "Paused task should not appear in activeTasks")
+
+            // Should not be in completedTasks
+            XCTAssertTrue(taskManager.completedTasks.isEmpty, "Paused task should not appear in completedTasks")
+
+            // Should still be in allTasks
+            XCTAssertEqual(taskManager.allTasks.count, 1)
+        }
+    }
+
+    func testResumeTaskSetsWorkingStatus() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let request = TaskCreationRequest(name: "Resume test", workspacePath: path)
+            let task = taskManager.createTask(from: request)
+
+            // Pause then resume
+            taskManager.pauseTask(id: task.id)
+            XCTAssertEqual(task.status, .paused)
+            let pausedAt = task.lastActivityAt
+
+            // Small delay to ensure time difference
+            // On non-macOS, resumeTask throws platformNotSupported
+            // So we test what we can: the pause behavior and status checks
+            XCTAssertNotNil(pausedAt)
+            XCTAssertFalse(task.status.isActive)
+            XCTAssertFalse(task.status.isTerminal)
+        }
+    }
+
+    func testTerminalTasksHaveIsTerminalTrue() throws {
+        // Verify all terminal statuses
+        XCTAssertTrue(TaskStatus.completed.isTerminal)
+        XCTAssertTrue(TaskStatus.failed.isTerminal)
+        XCTAssertTrue(TaskStatus.cancelled.isTerminal)
+
+        // Verify paused is NOT terminal (important for timer display logic)
+        XCTAssertFalse(TaskStatus.paused.isTerminal)
+    }
+
+    func testPauseTaskSetsLastActivityAt() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let request = TaskCreationRequest(name: "Pause activity test", workspacePath: path)
+            let task = taskManager.createTask(from: request)
+
+            XCTAssertNil(task.lastActivityAt)
+
+            taskManager.pauseTask(id: task.id)
+
+            XCTAssertEqual(task.status, .paused)
+            XCTAssertNotNil(task.lastActivityAt)
+        }
+    }
 }

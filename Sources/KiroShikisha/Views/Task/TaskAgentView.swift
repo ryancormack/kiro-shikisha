@@ -49,6 +49,9 @@ public struct TaskAgentView: View {
                         .foregroundColor(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if task.status == .paused {
+                // Task is paused - show stored messages and file changes with resume action
+                TaskPausedView(task: task)
             } else if task.status.isTerminal {
                 // Task is completed/failed/cancelled - show summary
                 TaskCompletedView(task: task)
@@ -329,6 +332,166 @@ struct TaskCompletedView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// View shown when a task is paused, displaying stored conversation and file changes
+struct TaskPausedView: View {
+    let task: AgentTask
+    @Environment(TaskManager.self) var taskManager
+    @State private var isResuming: Bool = false
+    @State private var resumeError: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Resume banner at top
+            HStack(spacing: 12) {
+                Image(systemName: "pause.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.yellow)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Task Paused")
+                        .font(.headline)
+                    Text("Resume to continue working with the agent")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                if isResuming {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Resuming...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    if task.agentId == nil && task.sessionId != nil {
+                        Button("Re-open Task") {
+                            isResuming = true
+                            resumeError = nil
+                            Task {
+                                do {
+                                    try await taskManager.reopenTask(id: task.id)
+                                } catch {
+                                    resumeError = error.localizedDescription
+                                }
+                                isResuming = false
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.regular)
+                    } else {
+                        Button("Resume Task") {
+                            isResuming = true
+                            resumeError = nil
+                            Task {
+                                do {
+                                    try await taskManager.resumeTask(id: task.id)
+                                } catch {
+                                    resumeError = error.localizedDescription
+                                }
+                                isResuming = false
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.regular)
+                    }
+                }
+            }
+            .padding()
+            .background(Color.yellow.opacity(0.1))
+
+            if let error = resumeError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .padding(.horizontal)
+                    .padding(.vertical, 4)
+            }
+
+            Divider()
+
+            // Show stored content
+            if !task.messages.isEmpty || !task.fileChanges.isEmpty {
+                HSplitView {
+                    // Messages list
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 8) {
+                            ForEach(task.messages) { message in
+                                ChatMessageView(message: message)
+                            }
+                        }
+                        .padding()
+                    }
+                    .frame(minWidth: 300)
+
+                    // File changes summary
+                    if !task.fileChanges.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Files Changed (\(task.fileChanges.count))")
+                                .font(.headline)
+                                .padding(.horizontal)
+                                .padding(.top, 8)
+
+                            List(task.fileChanges) { change in
+                                HStack(spacing: 8) {
+                                    Image(systemName: change.changeType == .created ? "plus.circle.fill" :
+                                            change.changeType == .deleted ? "minus.circle.fill" : "pencil.circle.fill")
+                                        .foregroundColor(change.changeType == .created ? .green :
+                                                change.changeType == .deleted ? .red : .yellow)
+                                        .font(.caption)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(change.fileName)
+                                            .font(.subheadline)
+                                            .lineLimit(1)
+                                        if !change.directoryPath.isEmpty {
+                                            Text(change.directoryPath)
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+
+                                    Spacer()
+
+                                    HStack(spacing: 4) {
+                                        if change.linesAdded > 0 {
+                                            Text("+\(change.linesAdded)")
+                                                .font(.caption)
+                                                .foregroundColor(.green)
+                                        }
+                                        if change.linesRemoved > 0 {
+                                            Text("-\(change.linesRemoved)")
+                                                .font(.caption)
+                                                .foregroundColor(.red)
+                                        }
+                                    }
+                                }
+                            }
+                            .listStyle(.plain)
+                        }
+                        .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
+                    }
+                }
+            } else {
+                // No stored content
+                VStack(spacing: 16) {
+                    Image(systemName: "pause.circle.fill")
+                        .font(.system(size: 64))
+                        .foregroundColor(.yellow)
+
+                    Text(task.name)
+                        .font(.title2)
+
+                    Text("This task is paused. Resume to continue.")
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
     }
 }
 

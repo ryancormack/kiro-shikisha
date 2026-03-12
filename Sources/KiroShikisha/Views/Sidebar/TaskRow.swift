@@ -63,7 +63,7 @@ public struct TaskRow: View {
             }
 
             // Last activity time
-            if let lastActivity = task.lastActivityAt {
+            if !task.status.isTerminal, let lastActivity = task.lastActivityAt {
                 Text(lastActivity, style: .relative)
                     .font(.caption2)
                     .foregroundColor(.secondary)
