@@ -510,4 +510,102 @@ final class TaskTests: XCTestCase {
             XCTAssertNotNil(taskManager.tasks[pendingEntry.id]?.lastActivityAt)
         }
     }
+
+    // MARK: - Session Persistence Tests
+
+    func testTaskPersistenceEntryWithSessionId() throws {
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+        let entryId = UUID()
+
+        let entry = AppStateManager.TaskPersistenceEntry(
+            id: entryId,
+            name: "Task with session",
+            statusRawValue: "working",
+            workspacePath: "/Users/test/projects/repo",
+            gitBranch: "feature/session",
+            sessionId: "session-abc-123",
+            createdAt: fixedDate
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(entry)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AppStateManager.TaskPersistenceEntry.self, from: data)
+
+        XCTAssertEqual(decoded.id, entryId)
+        XCTAssertEqual(decoded.name, "Task with session")
+        XCTAssertEqual(decoded.statusRawValue, "working")
+        XCTAssertEqual(decoded.workspacePath, "/Users/test/projects/repo")
+        XCTAssertEqual(decoded.gitBranch, "feature/session")
+        XCTAssertEqual(decoded.sessionId, "session-abc-123")
+        XCTAssertEqual(decoded.createdAt, fixedDate)
+    }
+
+    func testTaskPersistenceEntryWithNilSessionId() throws {
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+        let entryId = UUID()
+
+        let entry = AppStateManager.TaskPersistenceEntry(
+            id: entryId,
+            name: "Task without session",
+            statusRawValue: "pending",
+            workspacePath: "/Users/test/projects/repo",
+            createdAt: fixedDate
+        )
+
+        XCTAssertNil(entry.sessionId)
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(entry)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AppStateManager.TaskPersistenceEntry.self, from: data)
+
+        XCTAssertEqual(decoded.id, entryId)
+        XCTAssertEqual(decoded.name, "Task without session")
+        XCTAssertNil(decoded.sessionId)
+    }
+
+    func testTaskManagerRestorePreservesSessionId() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+            let entryWithSession = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Task with session",
+                statusRawValue: "working",
+                workspacePath: "/Users/test/projects/repo1",
+                sessionId: "session-xyz-456",
+                createdAt: fixedDate
+            )
+
+            let entryWithoutSession = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Task without session",
+                statusRawValue: "completed",
+                workspacePath: "/Users/test/projects/repo2",
+                createdAt: fixedDate
+            )
+
+            taskManager.restoreTasks(from: [entryWithSession, entryWithoutSession])
+
+            XCTAssertEqual(taskManager.tasks.count, 2)
+
+            let restoredWithSession = taskManager.tasks[entryWithSession.id]
+            XCTAssertNotNil(restoredWithSession)
+            XCTAssertEqual(restoredWithSession?.sessionId, "session-xyz-456")
+            XCTAssertEqual(restoredWithSession?.status, .paused) // active -> paused
+
+            let restoredWithoutSession = taskManager.tasks[entryWithoutSession.id]
+            XCTAssertNotNil(restoredWithoutSession)
+            XCTAssertNil(restoredWithoutSession?.sessionId)
+            XCTAssertEqual(restoredWithoutSession?.status, .completed)
+        }
+    }
 }

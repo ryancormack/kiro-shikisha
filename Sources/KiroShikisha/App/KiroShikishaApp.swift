@@ -45,7 +45,19 @@ struct KiroShikishaApp: App {
                 // Restore persisted tasks
                 let entries = appStateManager.persistedTaskEntries
                 taskManager.restoreTasks(from: entries)
-                // Auto-reconnect saved sessions
+                // Task-centric auto-reconnect for tasks with saved sessions
+                for restoredTask in taskManager.allTasks {
+                    if restoredTask.sessionId != nil {
+                        Task {
+                            do {
+                                try await taskManager.reopenTask(id: restoredTask.id)
+                            } catch {
+                                print("[TaskReconnect] Failed for \(restoredTask.name): \(error)")
+                            }
+                        }
+                    }
+                }
+                // Auto-reconnect saved sessions (workspace-based, kept for backward compatibility)
                 for workspace in appStateManager.workspaces {
                     if let sessionId = appStateManager.getLastSessionForWorkspace(workspace.id) {
                         Task {

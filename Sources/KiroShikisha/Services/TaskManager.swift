@@ -231,8 +231,42 @@ public final class TaskManager {
                 completedAt: entry.completedAt,
                 lastActivityAt: entry.lastActivityAt
             )
+            task.sessionId = entry.sessionId
             tasks[task.id] = task
         }
+        persistCurrentState()
+    }
+
+    /// Re-opens a previously persisted task by loading its ACP session
+    public func reopenTask(id: UUID) async throws {
+        guard let task = tasks[id] else { return }
+        guard let sessionId = task.sessionId else {
+            throw AgentManagerError.noSessionId
+        }
+        guard let agentManager = agentManager else {
+            throw AgentManagerError.platformNotSupported
+        }
+
+        task.status = .starting
+        task.lastActivityAt = Date()
+
+        let workspace = Workspace(
+            name: task.name,
+            path: task.workspacePath,
+            gitBranch: task.gitBranch
+        )
+
+        let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
+        task.agentId = agent.id
+        task.status = .working
+
+        // Load conversation history from session storage
+        let sessionStorage = SessionStorage()
+        if let messages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !messages.isEmpty {
+            task.messages = messages
+        }
+
+        task.lastActivityAt = Date()
         persistCurrentState()
     }
 }
@@ -359,9 +393,14 @@ public final class TaskManager {
                 completedAt: entry.completedAt,
                 lastActivityAt: entry.lastActivityAt
             )
+            task.sessionId = entry.sessionId
             tasks[task.id] = task
         }
         persistCurrentState()
+    }
+
+    public func reopenTask(id: UUID) async throws {
+        throw AgentManagerError.platformNotSupported
     }
 }
 #else
@@ -483,9 +522,14 @@ public final class TaskManager {
                 completedAt: entry.completedAt,
                 lastActivityAt: entry.lastActivityAt
             )
+            task.sessionId = entry.sessionId
             tasks[task.id] = task
         }
         persistCurrentState()
+    }
+
+    public func reopenTask(id: UUID) async throws {
+        throw AgentManagerError.platformNotSupported
     }
 }
 #endif

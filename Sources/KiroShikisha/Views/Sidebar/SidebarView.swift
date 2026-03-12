@@ -103,6 +103,11 @@ public struct SidebarView: View {
                         TaskRow(task: task)
                             .tag(task.id)
                             .contextMenu {
+                                if task.sessionId != nil {
+                                    Button("Re-open") {
+                                        Task { try? await taskManager.reopenTask(id: task.id) }
+                                    }
+                                }
                                 Button("Delete Task", role: .destructive) {
                                     taskToDelete = task
                                 }
