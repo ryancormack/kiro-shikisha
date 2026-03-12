@@ -34,6 +34,11 @@ public struct SidebarView: View {
         )
     }
 
+    private var pausedTasks: [AgentTask] {
+        taskManager.allTasks.filter { $0.status == .paused }
+            .sorted { ($0.lastActivityAt ?? $0.createdAt) > ($1.lastActivityAt ?? $1.createdAt) }
+    }
+
     public init(
         selectedTaskId: Binding<UUID?>,
         onCreateTask: (() -> Void)? = nil,
@@ -90,6 +95,32 @@ public struct SidebarView: View {
                 } header: {
                     Label("Needs Attention", systemImage: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
+                }
+            }
+
+            if !pausedTasks.isEmpty {
+                Section("Paused Tasks") {
+                    ForEach(pausedTasks) { task in
+                        TaskRow(task: task)
+                            .tag(task.id)
+                            .contextMenu {
+                                if task.agentId == nil && task.sessionId != nil {
+                                    Button("Re-open") {
+                                        Task { try? await taskManager.reopenTask(id: task.id) }
+                                    }
+                                } else {
+                                    Button("Resume") {
+                                        Task { try? await taskManager.resumeTask(id: task.id) }
+                                    }
+                                }
+                                Button("Mark Complete") {
+                                    taskManager.completeTask(id: task.id)
+                                }
+                                Button("Cancel Task", role: .destructive) {
+                                    Task { await taskManager.cancelTask(id: task.id) }
+                                }
+                            }
+                    }
                 }
             }
 

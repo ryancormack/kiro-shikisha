@@ -131,7 +131,46 @@ public final class TaskManager {
     /// - Parameter id: The task ID to resume
     public func resumeTask(id: UUID) async throws {
         guard let task = tasks[id] else { return }
+        guard let agentManager = agentManager else {
+            throw AgentManagerError.platformNotSupported
+        }
+
+        // If we already have an active agent, just resume
+        if let agentId = task.agentId, agentManager.getAgent(id: agentId) != nil {
+            task.status = .working
+            task.lastActivityAt = Date()
+            persistCurrentState()
+            return
+        }
+
+        // Need to reconnect - must have a session ID
+        guard let sessionId = task.sessionId else {
+            // No session to reconnect to - just set working status
+            task.status = .working
+            task.lastActivityAt = Date()
+            persistCurrentState()
+            return
+        }
+
+        task.status = .starting
+        task.lastActivityAt = Date()
+
+        let workspace = Workspace(
+            name: task.name,
+            path: task.workspacePath,
+            gitBranch: task.gitBranch
+        )
+
+        let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
+        task.agentId = agent.id
         task.status = .working
+
+        // Load conversation history from session storage
+        let sessionStorage = SessionStorage()
+        if let messages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !messages.isEmpty {
+            task.messages = messages
+        }
+
         task.lastActivityAt = Date()
         persistCurrentState()
     }
