@@ -47,7 +47,7 @@ struct KiroShikishaApp: App {
                 taskManager.restoreTasks(from: entries)
                 // Task-centric auto-reconnect for tasks with saved sessions
                 for restoredTask in taskManager.allTasks {
-                    if restoredTask.sessionId != nil {
+                    if restoredTask.status == .paused && restoredTask.sessionId != nil {
                         Task {
                             do {
                                 try await taskManager.reopenTask(id: restoredTask.id)

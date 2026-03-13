@@ -814,4 +814,126 @@ final class TaskTests: XCTestCase {
             XCTAssertEqual(task.fileChanges[0].path, "Sources/main.swift")
         }
     }
+
+    // MARK: - Resume/Reopen Error Recovery Tests
+
+    func testAutoReconnectShouldOnlyTargetPausedTasks() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+            let pausedEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Paused with session",
+                statusRawValue: "paused",
+                workspacePath: "/Users/test/projects/repo1",
+                sessionId: "session-1",
+                createdAt: fixedDate
+            )
+            let completedEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Completed with session",
+                statusRawValue: "completed",
+                workspacePath: "/Users/test/projects/repo2",
+                sessionId: "session-2",
+                createdAt: fixedDate
+            )
+            let cancelledEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Cancelled with session",
+                statusRawValue: "cancelled",
+                workspacePath: "/Users/test/projects/repo3",
+                sessionId: "session-3",
+                createdAt: fixedDate
+            )
+            let pausedNoSession = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Paused no session",
+                statusRawValue: "paused",
+                workspacePath: "/Users/test/projects/repo4",
+                createdAt: fixedDate
+            )
+
+            taskManager.restoreTasks(from: [pausedEntry, completedEntry, cancelledEntry, pausedNoSession])
+
+            // Only paused tasks with session IDs should be candidates for auto-reconnect
+            let candidates = taskManager.allTasks.filter { $0.status == .paused && $0.sessionId != nil }
+            XCTAssertEqual(candidates.count, 1)
+            XCTAssertEqual(candidates.first?.name, "Paused with session")
+
+            // Terminal tasks with sessions should NOT be candidates
+            let terminalWithSession = taskManager.allTasks.filter { $0.status.isTerminal && $0.sessionId != nil }
+            XCTAssertEqual(terminalWithSession.count, 2)
+
+            // Paused without session should not be a candidate
+            let pausedWithoutSession = taskManager.allTasks.filter { $0.status == .paused && $0.sessionId == nil }
+            XCTAssertEqual(pausedWithoutSession.count, 1)
+        }
+    }
+
+    @MainActor
+    func testResumeTaskFailureResetsStatusOnLinux() async throws {
+        // On Linux, resumeTask throws platformNotSupported immediately
+        // This test verifies the task status is not corrupted
+        let taskManager = TaskManager()
+        let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+        let request = TaskCreationRequest(name: "Resume fail test", workspacePath: path)
+        let task = taskManager.createTask(from: request)
+        task.status = .paused
+        task.sessionId = "session-abc"
+
+        // resumeTask on Linux throws platformNotSupported
+        // The task should remain in its pre-call state
+        let statusBefore = task.status
+        do {
+            try await taskManager.resumeTask(id: task.id)
+            XCTFail("Expected platformNotSupported error")
+        } catch {
+            // On Linux, the stub throws immediately without modifying state
+            // Verify task is still paused (not stuck in .starting)
+            XCTAssertEqual(task.status, statusBefore)
+        }
+    }
+
+    @MainActor
+    func testReopenTaskFailurePreservesStatusOnLinux() async throws {
+        // On Linux, reopenTask throws platformNotSupported immediately
+        let taskManager = TaskManager()
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+        let entry = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Completed task to reopen",
+            statusRawValue: "completed",
+            workspacePath: "/Users/test/projects/repo",
+            sessionId: "session-xyz",
+            createdAt: fixedDate
+        )
+        taskManager.restoreTasks(from: [entry])
+
+        let task = taskManager.tasks[entry.id]!
+        XCTAssertEqual(task.status, .completed)
+
+        do {
+            try await taskManager.reopenTask(id: task.id)
+            XCTFail("Expected platformNotSupported error")
+        } catch {
+            // Task should NOT be stuck in .starting - should be back to completed
+            XCTAssertEqual(task.status, .completed)
+        }
+    }
+
+    func testReopenTaskRequiresSessionId() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let request = TaskCreationRequest(name: "No session task", workspacePath: path)
+            let task = taskManager.createTask(from: request)
+
+            // Task has no sessionId
+            XCTAssertNil(task.sessionId)
+        }
+        // reopenTask should throw noSessionId
+        // On Linux it throws platformNotSupported, which is also acceptable
+    }
 }

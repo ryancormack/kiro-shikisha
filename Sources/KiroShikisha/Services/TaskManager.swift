@@ -166,24 +166,31 @@ public final class TaskManager {
         task.status = .starting
         task.lastActivityAt = Date()
 
-        let workspace = Workspace(
-            name: task.name,
-            path: task.workspacePath,
-            gitBranch: task.gitBranch
-        )
+        do {
+            let workspace = Workspace(
+                name: task.name,
+                path: task.workspacePath,
+                gitBranch: task.gitBranch
+            )
 
-        let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
-        task.agentId = agent.id
-        task.status = .working
+            let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
+            task.agentId = agent.id
+            task.status = .working
 
-        // Load conversation history from session storage
-        let sessionStorage = SessionStorage()
-        if let messages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !messages.isEmpty {
-            task.messages = messages
+            // Load conversation history from session storage
+            let sessionStorage = SessionStorage()
+            if let messages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !messages.isEmpty {
+                task.messages = messages
+            }
+
+            task.lastActivityAt = Date()
+            persistCurrentState()
+        } catch {
+            task.status = .paused
+            task.lastActivityAt = Date()
+            persistCurrentState()
+            throw error
         }
-
-        task.lastActivityAt = Date()
-        persistCurrentState()
     }
 
     /// Cancels a task and stops its agent if running
@@ -297,27 +304,35 @@ public final class TaskManager {
             throw AgentManagerError.platformNotSupported
         }
 
+        let previousStatus = task.status
         task.status = .starting
         task.lastActivityAt = Date()
 
-        let workspace = Workspace(
-            name: task.name,
-            path: task.workspacePath,
-            gitBranch: task.gitBranch
-        )
+        do {
+            let workspace = Workspace(
+                name: task.name,
+                path: task.workspacePath,
+                gitBranch: task.gitBranch
+            )
 
-        let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
-        task.agentId = agent.id
-        task.status = .working
+            let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
+            task.agentId = agent.id
+            task.status = .working
 
-        // Load conversation history from session storage
-        let sessionStorage = SessionStorage()
-        if let messages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !messages.isEmpty {
-            task.messages = messages
+            // Load conversation history from session storage
+            let sessionStorage = SessionStorage()
+            if let messages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !messages.isEmpty {
+                task.messages = messages
+            }
+
+            task.lastActivityAt = Date()
+            persistCurrentState()
+        } catch {
+            task.status = previousStatus
+            task.lastActivityAt = Date()
+            persistCurrentState()
+            throw error
         }
-
-        task.lastActivityAt = Date()
-        persistCurrentState()
     }
 }
 
