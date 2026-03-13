@@ -1079,4 +1079,155 @@ final class TaskTests: XCTestCase {
         // On Linux all stay paused since reopenTask throws immediately
         // On macOS with real errors, each should be independent
     }
+
+    // MARK: - Conversation History Loading Tests
+
+    func testRestoreTasksDoesNotRestoreMessages() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let entry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Task with lost messages",
+                statusRawValue: "working",
+                workspacePath: "/Users/test/projects/repo",
+                sessionId: "session-abc",
+                createdAt: Date()
+            )
+            taskManager.restoreTasks(from: [entry])
+            let task = taskManager.tasks[entry.id]!
+            // Messages are NOT persisted in TaskPersistenceEntry, so they're always empty after restore
+            XCTAssertTrue(task.messages.isEmpty, "Messages should be empty after restore since TaskPersistenceEntry does not store them")
+            // But sessionId IS preserved
+            XCTAssertEqual(task.sessionId, "session-abc")
+        }
+    }
+
+    func testSessionStorageLoadSessionHistory() throws {
+        // Create a temp directory with a mock JSONL file
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "test-session-123"
+        let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
+
+        let events = [
+            #"{"type":"user_message","content":"Hello agent","timestamp":1700000000}"#,
+            #"{"type":"agent_message","content":"Hi there! How can I help?","timestamp":1700000001}"#,
+            #"{"type":"turn_end","timestamp":1700000002}"#,
+            #"{"type":"user_message","content":"Fix my code","timestamp":1700000003}"#,
+            #"{"type":"agent_message","content":"Sure, let me look at it.","timestamp":1700000004}"#,
+            #"{"type":"turn_end","timestamp":1700000005}"#
+        ]
+        try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let messages = try storage.loadSessionHistory(sessionId: sessionId)
+
+        XCTAssertEqual(messages.count, 4) // 2 user + 2 assistant
+        XCTAssertEqual(messages[0].role, .user)
+        XCTAssertEqual(messages[0].content, "Hello agent")
+        XCTAssertEqual(messages[1].role, .assistant)
+        XCTAssertEqual(messages[1].content, "Hi there! How can I help?")
+        XCTAssertEqual(messages[2].role, .user)
+        XCTAssertEqual(messages[2].content, "Fix my code")
+        XCTAssertEqual(messages[3].role, .assistant)
+        XCTAssertEqual(messages[3].content, "Sure, let me look at it.")
+    }
+
+    func testSessionStorageLoadNonExistentSession() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        XCTAssertThrowsError(try storage.loadSessionHistory(sessionId: "nonexistent")) { error in
+            XCTAssertTrue(error is SessionStorageError)
+        }
+    }
+
+    func testSessionStorageWithToolCallEvents() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "test-session-toolcalls"
+        let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
+
+        let events = [
+            #"{"type":"user_message","content":"Please edit my file","timestamp":1700000000}"#,
+            #"{"type":"agent_message","content":"I will edit the file now.","timestamp":1700000001}"#,
+            #"{"type":"tool_call","tool_call_id":"tc-001","tool_name":"edit_file","timestamp":1700000002}"#,
+            #"{"type":"tool_result","tool_call_id":"tc-001","tool_output":"File edited","timestamp":1700000003}"#,
+            #"{"type":"agent_message","content":" Done editing.","timestamp":1700000004}"#,
+            #"{"type":"tool_call","tool_call_id":"tc-002","tool_name":"read_file","timestamp":1700000005}"#,
+            #"{"type":"tool_result","tool_call_id":"tc-002","tool_output":"file contents","timestamp":1700000006}"#,
+            #"{"type":"turn_end","timestamp":1700000007}"#,
+            #"{"type":"user_message","content":"Thanks","timestamp":1700000008}"#,
+            #"{"type":"agent_message","content":"You're welcome!","timestamp":1700000009}"#,
+            #"{"type":"turn_end","timestamp":1700000010}"#
+        ]
+        try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let messages = try storage.loadSessionHistory(sessionId: sessionId)
+
+        // Expected: user("Please edit my file"), assistant("I will edit the file now. Done editing." with tool calls), user("Thanks"), assistant("You're welcome!")
+        XCTAssertEqual(messages.count, 4)
+
+        XCTAssertEqual(messages[0].role, .user)
+        XCTAssertEqual(messages[0].content, "Please edit my file")
+
+        XCTAssertEqual(messages[1].role, .assistant)
+        XCTAssertTrue(messages[1].content.contains("I will edit the file now."))
+        XCTAssertTrue(messages[1].content.contains("Done editing."))
+        // Tool call IDs should be tracked
+        XCTAssertNotNil(messages[1].toolCallIds)
+        XCTAssertEqual(messages[1].toolCallIds?.count, 2)
+        XCTAssertTrue(messages[1].toolCallIds?.contains("tc-001") ?? false)
+        XCTAssertTrue(messages[1].toolCallIds?.contains("tc-002") ?? false)
+
+        XCTAssertEqual(messages[2].role, .user)
+        XCTAssertEqual(messages[2].content, "Thanks")
+
+        XCTAssertEqual(messages[3].role, .assistant)
+        XCTAssertEqual(messages[3].content, "You're welcome!")
+        // No tool calls in this assistant message
+        XCTAssertNil(messages[3].toolCallIds)
+    }
+
+    func testSessionStorageWithMalformedEvents() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "test-session-malformed"
+        let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
+
+        let events = [
+            #"{"type":"user_message","content":"First message","timestamp":1700000000}"#,
+            #"{"type":"agent_message","content":"First reply","timestamp":1700000001}"#,
+            #"{"type":"turn_end","timestamp":1700000002}"#,
+            #"this is not valid json at all"#,
+            #"{"broken json"#,
+            #"{"type":"user_message","content":"Second message","timestamp":1700000005}"#,
+            #"{"type":"agent_message","content":"Second reply","timestamp":1700000006}"#,
+            #"{"type":"turn_end","timestamp":1700000007}"#
+        ]
+        try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let messages = try storage.loadSessionHistory(sessionId: sessionId)
+
+        // Malformed lines should be skipped; valid events before and after should parse correctly
+        XCTAssertEqual(messages.count, 4) // 2 user + 2 assistant
+        XCTAssertEqual(messages[0].role, .user)
+        XCTAssertEqual(messages[0].content, "First message")
+        XCTAssertEqual(messages[1].role, .assistant)
+        XCTAssertEqual(messages[1].content, "First reply")
+        XCTAssertEqual(messages[2].role, .user)
+        XCTAssertEqual(messages[2].content, "Second message")
+        XCTAssertEqual(messages[3].role, .assistant)
+        XCTAssertEqual(messages[3].content, "Second reply")
+    }
 }

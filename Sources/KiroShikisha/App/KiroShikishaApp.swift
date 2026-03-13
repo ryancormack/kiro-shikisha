@@ -45,40 +45,33 @@ struct KiroShikishaApp: App {
                 // Restore persisted tasks
                 let entries = appStateManager.persistedTaskEntries
                 taskManager.restoreTasks(from: entries)
-                // Task-centric auto-reconnect for tasks with saved sessions
-                for restoredTask in taskManager.allTasks {
-                    if restoredTask.status == .paused && restoredTask.sessionId != nil {
-                        Task {
-                            print("[TaskReconnect] Starting reconnect for: \(restoredTask.name)")
-                            do {
-                                try await withThrowingTaskGroup(of: Void.self) { group in
-                                    group.addTask {
-                                        try await taskManager.reopenTask(id: restoredTask.id)
+                // Task-centric auto-reconnect for tasks with saved sessions.
+                // Each child task in the group runs on @MainActor but properly yields
+                // at await points (ACPConnection actor calls), allowing concurrent reconnection.
+                Task {
+                    await withTaskGroup(of: Void.self) { group in
+                        for restoredTask in taskManager.allTasks {
+                            if restoredTask.status == .paused && restoredTask.sessionId != nil {
+                                group.addTask {
+                                    print("[TaskReconnect] Starting reconnect for: \(restoredTask.name)")
+                                    do {
+                                        try await withThrowingTaskGroup(of: Void.self) { inner in
+                                            inner.addTask {
+                                                try await taskManager.reopenTask(id: restoredTask.id)
+                                            }
+                                            inner.addTask {
+                                                try await Task.sleep(for: .seconds(30))
+                                                throw CancellationError()
+                                            }
+                                            // Wait for the first to complete; cancel the other
+                                            try await inner.next()
+                                            inner.cancelAll()
+                                        }
+                                        print("[TaskReconnect] Successfully reconnected: \(restoredTask.name)")
+                                    } catch {
+                                        print("[TaskReconnect] Failed for \(restoredTask.name): \(error)")
                                     }
-                                    group.addTask {
-                                        try await Task.sleep(for: .seconds(30))
-                                        throw CancellationError()
-                                    }
-                                    // Wait for the first to complete; cancel the other
-                                    try await group.next()
-                                    group.cancelAll()
                                 }
-                                print("[TaskReconnect] Successfully reconnected: \(restoredTask.name)")
-                            } catch {
-                                print("[TaskReconnect] Failed for \(restoredTask.name): \(error)")
-                            }
-                        }
-                    }
-                }
-                // Auto-reconnect saved sessions (workspace-based, kept for backward compatibility)
-                for workspace in appStateManager.workspaces {
-                    if let sessionId = appStateManager.getLastSessionForWorkspace(workspace.id) {
-                        Task {
-                            do {
-                                let _ = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
-                            } catch {
-                                print("[AutoReconnect] Failed for \(workspace.name): \(error)")
-                                appStateManager.clearSessionForWorkspace(workspace.id)
                             }
                         }
                     }
