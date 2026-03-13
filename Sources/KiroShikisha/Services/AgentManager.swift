@@ -197,8 +197,32 @@ public final class AgentManager {
             if let connection = connections.removeValue(forKey: agent.id) {
                 await connection.disconnect()
             }
+            
+            // If the error is a stale session lock, fall back to a fresh session
+            if isStaleSessionLockError(error) {
+                print("[ACP] Stale session lock detected for session \(sessionId), creating fresh session...")
+                return try await startFreshAgent(workspace: workspace)
+            }
+            
             throw error
         }
+    }
+    
+    /// Start a fresh agent with a new session for the given workspace.
+    /// Used as a fallback when loading an existing session fails due to stale locks.
+    public func startFreshAgent(workspace: Workspace) async throws -> Agent {
+        return try await startAgent(workspace: workspace)
+    }
+    
+    /// Checks if an error is a stale session lock error from kiro-cli
+    private func isStaleSessionLockError(_ error: Error) -> Bool {
+        guard let protocolError = error as? ProtocolError else { return false }
+        if case .jsonRpcError(_, _, let data) = protocolError,
+           let message = data?.stringValue,
+           message.contains("Session is active in another process") {
+            return true
+        }
+        return false
     }
     
     /// Stop and remove an agent
@@ -634,6 +658,10 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
+    public func startFreshAgent(workspace: Workspace) async throws -> Agent {
+        throw AgentManagerError.platformNotSupported
+    }
+    
     public func handleSessionUpdate(_ update: SessionUpdate, for agent: Agent) {
         // No-op on non-macOS
     }
@@ -699,6 +727,10 @@ public final class AgentManager {
         branchName: String,
         worktreePath: URL? = nil
     ) async throws -> Agent {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func startFreshAgent(workspace: Workspace) async throws -> Agent {
         throw AgentManagerError.platformNotSupported
     }
     
