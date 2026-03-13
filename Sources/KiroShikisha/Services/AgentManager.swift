@@ -205,16 +205,16 @@ public final class AgentManager {
                 // Brief delay to allow the lock to release (stale processes killed at app startup)
                 try await Task.sleep(nanoseconds: 500_000_000)
                 
+                // Retry with a fresh connection but the SAME session ID
+                let retryAgent = Agent(
+                    name: workspace.name,
+                    workspace: workspace,
+                    sessionId: sessionIdValue,
+                    status: .connecting
+                )
+                agents[retryAgent.id] = retryAgent
+
                 do {
-                    // Retry with a fresh connection but the SAME session ID
-                    let retryAgent = Agent(
-                        name: workspace.name,
-                        workspace: workspace,
-                        sessionId: sessionIdValue,
-                        status: .connecting
-                    )
-                    agents[retryAgent.id] = retryAgent
-                    
                     let retryConnection = ACPConnection()
                     
                     let retryAgentId = retryAgent.id
