@@ -122,6 +122,17 @@ public final class TaskManager {
     /// - Parameter id: The task ID to pause
     public func pauseTask(id: UUID) {
         guard let task = tasks[id] else { return }
+
+        // Sync agent state before pausing so messages/fileChanges are preserved
+        syncFromAgent(taskId: id)
+
+        // Copy sessionId from agent if the task does not already have one
+        if task.sessionId == nil, let agentId = task.agentId,
+           let agent = agentManager?.getAgent(id: agentId),
+           let sid = agent.sessionId {
+            task.sessionId = sid.value
+        }
+
         task.status = .paused
         task.lastActivityAt = Date()
         persistCurrentState()
@@ -360,6 +371,7 @@ public final class TaskManager {
 
     public func pauseTask(id: UUID) {
         guard let task = tasks[id] else { return }
+        syncFromAgent(taskId: id)
         task.status = .paused
         task.lastActivityAt = Date()
         persistCurrentState()
@@ -489,6 +501,7 @@ public final class TaskManager {
 
     public func pauseTask(id: UUID) {
         guard let task = tasks[id] else { return }
+        syncFromAgent(taskId: id)
         task.status = .paused
         task.lastActivityAt = Date()
         persistCurrentState()
