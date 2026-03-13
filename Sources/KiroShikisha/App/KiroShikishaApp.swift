@@ -49,8 +49,21 @@ struct KiroShikishaApp: App {
                 for restoredTask in taskManager.allTasks {
                     if restoredTask.status == .paused && restoredTask.sessionId != nil {
                         Task {
+                            print("[TaskReconnect] Starting reconnect for: \(restoredTask.name)")
                             do {
-                                try await taskManager.reopenTask(id: restoredTask.id)
+                                try await withThrowingTaskGroup(of: Void.self) { group in
+                                    group.addTask {
+                                        try await taskManager.reopenTask(id: restoredTask.id)
+                                    }
+                                    group.addTask {
+                                        try await Task.sleep(for: .seconds(30))
+                                        throw CancellationError()
+                                    }
+                                    // Wait for the first to complete; cancel the other
+                                    try await group.next()
+                                    group.cancelAll()
+                                }
+                                print("[TaskReconnect] Successfully reconnected: \(restoredTask.name)")
                             } catch {
                                 print("[TaskReconnect] Failed for \(restoredTask.name): \(error)")
                             }

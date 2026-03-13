@@ -175,12 +175,21 @@ public final class TaskManager {
 
             let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
             task.agentId = agent.id
+            task.sessionId = agent.sessionId?.value  // Update sessionId in case a fresh session was created
             task.status = .working
 
-            // Load conversation history from session storage
-            let sessionStorage = SessionStorage()
-            if let messages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !messages.isEmpty {
-                task.messages = messages
+            // Load conversation history from session storage only if we don't already have messages
+            if task.messages.isEmpty {
+                let sessionStorage = SessionStorage()
+                if let storedSessionId = task.sessionId,
+                   let messages = try? sessionStorage.loadSessionHistory(sessionId: storedSessionId), !messages.isEmpty {
+                    task.messages = messages
+                }
+            }
+
+            // If the session was replaced (fresh session), add a system message
+            if agent.sessionId?.value != sessionId {
+                task.messages.append(ChatMessage(role: .system, content: "Session reconnected with a fresh session."))
             }
 
             task.lastActivityAt = Date()
@@ -317,12 +326,21 @@ public final class TaskManager {
 
             let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
             task.agentId = agent.id
+            task.sessionId = agent.sessionId?.value  // Update sessionId in case a fresh session was created
             task.status = .working
 
-            // Load conversation history from session storage
-            let sessionStorage = SessionStorage()
-            if let messages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !messages.isEmpty {
-                task.messages = messages
+            // Load conversation history from session storage only if we don't already have messages
+            if task.messages.isEmpty {
+                let sessionStorage = SessionStorage()
+                if let storedSessionId = task.sessionId,
+                   let messages = try? sessionStorage.loadSessionHistory(sessionId: storedSessionId), !messages.isEmpty {
+                    task.messages = messages
+                }
+            }
+
+            // If the session was replaced (fresh session), add a system message
+            if agent.sessionId?.value != sessionId {
+                task.messages.append(ChatMessage(role: .system, content: "Session reconnected with a fresh session."))
             }
 
             task.lastActivityAt = Date()
