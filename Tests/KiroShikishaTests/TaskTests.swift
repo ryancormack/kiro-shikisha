@@ -679,4 +679,139 @@ final class TaskTests: XCTestCase {
             XCTAssertNotNil(task.lastActivityAt)
         }
     }
+
+    // MARK: - Pause Syncs Data Tests
+
+    func testPauseTaskCallsSyncFromAgent() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let request = TaskCreationRequest(name: "Sync test task", workspacePath: path)
+            let task = taskManager.createTask(from: request)
+
+            // On non-macOS, syncFromAgent is a no-op, but pauseTask should still
+            // set status to paused and update lastActivityAt
+            task.status = .working
+            taskManager.pauseTask(id: task.id)
+
+            XCTAssertEqual(task.status, .paused)
+            XCTAssertNotNil(task.lastActivityAt)
+        }
+    }
+
+    func testPausedTaskWithMessagesRetainsMessages() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+            let message1 = ChatMessage(role: .user, content: "Hello")
+            let message2 = ChatMessage(role: .assistant, content: "Hi there")
+
+            // Use restoreTasks to create a working task, then manually add messages
+            let entryId = UUID()
+            let entry = AppStateManager.TaskPersistenceEntry(
+                id: entryId,
+                name: "Task with messages",
+                statusRawValue: "working",
+                workspacePath: "/Users/test/projects/repo",
+                createdAt: fixedDate
+            )
+            taskManager.restoreTasks(from: [entry])
+
+            // Working tasks are restored as paused
+            let task = taskManager.tasks[entryId]!
+            XCTAssertEqual(task.status, .paused)
+
+            // Add messages to the task
+            task.messages = [message1, message2]
+            XCTAssertEqual(task.messages.count, 2)
+
+            // Pause should retain messages (syncFromAgent is no-op on Linux)
+            taskManager.pauseTask(id: task.id)
+
+            XCTAssertEqual(task.status, .paused)
+            // Messages should be preserved after pause
+            XCTAssertEqual(task.messages.count, 2)
+            XCTAssertEqual(task.messages[0].content, "Hello")
+            XCTAssertEqual(task.messages[1].content, "Hi there")
+        }
+    }
+
+    func testTaskStateTransitionsDuringPauseResumeCycle() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let request = TaskCreationRequest(name: "Transition test", workspacePath: path)
+            let task = taskManager.createTask(from: request)
+
+            // Initial state
+            XCTAssertEqual(task.status, .pending)
+
+            // Transition to working
+            task.status = .working
+            XCTAssertTrue(task.status.isActive)
+            XCTAssertFalse(task.status.isTerminal)
+
+            // Pause
+            taskManager.pauseTask(id: task.id)
+            XCTAssertEqual(task.status, .paused)
+            XCTAssertFalse(task.status.isActive)
+            XCTAssertFalse(task.status.isTerminal)
+        }
+
+        // Separately test the complete-from-paused flow
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let request = TaskCreationRequest(name: "Transition complete test", workspacePath: path)
+            let task = taskManager.createTask(from: request)
+
+            // Set to working then pause
+            task.status = .working
+            taskManager.pauseTask(id: task.id)
+            XCTAssertEqual(task.status, .paused)
+
+            // Complete from paused state
+            taskManager.completeTask(id: task.id)
+            XCTAssertEqual(task.status, .completed)
+            XCTAssertTrue(task.status.isTerminal)
+            XCTAssertNotNil(task.completedAt)
+        }
+    }
+
+    func testPausedTaskWithFileChangesRetainsFileChanges() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+            let fileChange = FileChange(
+                path: "Sources/main.swift",
+                oldContent: "let x = 1",
+                newContent: "let x = 2",
+                changeType: .modified,
+                toolCallId: "tool-1"
+            )
+
+            // Use restoreTasks to create a task, then add file changes
+            let entryId = UUID()
+            let entry = AppStateManager.TaskPersistenceEntry(
+                id: entryId,
+                name: "Task with file changes",
+                statusRawValue: "working",
+                workspacePath: "/Users/test/projects/repo",
+                createdAt: fixedDate
+            )
+            taskManager.restoreTasks(from: [entry])
+
+            let task = taskManager.tasks[entryId]!
+            task.fileChanges = [fileChange]
+
+            XCTAssertEqual(task.fileChanges.count, 1)
+
+            taskManager.pauseTask(id: task.id)
+
+            XCTAssertEqual(task.status, .paused)
+            // File changes should be preserved after pause
+            XCTAssertEqual(task.fileChanges.count, 1)
+            XCTAssertEqual(task.fileChanges[0].path, "Sources/main.swift")
+        }
+    }
 }

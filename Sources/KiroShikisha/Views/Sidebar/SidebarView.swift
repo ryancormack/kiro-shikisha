@@ -106,11 +106,17 @@ public struct SidebarView: View {
                             .contextMenu {
                                 if task.agentId == nil && task.sessionId != nil {
                                     Button("Re-open") {
-                                        Task { try? await taskManager.reopenTask(id: task.id) }
+                                        Task {
+                                            try? await taskManager.reopenTask(id: task.id)
+                                            selectedTaskId = task.id
+                                        }
                                     }
                                 } else {
                                     Button("Resume") {
-                                        Task { try? await taskManager.resumeTask(id: task.id) }
+                                        Task {
+                                            try? await taskManager.resumeTask(id: task.id)
+                                            selectedTaskId = task.id
+                                        }
                                     }
                                 }
                                 Button("Mark Complete") {
@@ -136,7 +142,10 @@ public struct SidebarView: View {
                             .contextMenu {
                                 if task.sessionId != nil {
                                     Button("Re-open") {
-                                        Task { try? await taskManager.reopenTask(id: task.id) }
+                                        Task {
+                                            try? await taskManager.reopenTask(id: task.id)
+                                            selectedTaskId = task.id
+                                        }
                                     }
                                 }
                                 Button("Delete Task", role: .destructive) {
