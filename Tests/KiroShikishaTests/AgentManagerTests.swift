@@ -51,4 +51,22 @@ final class AgentManagerTests: XCTestCase {
         let error = ProtocolError.transportClosed
         XCTAssertFalse(agentManager.isStaleSessionLockError(error))
     }
+    
+    func testRemoveSessionLockFileBeforeRetry() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "stale-session-lock-test"
+        let lockFile = tempDir.appendingPathComponent("\(sessionId).lock")
+        try "12345".write(to: lockFile, atomically: true, encoding: .utf8)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: lockFile.path))
+
+        // This mirrors what loadAgent() now does before retrying session/load
+        let sessionStorage = SessionStorage(sessionsDirectory: tempDir)
+        let removed = sessionStorage.removeSessionLockFile(sessionId: sessionId)
+
+        XCTAssertTrue(removed, "Lock file should be successfully removed")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: lockFile.path), "Lock file should no longer exist on disk")
+    }
 }

@@ -183,6 +183,11 @@ public final class AgentManager {
             )
             connections[agent.id] = connection
             
+            // Proactively remove any stale lock file before attempting to load the session
+            let sessionStorage = SessionStorage()
+            sessionStorage.removeSessionLockFile(sessionId: sessionId)
+            print("[ACP] Proactively cleaned up lock file for session \(sessionId)")
+            
             _ = try await connection.loadSession(
                 sessionId: sessionIdValue,
                 cwd: workspace.path.path
@@ -204,6 +209,11 @@ public final class AgentManager {
                 
                 // Brief delay to allow the lock to release (stale processes killed at app startup)
                 try await Task.sleep(nanoseconds: 500_000_000)
+                
+                // Remove the stale lock file before retrying - this is the critical fix
+                let retrySessionStorage = SessionStorage()
+                retrySessionStorage.removeSessionLockFile(sessionId: sessionId)
+                print("[ACP] Removed stale lock file for session \(sessionId) before retry")
                 
                 // Retry with a fresh connection but the SAME session ID
                 let retryAgent = Agent(
