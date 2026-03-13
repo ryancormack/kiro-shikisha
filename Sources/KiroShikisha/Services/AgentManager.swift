@@ -193,15 +193,65 @@ public final class AgentManager {
             
             return agent
         } catch {
+            // Clean up the failed agent and connection
             agents.removeValue(forKey: agent.id)
             if let connection = connections.removeValue(forKey: agent.id) {
                 await connection.disconnect()
             }
             
-            // If the error is a stale session lock, fall back to a fresh session
+            // If the error is a stale session lock, try to clear the lock and retry
             if isStaleSessionLockError(error) {
-                print("[ACP] Stale session lock detected for session \(sessionId), creating fresh session...")
-                return try await startFreshAgent(workspace: workspace)
+                print("[ACP] Stale session lock detected for session \(sessionId), attempting to clear lock and retry...")
+                
+                // Attempt to remove the stale lock file
+                let sessionStorage = SessionStorage()
+                sessionStorage.removeSessionLockFile(sessionId: sessionId)
+                
+                // Retry with a fresh agent and connection using the SAME session ID
+                let retryAgent = Agent(
+                    name: workspace.name,
+                    workspace: workspace,
+                    sessionId: sessionIdValue,
+                    status: .connecting
+                )
+                agents[retryAgent.id] = retryAgent
+                
+                do {
+                    let retryConnection = ACPConnection()
+                    
+                    let retryAgentId = retryAgent.id
+                    let retrySessionUpdateHandler: @Sendable (SessionUpdate) async -> Void = { [weak self] update in
+                        await MainActor.run {
+                            guard let self = self, let agent = self.agents[retryAgentId] else { return }
+                            self.handleSessionUpdate(update, for: agent)
+                        }
+                    }
+                    
+                    try await retryConnection.connect(
+                        kirocliPath: kirocliPath,
+                        onSessionUpdate: retrySessionUpdateHandler
+                    )
+                    connections[retryAgent.id] = retryConnection
+                    
+                    _ = try await retryConnection.loadSession(
+                        sessionId: sessionIdValue,
+                        cwd: workspace.path.path
+                    )
+                    
+                    print("[ACP] Successfully loaded session \(sessionId) after clearing stale lock")
+                    retryAgent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
+                    retryAgent.status = .idle
+                    
+                    return retryAgent
+                } catch {
+                    // Retry also failed - clean up and fall back to fresh session
+                    print("[ACP] Retry session/load also failed for session \(sessionId): \(error). Falling back to fresh session...")
+                    agents.removeValue(forKey: retryAgent.id)
+                    if let conn = connections.removeValue(forKey: retryAgent.id) {
+                        await conn.disconnect()
+                    }
+                    return try await startFreshAgent(workspace: workspace)
+                }
             }
             
             throw error

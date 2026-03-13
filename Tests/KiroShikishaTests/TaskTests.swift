@@ -1337,4 +1337,61 @@ final class TaskTests: XCTestCase {
                 "Task \(entry.name) should remain paused after failed reconnect on Linux")
         }
     }
+
+    // MARK: - Session Lock File Tests
+
+    func testSessionStorageRemoveLockFile() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "test-session-lock"
+        let lockFile = tempDir.appendingPathComponent("\(sessionId).lock")
+
+        // Create a fake lock file
+        try "locked".write(to: lockFile, atomically: true, encoding: .utf8)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: lockFile.path))
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let result = storage.removeSessionLockFile(sessionId: sessionId)
+
+        XCTAssertTrue(result, "Should return true when lock file was removed")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: lockFile.path), "Lock file should be deleted")
+    }
+
+    func testSessionStorageRemoveLockFileWhenNoLockExists() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let result = storage.removeSessionLockFile(sessionId: "nonexistent-session")
+
+        XCTAssertFalse(result, "Should return false when no lock file exists")
+    }
+
+    func testSessionStorageRemoveLockFileDoesNotAffectSessionFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "test-session-preserve"
+
+        // Create lock file, json file, and jsonl file
+        let lockFile = tempDir.appendingPathComponent("\(sessionId).lock")
+        let jsonFile = tempDir.appendingPathComponent("\(sessionId).json")
+        let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
+
+        try "locked".write(to: lockFile, atomically: true, encoding: .utf8)
+        try "{\"session_id\":\"\(sessionId)\",\"cwd\":\"/tmp\"}".write(to: jsonFile, atomically: true, encoding: .utf8)
+        try "{\"type\":\"user_message\",\"content\":\"Hello\"}".write(to: jsonlFile, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let result = storage.removeSessionLockFile(sessionId: sessionId)
+
+        XCTAssertTrue(result, "Should return true when lock file was removed")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: lockFile.path), "Lock file should be deleted")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonFile.path), "Session metadata file should be preserved")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonlFile.path), "Session events file should be preserved")
+    }
 }

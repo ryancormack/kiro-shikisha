@@ -190,6 +190,28 @@ public final class SessionStorage: Sendable {
         return loadSessionMetadata(from: metadataFileURL)
     }
     
+    /// Remove the lock file for a session if it exists
+    /// - Parameter sessionId: The session ID whose lock file should be removed
+    /// - Returns: true if a lock file was found and removed, false otherwise
+    @discardableResult
+    public func removeSessionLockFile(sessionId: String) -> Bool {
+        let lockFileURL = sessionsDirectory
+            .appendingPathComponent("\(sessionId).lock")
+        
+        guard fileManager.fileExists(atPath: lockFileURL.path) else {
+            return false
+        }
+        
+        do {
+            try fileManager.removeItem(at: lockFileURL)
+            print("[SessionStorage] Removed stale lock file for session: \(sessionId)")
+            return true
+        } catch {
+            print("[SessionStorage] Failed to remove lock file for session \(sessionId): \(error)")
+            return false
+        }
+    }
+    
     /// Load and reconstruct the conversation history for a session
     /// - Parameter sessionId: The session ID to load history for
     /// - Returns: Array of ChatMessage representing the conversation
