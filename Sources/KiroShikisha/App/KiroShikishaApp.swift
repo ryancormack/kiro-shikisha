@@ -46,31 +46,31 @@ struct KiroShikishaApp: App {
                 let entries = appStateManager.persistedTaskEntries
                 taskManager.restoreTasks(from: entries)
                 // Task-centric auto-reconnect for tasks with saved sessions.
-                // Each child task in the group runs on @MainActor but properly yields
-                // at await points (ACPConnection actor calls), allowing concurrent reconnection.
+                // Collect task info while on @MainActor, then use it in the task group.
+                let tasksToReconnect: [(name: String, id: UUID)] = taskManager.allTasks
+                    .filter { $0.status == .paused && $0.sessionId != nil }
+                    .map { (name: $0.name, id: $0.id) }
+
                 Task {
                     await withTaskGroup(of: Void.self) { group in
-                        for restoredTask in taskManager.allTasks {
-                            if restoredTask.status == .paused && restoredTask.sessionId != nil {
-                                group.addTask {
-                                    print("[TaskReconnect] Starting reconnect for: \(restoredTask.name)")
-                                    do {
-                                        try await withThrowingTaskGroup(of: Void.self) { inner in
-                                            inner.addTask {
-                                                try await taskManager.reopenTask(id: restoredTask.id)
-                                            }
-                                            inner.addTask {
-                                                try await Task.sleep(for: .seconds(30))
-                                                throw CancellationError()
-                                            }
-                                            // Wait for the first to complete; cancel the other
-                                            try await inner.next()
-                                            inner.cancelAll()
+                        for taskInfo in tasksToReconnect {
+                            group.addTask {
+                                print("[TaskReconnect] Starting reconnect for: \(taskInfo.name)")
+                                do {
+                                    try await withThrowingTaskGroup(of: Void.self) { inner in
+                                        inner.addTask {
+                                            try await taskManager.reopenTask(id: taskInfo.id)
                                         }
-                                        print("[TaskReconnect] Successfully reconnected: \(restoredTask.name)")
-                                    } catch {
-                                        print("[TaskReconnect] Failed for \(restoredTask.name): \(error)")
+                                        inner.addTask {
+                                            try await Task.sleep(for: .seconds(30))
+                                            throw CancellationError()
+                                        }
+                                        try await inner.next()
+                                        inner.cancelAll()
                                     }
+                                    print("[TaskReconnect] Successfully reconnected: \(taskInfo.name)")
+                                } catch {
+                                    print("[TaskReconnect] Failed for \(taskInfo.name): \(error)")
                                 }
                             }
                         }
