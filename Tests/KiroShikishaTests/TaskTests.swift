@@ -936,4 +936,213 @@ final class TaskTests: XCTestCase {
         // reopenTask should throw noSessionId
         // On Linux it throws platformNotSupported, which is also acceptable
     }
+
+    // MARK: - Fresh Session Fallback Tests
+
+    @MainActor
+    func testResumeTaskPreservesExistingMessages() async throws {
+        let taskManager = TaskManager()
+        let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+        let request = TaskCreationRequest(name: "Resume preserve test", workspacePath: path)
+        let task = taskManager.createTask(from: request)
+        
+        // Set up task with existing messages
+        let msg1 = ChatMessage(role: .user, content: "Hello agent")
+        let msg2 = ChatMessage(role: .assistant, content: "Hi! How can I help?")
+        task.messages = [msg1, msg2]
+        task.status = .paused
+        task.sessionId = "old-session-123"
+        
+        // On Linux, resumeTask throws platformNotSupported
+        // But verify that messages are NOT cleared before the throw
+        let messagesBefore = task.messages
+        
+        do {
+            try await taskManager.resumeTask(id: task.id)
+            // Won't reach here on Linux
+        } catch {
+            // Expected on Linux
+        }
+        
+        // Messages should still be intact (not cleared)
+        XCTAssertEqual(task.messages.count, messagesBefore.count)
+        XCTAssertEqual(task.messages[0].content, "Hello agent")
+        XCTAssertEqual(task.messages[1].content, "Hi! How can I help?")
+    }
+
+    @MainActor
+    func testReopenTaskPreservesExistingMessages() async throws {
+        let taskManager = TaskManager()
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+        
+        let entry = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Reopen preserve test",
+            statusRawValue: "completed",
+            workspacePath: "/Users/test/projects/repo",
+            sessionId: "old-session-456",
+            createdAt: fixedDate
+        )
+        taskManager.restoreTasks(from: [entry])
+        
+        let task = taskManager.tasks[entry.id]!
+        
+        // Set up task with existing messages and file changes
+        let msg1 = ChatMessage(role: .user, content: "Implement feature X")
+        let msg2 = ChatMessage(role: .assistant, content: "I'll start working on that.")
+        task.messages = [msg1, msg2]
+        
+        let fileChange = FileChange(
+            path: "Sources/main.swift",
+            oldContent: "let x = 1",
+            newContent: "let x = 2",
+            changeType: .modified,
+            toolCallId: "tool-1"
+        )
+        task.fileChanges = [fileChange]
+        
+        do {
+            try await taskManager.reopenTask(id: task.id)
+            // Won't reach here on Linux
+        } catch {
+            // Expected on Linux
+        }
+        
+        // Messages and file changes should still be intact
+        XCTAssertEqual(task.messages.count, 2)
+        XCTAssertEqual(task.messages[0].content, "Implement feature X")
+        XCTAssertEqual(task.messages[1].content, "I'll start working on that.")
+        XCTAssertEqual(task.fileChanges.count, 1)
+        XCTAssertEqual(task.fileChanges[0].path, "Sources/main.swift")
+    }
+
+    @MainActor
+    func testConcurrentResumeDoesNotInterfere() async throws {
+        // Test that multiple tasks can be in resume state independently
+        let taskManager = TaskManager()
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+        
+        let entry1 = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Task A",
+            statusRawValue: "paused",
+            workspacePath: "/Users/test/projects/repo1",
+            sessionId: "session-a",
+            createdAt: fixedDate
+        )
+        let entry2 = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Task B",
+            statusRawValue: "paused",
+            workspacePath: "/Users/test/projects/repo2",
+            sessionId: "session-b",
+            createdAt: fixedDate
+        )
+        let entry3 = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Task C",
+            statusRawValue: "paused",
+            workspacePath: "/Users/test/projects/repo3",
+            sessionId: "session-c",
+            createdAt: fixedDate
+        )
+        
+        taskManager.restoreTasks(from: [entry1, entry2, entry3])
+        
+        // Verify all three tasks are independent
+        XCTAssertEqual(taskManager.tasks.count, 3)
+        
+        let taskA = taskManager.tasks[entry1.id]!
+        let taskB = taskManager.tasks[entry2.id]!
+        let taskC = taskManager.tasks[entry3.id]!
+        
+        XCTAssertEqual(taskA.status, .paused)
+        XCTAssertEqual(taskB.status, .paused)
+        XCTAssertEqual(taskC.status, .paused)
+        
+        // Set messages on each task
+        taskA.messages = [ChatMessage(role: .user, content: "Task A message")]
+        taskB.messages = [ChatMessage(role: .user, content: "Task B message")]
+        taskC.messages = [ChatMessage(role: .user, content: "Task C message")]
+        
+        // Attempt to resume each (will fail on Linux) but should not affect others
+        do { try await taskManager.reopenTask(id: entry1.id) } catch {}
+        do { try await taskManager.reopenTask(id: entry2.id) } catch {}
+        do { try await taskManager.reopenTask(id: entry3.id) } catch {}
+        
+        // Each task should retain its own messages independently
+        XCTAssertEqual(taskA.messages.first?.content, "Task A message")
+        XCTAssertEqual(taskB.messages.first?.content, "Task B message")
+        XCTAssertEqual(taskC.messages.first?.content, "Task C message")
+        
+        // Failing one task should not affect others' status
+        // On Linux all stay paused since reopenTask throws immediately
+        // On macOS with real errors, each should be independent
+    }
+
+    // MARK: - Conversation History Loading Tests
+
+    func testRestoreTasksDoesNotRestoreMessages() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let entry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Task with lost messages",
+                statusRawValue: "working",
+                workspacePath: "/Users/test/projects/repo",
+                sessionId: "session-abc",
+                createdAt: Date()
+            )
+            taskManager.restoreTasks(from: [entry])
+            let task = taskManager.tasks[entry.id]!
+            // Messages are NOT persisted in TaskPersistenceEntry, so they're always empty after restore
+            XCTAssertTrue(task.messages.isEmpty, "Messages should be empty after restore since TaskPersistenceEntry does not store them")
+            // But sessionId IS preserved
+            XCTAssertEqual(task.sessionId, "session-abc")
+        }
+    }
+
+    func testSessionStorageLoadSessionHistory() throws {
+        // Create a temp directory with a mock JSONL file
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "test-session-123"
+        let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
+
+        let events = [
+            #"{"type":"user_message","content":"Hello agent","timestamp":1700000000}"#,
+            #"{"type":"agent_message","content":"Hi there! How can I help?","timestamp":1700000001}"#,
+            #"{"type":"turn_end","timestamp":1700000002}"#,
+            #"{"type":"user_message","content":"Fix my code","timestamp":1700000003}"#,
+            #"{"type":"agent_message","content":"Sure, let me look at it.","timestamp":1700000004}"#,
+            #"{"type":"turn_end","timestamp":1700000005}"#
+        ]
+        try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let messages = try storage.loadSessionHistory(sessionId: sessionId)
+
+        XCTAssertEqual(messages.count, 4) // 2 user + 2 assistant
+        XCTAssertEqual(messages[0].role, .user)
+        XCTAssertEqual(messages[0].content, "Hello agent")
+        XCTAssertEqual(messages[1].role, .assistant)
+        XCTAssertEqual(messages[1].content, "Hi there! How can I help?")
+        XCTAssertEqual(messages[2].role, .user)
+        XCTAssertEqual(messages[2].content, "Fix my code")
+        XCTAssertEqual(messages[3].role, .assistant)
+        XCTAssertEqual(messages[3].content, "Sure, let me look at it.")
+    }
+
+    func testSessionStorageLoadNonExistentSession() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        XCTAssertThrowsError(try storage.loadSessionHistory(sessionId: "nonexistent")) { error in
+            XCTAssertTrue(error is SessionStorageError)
+        }
+    }
 }

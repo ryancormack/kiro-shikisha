@@ -46,13 +46,30 @@ struct KiroShikishaApp: App {
                 let entries = appStateManager.persistedTaskEntries
                 taskManager.restoreTasks(from: entries)
                 // Task-centric auto-reconnect for tasks with saved sessions
-                for restoredTask in taskManager.allTasks {
-                    if restoredTask.status == .paused && restoredTask.sessionId != nil {
-                        Task {
-                            do {
-                                try await taskManager.reopenTask(id: restoredTask.id)
-                            } catch {
-                                print("[TaskReconnect] Failed for \(restoredTask.name): \(error)")
+                Task {
+                    await withTaskGroup(of: Void.self) { group in
+                        for restoredTask in taskManager.allTasks {
+                            if restoredTask.status == .paused && restoredTask.sessionId != nil {
+                                group.addTask {
+                                    print("[TaskReconnect] Starting reconnect for: \(restoredTask.name)")
+                                    do {
+                                        try await withThrowingTaskGroup(of: Void.self) { inner in
+                                            inner.addTask {
+                                                try await taskManager.reopenTask(id: restoredTask.id)
+                                            }
+                                            inner.addTask {
+                                                try await Task.sleep(for: .seconds(30))
+                                                throw CancellationError()
+                                            }
+                                            // Wait for the first to complete; cancel the other
+                                            try await inner.next()
+                                            inner.cancelAll()
+                                        }
+                                        print("[TaskReconnect] Successfully reconnected: \(restoredTask.name)")
+                                    } catch {
+                                        print("[TaskReconnect] Failed for \(restoredTask.name): \(error)")
+                                    }
+                                }
                             }
                         }
                     }

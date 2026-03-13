@@ -175,12 +175,20 @@ public final class TaskManager {
 
             let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
             task.agentId = agent.id
+            task.sessionId = agent.sessionId?.value  // Update sessionId in case a fresh session was created
             task.status = .working
 
-            // Load conversation history from session storage
+            // Always load conversation history from the ORIGINAL session ID (before loadAgent may have changed it)
             let sessionStorage = SessionStorage()
-            if let messages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !messages.isEmpty {
-                task.messages = messages
+            if let loadedMessages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !loadedMessages.isEmpty {
+                task.messages = loadedMessages
+                // Propagate loaded history to agent.messages so ChatPanel displays them
+                agent.messages = loadedMessages + agent.messages
+            }
+
+            // If the session was replaced (fresh session), add a system message
+            if agent.sessionId?.value != sessionId {
+                task.messages.append(ChatMessage(role: .system, content: "Session reconnected with a fresh session."))
             }
 
             task.lastActivityAt = Date()
@@ -317,12 +325,20 @@ public final class TaskManager {
 
             let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: sessionId)
             task.agentId = agent.id
+            task.sessionId = agent.sessionId?.value  // Update sessionId in case a fresh session was created
             task.status = .working
 
-            // Load conversation history from session storage
+            // Always load conversation history from the ORIGINAL session ID (before loadAgent may have changed it)
             let sessionStorage = SessionStorage()
-            if let messages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !messages.isEmpty {
-                task.messages = messages
+            if let loadedMessages = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !loadedMessages.isEmpty {
+                task.messages = loadedMessages
+                // Propagate loaded history to agent.messages so ChatPanel displays them
+                agent.messages = loadedMessages + agent.messages
+            }
+
+            // If the session was replaced (fresh session), add a system message
+            if agent.sessionId?.value != sessionId {
+                task.messages.append(ChatMessage(role: .system, content: "Session reconnected with a fresh session."))
             }
 
             task.lastActivityAt = Date()
