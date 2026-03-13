@@ -381,6 +381,7 @@ struct TaskCompletedView: View {
         }
     }
 
+    @ViewBuilder
     private var completionBanner: some View {
         HStack(spacing: 12) {
             Image(systemName: task.status.iconName)
