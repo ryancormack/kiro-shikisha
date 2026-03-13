@@ -193,30 +193,28 @@ public final class AgentManager {
             
             return agent
         } catch {
-            // Clean up the failed agent and connection
             agents.removeValue(forKey: agent.id)
             if let connection = connections.removeValue(forKey: agent.id) {
                 await connection.disconnect()
             }
             
-            // If the error is a stale session lock, try to clear the lock and retry
+            // If the error is a stale session lock, retry session/load before falling back
             if isStaleSessionLockError(error) {
-                print("[ACP] Stale session lock detected for session \(sessionId), attempting to clear lock and retry...")
+                print("[ACP] Stale session lock detected for session \(sessionId), retrying session/load...")
                 
-                // Attempt to remove the stale lock file
-                let sessionStorage = SessionStorage()
-                sessionStorage.removeSessionLockFile(sessionId: sessionId)
-                
-                // Retry with a fresh agent and connection using the SAME session ID
-                let retryAgent = Agent(
-                    name: workspace.name,
-                    workspace: workspace,
-                    sessionId: sessionIdValue,
-                    status: .connecting
-                )
-                agents[retryAgent.id] = retryAgent
+                // Brief delay to allow the lock to release (stale processes killed at app startup)
+                try await Task.sleep(nanoseconds: 500_000_000)
                 
                 do {
+                    // Retry with a fresh connection but the SAME session ID
+                    let retryAgent = Agent(
+                        name: workspace.name,
+                        workspace: workspace,
+                        sessionId: sessionIdValue,
+                        status: .connecting
+                    )
+                    agents[retryAgent.id] = retryAgent
+                    
                     let retryConnection = ACPConnection()
                     
                     let retryAgentId = retryAgent.id
@@ -238,18 +236,18 @@ public final class AgentManager {
                         cwd: workspace.path.path
                     )
                     
-                    print("[ACP] Successfully loaded session \(sessionId) after clearing stale lock")
+                    print("[ACP] Session loaded successfully on retry: \(sessionId)")
                     retryAgent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
                     retryAgent.status = .idle
                     
                     return retryAgent
                 } catch {
-                    // Retry also failed - clean up and fall back to fresh session
-                    print("[ACP] Retry session/load also failed for session \(sessionId): \(error). Falling back to fresh session...")
                     agents.removeValue(forKey: retryAgent.id)
-                    if let conn = connections.removeValue(forKey: retryAgent.id) {
-                        await conn.disconnect()
+                    if let retryConn = connections.removeValue(forKey: retryAgent.id) {
+                        await retryConn.disconnect()
                     }
+                    
+                    print("[ACP] Retry failed for session \(sessionId), falling back to fresh session...")
                     return try await startFreshAgent(workspace: workspace)
                 }
             }
@@ -265,7 +263,7 @@ public final class AgentManager {
     }
     
     /// Checks if an error is a stale session lock error from kiro-cli
-    private func isStaleSessionLockError(_ error: Error) -> Bool {
+    func isStaleSessionLockError(_ error: Error) -> Bool {
         guard let protocolError = error as? ProtocolError else { return false }
         if case .jsonRpcError(_, _, let data) = protocolError,
            let message = data?.stringValue,
@@ -715,6 +713,16 @@ public final class AgentManager {
     public func handleSessionUpdate(_ update: SessionUpdate, for agent: Agent) {
         // No-op on non-macOS
     }
+    
+    func isStaleSessionLockError(_ error: Error) -> Bool {
+        guard let protocolError = error as? ProtocolError else { return false }
+        if case .jsonRpcError(_, _, let data) = protocolError,
+           let message = data?.stringValue,
+           message.contains("Session is active in another process") {
+            return true
+        }
+        return false
+    }
 }
 #else
 // Fallback for platforms without Observation framework
@@ -786,6 +794,16 @@ public final class AgentManager {
     
     public func handleSessionUpdate(_ update: SessionUpdate, for agent: Agent) {
         // No-op on non-macOS
+    }
+    
+    func isStaleSessionLockError(_ error: Error) -> Bool {
+        guard let protocolError = error as? ProtocolError else { return false }
+        if case .jsonRpcError(_, _, let data) = protocolError,
+           let message = data?.stringValue,
+           message.contains("Session is active in another process") {
+            return true
+        }
+        return false
     }
 }
 #endif
