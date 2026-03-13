@@ -7,6 +7,7 @@ public struct TaskAgentView: View {
     @Environment(AgentManager.self) var agentManager
     @Environment(TaskManager.self) var taskManager
     @State private var actionError: String?
+    @State private var showStartingCancel: Bool = false
 
     public init(task: AgentTask) {
         self.task = task
@@ -69,8 +70,24 @@ public struct TaskAgentView: View {
                     Text("Connecting to agent for \(task.workspacePath.lastPathComponent)")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    if showStartingCancel {
+                        Button("Cancel") {
+                            taskManager.pauseTask(id: task.id)
+                            showStartingCancel = false
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task(id: task.status) {
+                    showStartingCancel = false
+                    guard task.status == .starting else { return }
+                    try? await Task.sleep(for: .seconds(10))
+                    if task.status == .starting {
+                        showStartingCancel = true
+                    }
+                }
             } else if task.status == .paused {
                 // Task is paused - show stored messages and file changes with resume action
                 TaskPausedView(task: task)
@@ -87,8 +104,24 @@ public struct TaskAgentView: View {
                     Text("Resuming session for \(task.workspacePath.lastPathComponent)")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    if showStartingCancel {
+                        Button("Cancel") {
+                            taskManager.pauseTask(id: task.id)
+                            showStartingCancel = false
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task(id: task.status) {
+                    showStartingCancel = false
+                    guard task.status == .working else { return }
+                    try? await Task.sleep(for: .seconds(10))
+                    if task.status == .working && agent == nil {
+                        showStartingCancel = true
+                    }
+                }
             } else {
                 // Fallback
                 VStack(spacing: 16) {
