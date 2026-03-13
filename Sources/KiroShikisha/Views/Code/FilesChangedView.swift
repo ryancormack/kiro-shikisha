@@ -116,12 +116,14 @@ struct FilesChangedView: View {
                 }
             }
         }
-        .onAppear {
-            Task { await loadDiff() }
+        .task(id: workspacePath.path) {
+            await loadDiff()
         }
     }
 
     private func loadDiff() async {
+        fileDiffs = []
+        selectedFileDiff = nil
         isLoading = true
         errorMessage = nil
 

@@ -1230,4 +1230,111 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(messages[3].role, .assistant)
         XCTAssertEqual(messages[3].content, "Second reply")
     }
+
+    // MARK: - Session ID Fallback Loading Tests
+
+    @MainActor
+    func testTaskSessionIdUpdateOnReconnect() async throws {
+        // Verify that a task's sessionId can be updated to a new value
+        // simulating what happens when loadAgent creates a fresh session
+        let taskManager = TaskManager()
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+        let entry = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Reconnect session test",
+            statusRawValue: "paused",
+            workspacePath: "/Users/test/projects/repo",
+            sessionId: "old-session-id",
+            createdAt: fixedDate
+        )
+        taskManager.restoreTasks(from: [entry])
+
+        let task = taskManager.tasks[entry.id]!
+        XCTAssertEqual(task.sessionId, "old-session-id")
+
+        // Simulate what TaskManager does after loadAgent returns a fresh session:
+        // update the task's sessionId
+        let newSessionId = "new-fresh-session-id"
+        task.sessionId = newSessionId
+
+        XCTAssertEqual(task.sessionId, newSessionId)
+        XCTAssertNotEqual(task.sessionId, "old-session-id")
+    }
+
+    func testSessionStorageFallbackLoading() throws {
+        // Test that we can load history from an original session ID when
+        // the current session ID has no history (simulating the fresh session fallback)
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let originalSessionId = "original-session-abc"
+        let freshSessionId = "fresh-session-xyz"
+
+        // Create history file only for the original session
+        let jsonlFile = tempDir.appendingPathComponent("\(originalSessionId).jsonl")
+        let events = [
+            #"{"type":"user_message","content":"Hello from original session","timestamp":1700000000}"#,
+            #"{"type":"agent_message","content":"Original reply","timestamp":1700000001}"#,
+            #"{"type":"turn_end","timestamp":1700000002}"#
+        ]
+        try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+
+        // Loading from the fresh session should fail (no file)
+        let freshResult = try? storage.loadSessionHistory(sessionId: freshSessionId)
+        XCTAssertNil(freshResult, "Fresh session should have no history file")
+
+        // Loading from the original session should succeed
+        let originalResult = try storage.loadSessionHistory(sessionId: originalSessionId)
+        XCTAssertEqual(originalResult.count, 2)
+        XCTAssertEqual(originalResult[0].content, "Hello from original session")
+        XCTAssertEqual(originalResult[1].content, "Original reply")
+
+        // This mirrors the fallback pattern in TaskManager:
+        // 1. Try loading from currentSessionId (fresh) - empty/fails
+        // 2. Fall back to originalSessionId - succeeds
+    }
+
+    @MainActor
+    func testSequentialReconnectIndependence() async throws {
+        // Test that sequential reconnect attempts for multiple tasks
+        // don't interfere with each other
+        let taskManager = TaskManager()
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+        var entries: [AppStateManager.TaskPersistenceEntry] = []
+        for i in 1...5 {
+            entries.append(AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Task \(i)",
+                statusRawValue: "paused",
+                workspacePath: "/Users/test/projects/repo\(i)",
+                sessionId: "session-\(i)",
+                createdAt: fixedDate
+            ))
+        }
+        taskManager.restoreTasks(from: entries)
+
+        // Attempt sequential reconnect (mimicking the fixed auto-reconnect)
+        for entry in entries {
+            do {
+                try await taskManager.reopenTask(id: entry.id)
+            } catch {
+                // Expected on Linux - platformNotSupported
+            }
+        }
+
+        // All tasks should remain paused (on Linux, reopenTask throws immediately)
+        // Crucially, each task retains its own session ID
+        for entry in entries {
+            let task = taskManager.tasks[entry.id]!
+            XCTAssertEqual(task.sessionId, entry.sessionId,
+                "Task \(entry.name) should retain its session ID after failed reconnect")
+            XCTAssertEqual(task.status, .paused,
+                "Task \(entry.name) should remain paused after failed reconnect on Linux")
+        }
+    }
 }

@@ -56,6 +56,7 @@ public struct TaskAgentView: View {
 
                     CodePanel(agent: agent, workspacePath: task.workspacePath)
                         .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
+                        .id(task.id)
                 }
             } else if task.status == .pending {
                 // Task created but not started
@@ -377,6 +378,7 @@ struct TaskCompletedView: View {
 
                     CodePanel(agent: agent, workspacePath: task.workspacePath)
                         .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
+                        .id(task.id)
                 }
             } else if !task.messages.isEmpty || !task.fileChanges.isEmpty {
                 // Show stored messages and file changes
@@ -632,6 +634,7 @@ struct TaskPausedView: View {
 
                     CodePanel(agent: agent, workspacePath: task.workspacePath)
                         .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
+                        .id(task.id)
                 }
             } else if !task.messages.isEmpty || !task.fileChanges.isEmpty {
                 // Show stored content with chat input

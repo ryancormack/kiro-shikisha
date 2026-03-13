@@ -180,15 +180,21 @@ public final class TaskManager {
             // Load conversation history BEFORE setting task.status = .working
             // so that ChatPanel has messages available when the view transitions
             let sessionStorage = SessionStorage()
-            do {
-                let loadedMessages = try sessionStorage.loadSessionHistory(sessionId: sessionId)
-                if !loadedMessages.isEmpty {
-                    task.messages = loadedMessages
-                    // Propagate loaded history to agent.messages so ChatPanel displays them
-                    agent.messages = loadedMessages + agent.messages
+            let currentSessionId = agent.sessionId?.value ?? sessionId
+            var loadedMessages: [ChatMessage] = []
+            // Try loading from the current (possibly new) session ID first
+            if let msgs = try? sessionStorage.loadSessionHistory(sessionId: currentSessionId), !msgs.isEmpty {
+                loadedMessages = msgs
+            } else if currentSessionId != sessionId {
+                // If fresh session was created, try loading from original session ID
+                if let msgs = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !msgs.isEmpty {
+                    loadedMessages = msgs
                 }
-            } catch {
-                print("[TaskManager] Failed to load session history for \(sessionId): \(error)")
+            }
+            if !loadedMessages.isEmpty {
+                task.messages = loadedMessages
+                // Propagate loaded history to agent.messages so ChatPanel displays them
+                agent.messages = loadedMessages + agent.messages
             }
 
             // If the session was replaced (fresh session), add a system message
@@ -336,15 +342,21 @@ public final class TaskManager {
             // Load conversation history BEFORE setting task.status = .working
             // so that ChatPanel has messages available when the view transitions
             let sessionStorage = SessionStorage()
-            do {
-                let loadedMessages = try sessionStorage.loadSessionHistory(sessionId: sessionId)
-                if !loadedMessages.isEmpty {
-                    task.messages = loadedMessages
-                    // Propagate loaded history to agent.messages so ChatPanel displays them
-                    agent.messages = loadedMessages + agent.messages
+            let currentSessionId = agent.sessionId?.value ?? sessionId
+            var loadedMessages: [ChatMessage] = []
+            // Try loading from the current (possibly new) session ID first
+            if let msgs = try? sessionStorage.loadSessionHistory(sessionId: currentSessionId), !msgs.isEmpty {
+                loadedMessages = msgs
+            } else if currentSessionId != sessionId {
+                // If fresh session was created, try loading from original session ID
+                if let msgs = try? sessionStorage.loadSessionHistory(sessionId: sessionId), !msgs.isEmpty {
+                    loadedMessages = msgs
                 }
-            } catch {
-                print("[TaskManager] Failed to load session history for \(sessionId): \(error)")
+            }
+            if !loadedMessages.isEmpty {
+                task.messages = loadedMessages
+                // Propagate loaded history to agent.messages so ChatPanel displays them
+                agent.messages = loadedMessages + agent.messages
             }
 
             // If the session was replaced (fresh session), add a system message
