@@ -152,13 +152,20 @@ public final class SessionStorage: Sendable {
         let eventsFileURL = sessionsDirectory
             .appendingPathComponent("\(sessionId).jsonl")
         
+        print("[SessionStorage] Loading events from: \(eventsFileURL.path)")
+        
         guard fileManager.fileExists(atPath: eventsFileURL.path) else {
+            print("[SessionStorage] Events file does not exist: \(eventsFileURL.path)")
             return nil
         }
+        
+        print("[SessionStorage] Events file exists: \(eventsFileURL.path)")
         
         do {
             let content = try String(contentsOf: eventsFileURL, encoding: .utf8)
             let lines = content.components(separatedBy: .newlines)
+            let nonEmptyLines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            print("[SessionStorage] Found \(nonEmptyLines.count) non-empty lines in JSONL file")
             
             var events: [Data] = []
             for line in lines {
@@ -170,8 +177,10 @@ public final class SessionStorage: Sendable {
                 }
             }
             
+            print("[SessionStorage] Created \(events.count) Data objects from JSONL lines")
             return events
         } catch {
+            print("[SessionStorage] Failed to read events file: \(error)")
             return nil
         }
     }
@@ -221,16 +230,32 @@ public final class SessionStorage: Sendable {
             throw SessionStorageError.sessionNotFound(sessionId)
         }
         
+        print("[SessionStorage] loadSessionHistory: received \(eventsData.count) events for session \(sessionId)")
+        
         let decoder = JSONDecoder()
         var messages: [ChatMessage] = []
         var currentAssistantContent = ""
         var currentAssistantTimestamp: Date?
         var currentToolCallIds: [String] = []
+        var decodedCount = 0
+        var skippedCount = 0
+        var eventTypeCounts: [String: Int] = [:]
         
         for eventData in eventsData {
-            guard let event = try? decoder.decode(SessionEvent.self, from: eventData) else {
-                continue // Skip malformed events
+            let event: SessionEvent
+            do {
+                event = try decoder.decode(SessionEvent.self, from: eventData)
+            } catch {
+                skippedCount += 1
+                if skippedCount <= 3 {
+                    let rawSample = String(data: eventData, encoding: .utf8)?.prefix(200) ?? "(not UTF-8)"
+                    print("[SessionStorage] Failed to decode event: \(error). Raw JSON sample: \(rawSample)")
+                }
+                continue
             }
+            
+            decodedCount += 1
+            eventTypeCounts[event.type.rawValue, default: 0] += 1
             
             switch event.type {
             case .userMessage:
@@ -301,7 +326,62 @@ public final class SessionStorage: Sendable {
             ))
         }
         
+        print("[SessionStorage] loadSessionHistory summary: \(decodedCount) decoded, \(skippedCount) skipped, \(messages.count) ChatMessages reconstructed. Event types: \(eventTypeCounts)")
+        
         return messages
+    }
+    
+    /// Load session history with workspace-based fallback
+    /// If the given session has no history, tries other sessions for the same workspace
+    /// - Parameters:
+    ///   - sessionId: The primary session ID to try first
+    ///   - workspacePath: The workspace path to find alternative sessions
+    /// - Returns: Array of ChatMessage, or empty array if nothing found
+    public func loadSessionHistoryWithWorkspaceFallback(sessionId: String, workspacePath: URL) -> [ChatMessage] {
+        print("[SessionStorage] loadSessionHistoryWithWorkspaceFallback: sessionId=\(sessionId), workspace=\(workspacePath.path)")
+        
+        // First try the given session ID
+        do {
+            let messages = try loadSessionHistory(sessionId: sessionId)
+            if !messages.isEmpty {
+                print("[SessionStorage] Found \(messages.count) messages from primary session \(sessionId)")
+                return messages
+            }
+            print("[SessionStorage] Primary session \(sessionId) exists but has no messages")
+        } catch {
+            print("[SessionStorage] Primary session \(sessionId) failed: \(error)")
+        }
+        
+        // Fallback: find other sessions for the same workspace
+        print("[SessionStorage] Trying workspace-based fallback for: \(workspacePath.path)")
+        let workspaceSessions = getSessionsForWorkspace(path: workspacePath)
+        print("[SessionStorage] Found \(workspaceSessions.count) sessions for workspace")
+        
+        // Sort by lastModified descending (newest first)
+        let sortedSessions = workspaceSessions.sorted { a, b in
+            (a.lastModified ?? .distantPast) > (b.lastModified ?? .distantPast)
+        }
+        
+        // Filter out the session we already tried
+        let candidates = sortedSessions.filter { $0.sessionId != sessionId }
+        print("[SessionStorage] \(candidates.count) candidate sessions after filtering out \(sessionId)")
+        
+        for candidate in candidates {
+            print("[SessionStorage] Trying fallback session: \(candidate.sessionId)")
+            do {
+                let messages = try loadSessionHistory(sessionId: candidate.sessionId)
+                if !messages.isEmpty {
+                    print("[SessionStorage] Workspace fallback found \(messages.count) messages from session \(candidate.sessionId)")
+                    return messages
+                }
+                print("[SessionStorage] Fallback session \(candidate.sessionId) has no messages")
+            } catch {
+                print("[SessionStorage] Fallback session \(candidate.sessionId) failed: \(error)")
+            }
+        }
+        
+        print("[SessionStorage] No chat history found via workspace fallback")
+        return []
     }
     
     // MARK: - Private Helpers

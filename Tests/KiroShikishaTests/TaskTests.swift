@@ -1394,4 +1394,119 @@ final class TaskTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: jsonFile.path), "Session metadata file should be preserved")
         XCTAssertTrue(FileManager.default.fileExists(atPath: jsonlFile.path), "Session events file should be preserved")
     }
+
+    // MARK: - Workspace Fallback Tests
+
+    func testLoadSessionHistoryWithWorkspaceFallbackFindsOtherSession() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let workspaceCwd = "/tmp/my-project"
+        let sessionId1 = "session-no-history"
+        let sessionId2 = "session-with-history"
+
+        // Create metadata for both sessions pointing to the same workspace
+        let metadata1 = """
+        {"session_id":"\(sessionId1)","cwd":"\(workspaceCwd)","last_modified":1700000000}
+        """
+        let metadata2 = """
+        {"session_id":"\(sessionId2)","cwd":"\(workspaceCwd)","last_modified":1700000100}
+        """
+        try metadata1.write(to: tempDir.appendingPathComponent("\(sessionId1).json"), atomically: true, encoding: .utf8)
+        try metadata2.write(to: tempDir.appendingPathComponent("\(sessionId2).json"), atomically: true, encoding: .utf8)
+
+        // Create JSONL only for session2 (not session1)
+        let events = [
+            #"{"type":"user_message","content":"Hello from fallback session","timestamp":1700000000}"#,
+            #"{"type":"agent_message","content":"Fallback reply","timestamp":1700000001}"#,
+            #"{"type":"turn_end","timestamp":1700000002}"#
+        ]
+        try events.joined(separator: "\n").write(
+            to: tempDir.appendingPathComponent("\(sessionId2).jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let workspaceURL = URL(fileURLWithPath: workspaceCwd)
+        let messages = storage.loadSessionHistoryWithWorkspaceFallback(
+            sessionId: sessionId1,
+            workspacePath: workspaceURL
+        )
+
+        XCTAssertEqual(messages.count, 2)
+        XCTAssertEqual(messages[0].role, .user)
+        XCTAssertEqual(messages[0].content, "Hello from fallback session")
+        XCTAssertEqual(messages[1].role, .assistant)
+        XCTAssertEqual(messages[1].content, "Fallback reply")
+    }
+
+    func testLoadSessionHistoryWithWorkspaceFallbackReturnsEmptyWhenNoSessions() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let workspaceURL = URL(fileURLWithPath: "/tmp/nonexistent-project")
+        let messages = storage.loadSessionHistoryWithWorkspaceFallback(
+            sessionId: "nonexistent-session",
+            workspacePath: workspaceURL
+        )
+
+        XCTAssertTrue(messages.isEmpty, "Should return empty array when no workspace sessions exist")
+    }
+
+    func testSessionEventDecodesWithExtraUnknownFields() throws {
+        // Verify that SessionEvent decodes successfully even with extra fields not in CodingKeys
+        let json = """
+        {"type":"user_message","content":"Hello","timestamp":1700000000,"unknown_field":"value","extra_data":{"nested":true}}
+        """
+        let data = json.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        let event = try decoder.decode(SessionEvent.self, from: data)
+
+        XCTAssertEqual(event.type, .userMessage)
+        XCTAssertEqual(event.content, "Hello")
+        XCTAssertNotNil(event.timestamp)
+    }
+
+    func testLoadSessionHistoryWithMismatchedTimestampType() throws {
+        // Test that events with truly malformed data are skipped
+        // but other valid events still parse correctly
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "test-session-mismatched"
+        let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
+
+        let events = [
+            #"{"type":"user_message","content":"Before malformed","timestamp":1700000000}"#,
+            #"{"type":"agent_message","content":"Reply before","timestamp":1700000001}"#,
+            #"{"type":"turn_end","timestamp":1700000002}"#,
+            // Malformed: type is a number instead of string (will fail to decode)
+            #"{"type":42,"content":"Bad type"}"#,
+            // Malformed: type is missing entirely
+            #"{"content":"No type field","timestamp":1700000003}"#,
+            #"{"type":"user_message","content":"After malformed","timestamp":1700000005}"#,
+            #"{"type":"agent_message","content":"Reply after","timestamp":1700000006}"#,
+            #"{"type":"turn_end","timestamp":1700000007}"#
+        ]
+        try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let messages = try storage.loadSessionHistory(sessionId: sessionId)
+
+        // The malformed events should be skipped; valid events parse correctly
+        XCTAssertEqual(messages.count, 4) // 2 user + 2 assistant from valid events
+        XCTAssertEqual(messages[0].role, .user)
+        XCTAssertEqual(messages[0].content, "Before malformed")
+        XCTAssertEqual(messages[1].role, .assistant)
+        XCTAssertEqual(messages[1].content, "Reply before")
+        XCTAssertEqual(messages[2].role, .user)
+        XCTAssertEqual(messages[2].content, "After malformed")
+        XCTAssertEqual(messages[3].role, .assistant)
+        XCTAssertEqual(messages[3].content, "Reply after")
+    }
 }
