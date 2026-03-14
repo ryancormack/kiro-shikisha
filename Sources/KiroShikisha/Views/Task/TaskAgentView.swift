@@ -55,7 +55,7 @@ public struct TaskAgentView: View {
                         .frame(minWidth: 300)
 
                     CodePanel(agent: agent, workspacePath: task.workspacePath)
-                        .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
+                        .frame(minWidth: 350, idealWidth: 500)
                         .id(task.id)
                 }
             } else if task.status == .pending {
@@ -377,7 +377,7 @@ struct TaskCompletedView: View {
                         .frame(minWidth: 300)
 
                     CodePanel(agent: agent, workspacePath: task.workspacePath)
-                        .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
+                        .frame(minWidth: 350, idealWidth: 500)
                         .id(task.id)
                 }
             } else if !task.messages.isEmpty || !task.fileChanges.isEmpty {
@@ -536,7 +536,7 @@ struct TaskCompletedView: View {
             }
             .listStyle(.plain)
         }
-        .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
+        .frame(minWidth: 250, idealWidth: 400)
     }
 }
 
@@ -633,7 +633,7 @@ struct TaskPausedView: View {
                         .frame(minWidth: 300)
 
                     CodePanel(agent: agent, workspacePath: task.workspacePath)
-                        .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
+                        .frame(minWidth: 350, idealWidth: 500)
                         .id(task.id)
                 }
             } else if !task.messages.isEmpty || !task.fileChanges.isEmpty {
@@ -750,7 +750,7 @@ struct TaskPausedView: View {
             }
             .listStyle(.plain)
         }
-        .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
+        .frame(minWidth: 250, idealWidth: 400)
     }
 }
 
@@ -763,6 +763,6 @@ struct TaskPausedView: View {
     TaskAgentView(task: task)
         .environment(AgentManager())
         .environment(TaskManager())
-        .frame(width: 800, height: 600)
+        .frame(width: 1000, height: 650)
 }
 #endif

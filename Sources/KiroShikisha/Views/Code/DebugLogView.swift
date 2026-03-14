@@ -16,7 +16,7 @@ struct DebugLogView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(agent.debugLog) { entry in
-                        HStack(alignment: .top, spacing: 6) {
+                        HStack(alignment: .top, spacing: DesignConstants.spacingSM) {
                             Text(formatter.string(from: entry.timestamp))
                                 .font(.system(.caption2, design: .monospaced))
                                 .foregroundColor(.secondary)
@@ -31,11 +31,11 @@ struct DebugLogView: View {
                                 .textSelection(.enabled)
                         }
                         .id(entry.id)
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, DesignConstants.spacingSM)
                         .padding(.vertical, 1)
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, DesignConstants.spacingXS)
             }
             .onChange(of: agent.debugLog.count) { _, _ in
                 if let last = agent.debugLog.last {

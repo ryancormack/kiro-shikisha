@@ -16,7 +16,7 @@ public struct AgentView: View {
                 .frame(minWidth: 300)
             
             CodePanel(agent: agent, workspacePath: agent.workspace.path)
-                .frame(minWidth: 200, idealWidth: 320, maxWidth: 500)
+                .frame(minWidth: 350, idealWidth: 500)
         }
         .navigationTitle(agent.name)
     }
@@ -193,6 +193,6 @@ struct ToolCallRow: View {
     )
     
     AgentView(agent: agent)
-        .frame(width: 900, height: 600)
+        .frame(width: 1000, height: 650)
 }
 #endif
