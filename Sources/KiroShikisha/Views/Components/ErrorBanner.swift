@@ -52,7 +52,7 @@ public struct ErrorBanner: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 4)
                                 .background(Color.white.opacity(0.2))
-                                .cornerRadius(4)
+                                .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                         }
                         .buttonStyle(.plain)
                     }
@@ -82,7 +82,7 @@ public struct ErrorBanner: View {
                     endPoint: .trailing
                 )
             )
-            .cornerRadius(8)
+            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
             .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
             .transition(.move(edge: .top).combined(with: .opacity))
         }

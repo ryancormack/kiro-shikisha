@@ -13,7 +13,7 @@ struct DebugLogView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
+            ScrollView([.horizontal, .vertical]) {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(agent.debugLog) { entry in
                         HStack(alignment: .top, spacing: DesignConstants.spacingSM) {

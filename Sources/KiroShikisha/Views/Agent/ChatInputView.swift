@@ -24,7 +24,7 @@ public struct ChatInputView: View {
                 .scrollContentBackground(.hidden)
                 .padding(8)
                 .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge))
                 .frame(minHeight: 36, maxHeight: 100)
             
             Button(action: send) {

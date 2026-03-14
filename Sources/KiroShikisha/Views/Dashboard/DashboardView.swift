@@ -100,7 +100,7 @@ public struct DashboardView: View {
         }
         .padding()
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge)
                 .stroke(Color.orange.opacity(0.3), lineWidth: 1)
         )
     }

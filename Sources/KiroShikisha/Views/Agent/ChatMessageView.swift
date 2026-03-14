@@ -47,29 +47,29 @@ public struct ChatMessageView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
         } else {
-        HStack(alignment: .bottom, spacing: 8) {
-            if isUser {
-                Spacer(minLength: 60)
-            }
-            
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                Text(LocalizedStringKey(message.content))
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(backgroundColor)
-                    .foregroundColor(textColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            HStack(alignment: .bottom, spacing: 8) {
+                if isUser {
+                    Spacer(minLength: 60)
+                }
                 
-                Text(timestampFormatter.string(from: message.timestamp))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+                VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+                    Text(LocalizedStringKey(message.content))
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(backgroundColor)
+                        .foregroundColor(textColor)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    
+                    Text(timestampFormatter.string(from: message.timestamp))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
+                if !isUser {
+                    Spacer(minLength: 60)
+                }
             }
-            
-            if !isUser {
-                Spacer(minLength: 60)
-            }
-        }
         }
     }
 }

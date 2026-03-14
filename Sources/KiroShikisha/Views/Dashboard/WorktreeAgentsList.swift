@@ -135,7 +135,7 @@ struct WorkspaceTaskGroup: View {
         }
         .padding()
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
                 .fill(Color(nsColor: .windowBackgroundColor))
         )
     }
@@ -189,7 +189,7 @@ struct TaskListRow: View {
             .padding(.vertical, 6)
             .padding(.horizontal, 8)
             .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
                     .fill(isHovered ? Color.accentColor.opacity(0.1) : Color.clear)
             )
         }

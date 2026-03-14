@@ -150,7 +150,7 @@ public struct QuickActionsView: View {
     }
 
     private var backgroundView: some View {
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
             .fill(Color(nsColor: .controlBackgroundColor))
             .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
     }

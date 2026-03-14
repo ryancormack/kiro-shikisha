@@ -257,17 +257,14 @@ struct WorktreeRow: View {
                             .padding(.vertical, 1)
                             .background(Color.blue.opacity(0.15))
                             .foregroundColor(.blue)
-                            .cornerRadius(3)
-                    }
-                    
-                    if hasActiveAgent {
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                         Text("running")
                             .font(.caption2)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(Color.green.opacity(0.15))
                             .foregroundColor(.green)
-                            .cornerRadius(3)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                     }
                 }
                 
@@ -293,11 +290,11 @@ struct WorktreeRow: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
                 .fill(hasActiveAgent ? Color.green.opacity(0.05) : Color.clear)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
                 .stroke(hasActiveAgent ? Color.green.opacity(0.2) : Color.clear, lineWidth: 1)
         )
     }

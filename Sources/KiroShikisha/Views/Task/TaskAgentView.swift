@@ -193,7 +193,7 @@ public struct TaskAgentView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(Color.orange.opacity(0.1))
-                .cornerRadius(6)
+                .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
             }
 
             // Task actions
