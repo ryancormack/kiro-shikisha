@@ -1112,12 +1112,10 @@ final class TaskTests: XCTestCase {
         let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
 
         let events = [
-            #"{"type":"user_message","content":"Hello agent","timestamp":1700000000}"#,
-            #"{"type":"agent_message","content":"Hi there! How can I help?","timestamp":1700000001}"#,
-            #"{"type":"turn_end","timestamp":1700000002}"#,
-            #"{"type":"user_message","content":"Fix my code","timestamp":1700000003}"#,
-            #"{"type":"agent_message","content":"Sure, let me look at it.","timestamp":1700000004}"#,
-            #"{"type":"turn_end","timestamp":1700000005}"#
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello agent"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Hi there! How can I help?"}]}}"#,
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-003","content":[{"kind":"text","data":"Fix my code"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-004","content":[{"kind":"text","data":"Sure, let me look at it."}]}}"#
         ]
         try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
 
@@ -1155,17 +1153,15 @@ final class TaskTests: XCTestCase {
         let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
 
         let events = [
-            #"{"type":"user_message","content":"Please edit my file","timestamp":1700000000}"#,
-            #"{"type":"agent_message","content":"I will edit the file now.","timestamp":1700000001}"#,
-            #"{"type":"tool_call","tool_call_id":"tc-001","tool_name":"edit_file","timestamp":1700000002}"#,
-            #"{"type":"tool_result","tool_call_id":"tc-001","tool_output":"File edited","timestamp":1700000003}"#,
-            #"{"type":"agent_message","content":" Done editing.","timestamp":1700000004}"#,
-            #"{"type":"tool_call","tool_call_id":"tc-002","tool_name":"read_file","timestamp":1700000005}"#,
-            #"{"type":"tool_result","tool_call_id":"tc-002","tool_output":"file contents","timestamp":1700000006}"#,
-            #"{"type":"turn_end","timestamp":1700000007}"#,
-            #"{"type":"user_message","content":"Thanks","timestamp":1700000008}"#,
-            #"{"type":"agent_message","content":"You're welcome!","timestamp":1700000009}"#,
-            #"{"type":"turn_end","timestamp":1700000010}"#
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Please edit my file"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"I will edit the file now."}]}}"#,
+            #"{"version":"v1","kind":"ToolUse","data":{"message_id":"msg-003","content":[{"kind":"toolUse","data":{"toolUseId":"tc-001","name":"edit_file","input":{}}}]}}"#,
+            #"{"version":"v1","kind":"ToolResults","data":{"message_id":"msg-004","content":[{"kind":"toolResult","data":{"toolUseId":"tc-001","content":[{"kind":"text","text":"File edited"}]}}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-005","content":[{"kind":"text","data":" Done editing."}]}}"#,
+            #"{"version":"v1","kind":"ToolUse","data":{"message_id":"msg-006","content":[{"kind":"toolUse","data":{"toolUseId":"tc-002","name":"read_file","input":{}}}]}}"#,
+            #"{"version":"v1","kind":"ToolResults","data":{"message_id":"msg-007","content":[{"kind":"toolResult","data":{"toolUseId":"tc-002","content":[{"kind":"text","text":"file contents"}]}}]}}"#,
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-008","content":[{"kind":"text","data":"Thanks"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-009","content":[{"kind":"text","data":"You're welcome!"}]}}"#
         ]
         try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
 
@@ -1205,14 +1201,12 @@ final class TaskTests: XCTestCase {
         let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
 
         let events = [
-            #"{"type":"user_message","content":"First message","timestamp":1700000000}"#,
-            #"{"type":"agent_message","content":"First reply","timestamp":1700000001}"#,
-            #"{"type":"turn_end","timestamp":1700000002}"#,
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"First message"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"First reply"}]}}"#,
             #"this is not valid json at all"#,
             #"{"broken json"#,
-            #"{"type":"user_message","content":"Second message","timestamp":1700000005}"#,
-            #"{"type":"agent_message","content":"Second reply","timestamp":1700000006}"#,
-            #"{"type":"turn_end","timestamp":1700000007}"#
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-003","content":[{"kind":"text","data":"Second message"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-004","content":[{"kind":"text","data":"Second reply"}]}}"#
         ]
         try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
 
@@ -1275,9 +1269,8 @@ final class TaskTests: XCTestCase {
         // Create history file only for the original session
         let jsonlFile = tempDir.appendingPathComponent("\(originalSessionId).jsonl")
         let events = [
-            #"{"type":"user_message","content":"Hello from original session","timestamp":1700000000}"#,
-            #"{"type":"agent_message","content":"Original reply","timestamp":1700000001}"#,
-            #"{"type":"turn_end","timestamp":1700000002}"#
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello from original session"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Original reply"}]}}"#
         ]
         try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
 
@@ -1384,7 +1377,7 @@ final class TaskTests: XCTestCase {
 
         try "locked".write(to: lockFile, atomically: true, encoding: .utf8)
         try "{\"session_id\":\"\(sessionId)\",\"cwd\":\"/tmp\"}".write(to: jsonFile, atomically: true, encoding: .utf8)
-        try "{\"type\":\"user_message\",\"content\":\"Hello\"}".write(to: jsonlFile, atomically: true, encoding: .utf8)
+        try #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello"}]}}"#.write(to: jsonlFile, atomically: true, encoding: .utf8)
 
         let storage = SessionStorage(sessionsDirectory: tempDir)
         let result = storage.removeSessionLockFile(sessionId: sessionId)
@@ -1418,9 +1411,8 @@ final class TaskTests: XCTestCase {
 
         // Create JSONL only for session2 (not session1)
         let events = [
-            #"{"type":"user_message","content":"Hello from fallback session","timestamp":1700000000}"#,
-            #"{"type":"agent_message","content":"Fallback reply","timestamp":1700000001}"#,
-            #"{"type":"turn_end","timestamp":1700000002}"#
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello from fallback session"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Fallback reply"}]}}"#
         ]
         try events.joined(separator: "\n").write(
             to: tempDir.appendingPathComponent("\(sessionId2).jsonl"),
@@ -1460,15 +1452,15 @@ final class TaskTests: XCTestCase {
     func testSessionEventDecodesWithExtraUnknownFields() throws {
         // Verify that SessionEvent decodes successfully even with extra fields not in CodingKeys
         let json = """
-        {"type":"user_message","content":"Hello","timestamp":1700000000,"unknown_field":"value","extra_data":{"nested":true}}
+        {"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello"}]},"unknown_field":"value","extra_data":{"nested":true}}
         """
         let data = json.data(using: .utf8)!
         let decoder = JSONDecoder()
         let event = try decoder.decode(SessionEvent.self, from: data)
 
-        XCTAssertEqual(event.type, .userMessage)
-        XCTAssertEqual(event.content, "Hello")
-        XCTAssertNotNil(event.timestamp)
+        XCTAssertEqual(event.kind, .prompt)
+        XCTAssertEqual(event.data.extractTextContent(), "Hello")
+        XCTAssertEqual(event.version, "v1")
     }
 
     func testLoadSessionHistoryWithMismatchedTimestampType() throws {
@@ -1482,16 +1474,14 @@ final class TaskTests: XCTestCase {
         let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
 
         let events = [
-            #"{"type":"user_message","content":"Before malformed","timestamp":1700000000}"#,
-            #"{"type":"agent_message","content":"Reply before","timestamp":1700000001}"#,
-            #"{"type":"turn_end","timestamp":1700000002}"#,
-            // Malformed: type is a number instead of string (will fail to decode)
-            #"{"type":42,"content":"Bad type"}"#,
-            // Malformed: type is missing entirely
-            #"{"content":"No type field","timestamp":1700000003}"#,
-            #"{"type":"user_message","content":"After malformed","timestamp":1700000005}"#,
-            #"{"type":"agent_message","content":"Reply after","timestamp":1700000006}"#,
-            #"{"type":"turn_end","timestamp":1700000007}"#
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Before malformed"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Reply before"}]}}"#,
+            // Malformed: kind is a number instead of string (will fail to decode)
+            #"{"version":"v1","kind":42,"data":{"message_id":"msg-003","content":[{"kind":"text","data":"Bad kind"}]}}"#,
+            // Malformed: version is missing entirely
+            #"{"kind":"Prompt","data":{"message_id":"msg-004","content":[{"kind":"text","data":"No version field"}]}}"#,
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-005","content":[{"kind":"text","data":"After malformed"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-006","content":[{"kind":"text","data":"Reply after"}]}}"#
         ]
         try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
 

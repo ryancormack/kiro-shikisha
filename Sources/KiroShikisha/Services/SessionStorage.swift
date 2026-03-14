@@ -255,10 +255,10 @@ public final class SessionStorage: Sendable {
             }
             
             decodedCount += 1
-            eventTypeCounts[event.type.rawValue, default: 0] += 1
+            eventTypeCounts[event.kind.rawValue, default: 0] += 1
             
-            switch event.type {
-            case .userMessage:
+            switch event.kind {
+            case .prompt:
                 // Flush any pending assistant message
                 if !currentAssistantContent.isEmpty {
                     messages.append(ChatMessage(
@@ -273,44 +273,38 @@ public final class SessionStorage: Sendable {
                 }
                 
                 // Add user message
-                if let content = event.content, !content.isEmpty {
+                let text = event.data.extractTextContent()
+                if !text.isEmpty {
                     messages.append(ChatMessage(
                         role: .user,
-                        content: content,
-                        timestamp: event.timestamp ?? Date()
+                        content: text,
+                        timestamp: Date()
                     ))
                 }
                 
-            case .agentMessage:
-                // Accumulate assistant content (may come in chunks)
-                if let content = event.content {
+            case .assistantMessage:
+                // Accumulate assistant content
+                let text = event.data.extractTextContent()
+                if !text.isEmpty {
                     if currentAssistantTimestamp == nil {
-                        currentAssistantTimestamp = event.timestamp
+                        currentAssistantTimestamp = Date()
                     }
-                    currentAssistantContent += content
+                    currentAssistantContent += text
                 }
                 
-            case .toolCall:
-                // Track tool call IDs for the current assistant message
-                if let toolCallId = event.toolCallId {
-                    currentToolCallIds.append(toolCallId)
+            case .toolUse:
+                // Extract toolUseId from content items where kind == "toolUse"
+                if let contentItems = event.data.content {
+                    for item in contentItems {
+                        if item.kind == "toolUse", let data = item.data, case .object(let dict) = data {
+                            if let toolUseIdValue = dict["toolUseId"], let toolUseId = toolUseIdValue.stringValue {
+                                currentToolCallIds.append(toolUseId)
+                            }
+                        }
+                    }
                 }
                 
-            case .turnEnd:
-                // Flush any pending assistant message at turn end
-                if !currentAssistantContent.isEmpty {
-                    messages.append(ChatMessage(
-                        role: .assistant,
-                        content: currentAssistantContent.trimmingCharacters(in: .whitespacesAndNewlines),
-                        timestamp: currentAssistantTimestamp ?? Date(),
-                        toolCallIds: currentToolCallIds.isEmpty ? nil : currentToolCallIds
-                    ))
-                    currentAssistantContent = ""
-                    currentAssistantTimestamp = nil
-                    currentToolCallIds = []
-                }
-                
-            case .toolResult, .sessionStart, .sessionEnd, .error, .unknown:
+            case .toolResults, .unknown:
                 // These events don't directly contribute to chat messages
                 break
             }
