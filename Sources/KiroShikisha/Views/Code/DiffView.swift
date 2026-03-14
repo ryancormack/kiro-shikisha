@@ -39,10 +39,12 @@ struct DiffView: View {
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - File Header
@@ -323,7 +325,10 @@ struct DiffHunkLineView: View {
             // Line content
             lineContent
                 .padding(.leading, DesignConstants.spacingSM)
+
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .font(.system(size: DesignConstants.codeFontSize, design: .monospaced))
         .padding(.vertical, 1)
         .background(backgroundColor)
