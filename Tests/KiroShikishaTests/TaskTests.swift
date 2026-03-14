@@ -1112,12 +1112,10 @@ final class TaskTests: XCTestCase {
         let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
 
         let events = [
-            #"{"type":"user_message","content":"Hello agent","timestamp":1700000000}"#,
-            #"{"type":"agent_message","content":"Hi there! How can I help?","timestamp":1700000001}"#,
-            #"{"type":"turn_end","timestamp":1700000002}"#,
-            #"{"type":"user_message","content":"Fix my code","timestamp":1700000003}"#,
-            #"{"type":"agent_message","content":"Sure, let me look at it.","timestamp":1700000004}"#,
-            #"{"type":"turn_end","timestamp":1700000005}"#
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello agent"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Hi there! How can I help?"}]}}"#,
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-003","content":[{"kind":"text","data":"Fix my code"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-004","content":[{"kind":"text","data":"Sure, let me look at it."}]}}"#
         ]
         try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
 
@@ -1155,17 +1153,15 @@ final class TaskTests: XCTestCase {
         let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
 
         let events = [
-            #"{"type":"user_message","content":"Please edit my file","timestamp":1700000000}"#,
-            #"{"type":"agent_message","content":"I will edit the file now.","timestamp":1700000001}"#,
-            #"{"type":"tool_call","tool_call_id":"tc-001","tool_name":"edit_file","timestamp":1700000002}"#,
-            #"{"type":"tool_result","tool_call_id":"tc-001","tool_output":"File edited","timestamp":1700000003}"#,
-            #"{"type":"agent_message","content":" Done editing.","timestamp":1700000004}"#,
-            #"{"type":"tool_call","tool_call_id":"tc-002","tool_name":"read_file","timestamp":1700000005}"#,
-            #"{"type":"tool_result","tool_call_id":"tc-002","tool_output":"file contents","timestamp":1700000006}"#,
-            #"{"type":"turn_end","timestamp":1700000007}"#,
-            #"{"type":"user_message","content":"Thanks","timestamp":1700000008}"#,
-            #"{"type":"agent_message","content":"You're welcome!","timestamp":1700000009}"#,
-            #"{"type":"turn_end","timestamp":1700000010}"#
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Please edit my file"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"I will edit the file now."}]}}"#,
+            #"{"version":"v1","kind":"ToolUse","data":{"message_id":"msg-003","content":[{"kind":"toolUse","data":{"toolUseId":"tc-001","name":"edit_file","input":{}}}]}}"#,
+            #"{"version":"v1","kind":"ToolResults","data":{"message_id":"msg-004","content":[{"kind":"toolResult","data":{"toolUseId":"tc-001","content":[{"kind":"text","text":"File edited"}]}}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-005","content":[{"kind":"text","data":" Done editing."}]}}"#,
+            #"{"version":"v1","kind":"ToolUse","data":{"message_id":"msg-006","content":[{"kind":"toolUse","data":{"toolUseId":"tc-002","name":"read_file","input":{}}}]}}"#,
+            #"{"version":"v1","kind":"ToolResults","data":{"message_id":"msg-007","content":[{"kind":"toolResult","data":{"toolUseId":"tc-002","content":[{"kind":"text","text":"file contents"}]}}]}}"#,
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-008","content":[{"kind":"text","data":"Thanks"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-009","content":[{"kind":"text","data":"You're welcome!"}]}}"#
         ]
         try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
 
@@ -1205,14 +1201,12 @@ final class TaskTests: XCTestCase {
         let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
 
         let events = [
-            #"{"type":"user_message","content":"First message","timestamp":1700000000}"#,
-            #"{"type":"agent_message","content":"First reply","timestamp":1700000001}"#,
-            #"{"type":"turn_end","timestamp":1700000002}"#,
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"First message"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"First reply"}]}}"#,
             #"this is not valid json at all"#,
             #"{"broken json"#,
-            #"{"type":"user_message","content":"Second message","timestamp":1700000005}"#,
-            #"{"type":"agent_message","content":"Second reply","timestamp":1700000006}"#,
-            #"{"type":"turn_end","timestamp":1700000007}"#
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-003","content":[{"kind":"text","data":"Second message"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-004","content":[{"kind":"text","data":"Second reply"}]}}"#
         ]
         try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
 
@@ -1229,5 +1223,280 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(messages[2].content, "Second message")
         XCTAssertEqual(messages[3].role, .assistant)
         XCTAssertEqual(messages[3].content, "Second reply")
+    }
+
+    // MARK: - Session ID Fallback Loading Tests
+
+    @MainActor
+    func testTaskSessionIdUpdateOnReconnect() async throws {
+        // Verify that a task's sessionId can be updated to a new value
+        // simulating what happens when loadAgent creates a fresh session
+        let taskManager = TaskManager()
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+        let entry = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Reconnect session test",
+            statusRawValue: "paused",
+            workspacePath: "/Users/test/projects/repo",
+            sessionId: "old-session-id",
+            createdAt: fixedDate
+        )
+        taskManager.restoreTasks(from: [entry])
+
+        let task = taskManager.tasks[entry.id]!
+        XCTAssertEqual(task.sessionId, "old-session-id")
+
+        // Simulate what TaskManager does after loadAgent returns a fresh session:
+        // update the task's sessionId
+        let newSessionId = "new-fresh-session-id"
+        task.sessionId = newSessionId
+
+        XCTAssertEqual(task.sessionId, newSessionId)
+        XCTAssertNotEqual(task.sessionId, "old-session-id")
+    }
+
+    func testSessionStorageFallbackLoading() throws {
+        // Test that we can load history from an original session ID when
+        // the current session ID has no history (simulating the fresh session fallback)
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let originalSessionId = "original-session-abc"
+        let freshSessionId = "fresh-session-xyz"
+
+        // Create history file only for the original session
+        let jsonlFile = tempDir.appendingPathComponent("\(originalSessionId).jsonl")
+        let events = [
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello from original session"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Original reply"}]}}"#
+        ]
+        try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+
+        // Loading from the fresh session should fail (no file)
+        let freshResult = try? storage.loadSessionHistory(sessionId: freshSessionId)
+        XCTAssertNil(freshResult, "Fresh session should have no history file")
+
+        // Loading from the original session should succeed
+        let originalResult = try storage.loadSessionHistory(sessionId: originalSessionId)
+        XCTAssertEqual(originalResult.count, 2)
+        XCTAssertEqual(originalResult[0].content, "Hello from original session")
+        XCTAssertEqual(originalResult[1].content, "Original reply")
+
+        // This mirrors the fallback pattern in TaskManager:
+        // 1. Try loading from currentSessionId (fresh) - empty/fails
+        // 2. Fall back to originalSessionId - succeeds
+    }
+
+    @MainActor
+    func testSequentialReconnectIndependence() async throws {
+        // Test that sequential reconnect attempts for multiple tasks
+        // don't interfere with each other
+        let taskManager = TaskManager()
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+        var entries: [AppStateManager.TaskPersistenceEntry] = []
+        for i in 1...5 {
+            entries.append(AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Task \(i)",
+                statusRawValue: "paused",
+                workspacePath: "/Users/test/projects/repo\(i)",
+                sessionId: "session-\(i)",
+                createdAt: fixedDate
+            ))
+        }
+        taskManager.restoreTasks(from: entries)
+
+        // Attempt sequential reconnect (mimicking the fixed auto-reconnect)
+        for entry in entries {
+            do {
+                try await taskManager.reopenTask(id: entry.id)
+            } catch {
+                // Expected on Linux - platformNotSupported
+            }
+        }
+
+        // All tasks should remain paused (on Linux, reopenTask throws immediately)
+        // Crucially, each task retains its own session ID
+        for entry in entries {
+            let task = taskManager.tasks[entry.id]!
+            XCTAssertEqual(task.sessionId, entry.sessionId,
+                "Task \(entry.name) should retain its session ID after failed reconnect")
+            XCTAssertEqual(task.status, .paused,
+                "Task \(entry.name) should remain paused after failed reconnect on Linux")
+        }
+    }
+
+    // MARK: - Session Lock File Tests
+
+    func testSessionStorageRemoveLockFile() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "test-session-lock"
+        let lockFile = tempDir.appendingPathComponent("\(sessionId).lock")
+
+        // Create a fake lock file
+        try "locked".write(to: lockFile, atomically: true, encoding: .utf8)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: lockFile.path))
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let result = storage.removeSessionLockFile(sessionId: sessionId)
+
+        XCTAssertTrue(result, "Should return true when lock file was removed")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: lockFile.path), "Lock file should be deleted")
+    }
+
+    func testSessionStorageRemoveLockFileWhenNoLockExists() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let result = storage.removeSessionLockFile(sessionId: "nonexistent-session")
+
+        XCTAssertFalse(result, "Should return false when no lock file exists")
+    }
+
+    func testSessionStorageRemoveLockFileDoesNotAffectSessionFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "test-session-preserve"
+
+        // Create lock file, json file, and jsonl file
+        let lockFile = tempDir.appendingPathComponent("\(sessionId).lock")
+        let jsonFile = tempDir.appendingPathComponent("\(sessionId).json")
+        let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
+
+        try "locked".write(to: lockFile, atomically: true, encoding: .utf8)
+        try "{\"session_id\":\"\(sessionId)\",\"cwd\":\"/tmp\"}".write(to: jsonFile, atomically: true, encoding: .utf8)
+        try #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello"}]}}"#.write(to: jsonlFile, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let result = storage.removeSessionLockFile(sessionId: sessionId)
+
+        XCTAssertTrue(result, "Should return true when lock file was removed")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: lockFile.path), "Lock file should be deleted")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonFile.path), "Session metadata file should be preserved")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonlFile.path), "Session events file should be preserved")
+    }
+
+    // MARK: - Workspace Fallback Tests
+
+    func testLoadSessionHistoryWithWorkspaceFallbackFindsOtherSession() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let workspaceCwd = "/tmp/my-project"
+        let sessionId1 = "session-no-history"
+        let sessionId2 = "session-with-history"
+
+        // Create metadata for both sessions pointing to the same workspace
+        let metadata1 = """
+        {"session_id":"\(sessionId1)","cwd":"\(workspaceCwd)","last_modified":1700000000}
+        """
+        let metadata2 = """
+        {"session_id":"\(sessionId2)","cwd":"\(workspaceCwd)","last_modified":1700000100}
+        """
+        try metadata1.write(to: tempDir.appendingPathComponent("\(sessionId1).json"), atomically: true, encoding: .utf8)
+        try metadata2.write(to: tempDir.appendingPathComponent("\(sessionId2).json"), atomically: true, encoding: .utf8)
+
+        // Create JSONL only for session2 (not session1)
+        let events = [
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello from fallback session"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Fallback reply"}]}}"#
+        ]
+        try events.joined(separator: "\n").write(
+            to: tempDir.appendingPathComponent("\(sessionId2).jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let workspaceURL = URL(fileURLWithPath: workspaceCwd)
+        let messages = storage.loadSessionHistoryWithWorkspaceFallback(
+            sessionId: sessionId1,
+            workspacePath: workspaceURL
+        )
+
+        XCTAssertEqual(messages.count, 2)
+        XCTAssertEqual(messages[0].role, .user)
+        XCTAssertEqual(messages[0].content, "Hello from fallback session")
+        XCTAssertEqual(messages[1].role, .assistant)
+        XCTAssertEqual(messages[1].content, "Fallback reply")
+    }
+
+    func testLoadSessionHistoryWithWorkspaceFallbackReturnsEmptyWhenNoSessions() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let workspaceURL = URL(fileURLWithPath: "/tmp/nonexistent-project")
+        let messages = storage.loadSessionHistoryWithWorkspaceFallback(
+            sessionId: "nonexistent-session",
+            workspacePath: workspaceURL
+        )
+
+        XCTAssertTrue(messages.isEmpty, "Should return empty array when no workspace sessions exist")
+    }
+
+    func testSessionEventDecodesWithExtraUnknownFields() throws {
+        // Verify that SessionEvent decodes successfully even with extra fields not in CodingKeys
+        let json = """
+        {"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello"}]},"unknown_field":"value","extra_data":{"nested":true}}
+        """
+        let data = json.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        let event = try decoder.decode(SessionEvent.self, from: data)
+
+        XCTAssertEqual(event.kind, .prompt)
+        XCTAssertEqual(event.data.extractTextContent(), "Hello")
+        XCTAssertEqual(event.version, "v1")
+    }
+
+    func testLoadSessionHistoryWithMismatchedTimestampType() throws {
+        // Test that events with truly malformed data are skipped
+        // but other valid events still parse correctly
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "test-session-mismatched"
+        let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
+
+        let events = [
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Before malformed"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Reply before"}]}}"#,
+            // Malformed: kind is a number instead of string (will fail to decode)
+            #"{"version":"v1","kind":42,"data":{"message_id":"msg-003","content":[{"kind":"text","data":"Bad kind"}]}}"#,
+            // Malformed: version is missing entirely
+            #"{"kind":"Prompt","data":{"message_id":"msg-004","content":[{"kind":"text","data":"No version field"}]}}"#,
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-005","content":[{"kind":"text","data":"After malformed"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-006","content":[{"kind":"text","data":"Reply after"}]}}"#
+        ]
+        try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let messages = try storage.loadSessionHistory(sessionId: sessionId)
+
+        // The malformed events should be skipped; valid events parse correctly
+        XCTAssertEqual(messages.count, 4) // 2 user + 2 assistant from valid events
+        XCTAssertEqual(messages[0].role, .user)
+        XCTAssertEqual(messages[0].content, "Before malformed")
+        XCTAssertEqual(messages[1].role, .assistant)
+        XCTAssertEqual(messages[1].content, "Reply before")
+        XCTAssertEqual(messages[2].role, .user)
+        XCTAssertEqual(messages[2].content, "After malformed")
+        XCTAssertEqual(messages[3].role, .assistant)
+        XCTAssertEqual(messages[3].content, "Reply after")
     }
 }

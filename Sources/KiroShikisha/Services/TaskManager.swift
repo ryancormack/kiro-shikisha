@@ -180,15 +180,58 @@ public final class TaskManager {
             // Load conversation history BEFORE setting task.status = .working
             // so that ChatPanel has messages available when the view transitions
             let sessionStorage = SessionStorage()
+            let currentSessionId = agent.sessionId?.value ?? sessionId
+            var loadedMessages: [ChatMessage] = []
+
+            print("[TaskReconnect] Loading chat history for session: \(currentSessionId) (original: \(sessionId))")
+
+            // Try loading from the current (possibly new) session ID first
             do {
-                let loadedMessages = try sessionStorage.loadSessionHistory(sessionId: sessionId)
-                if !loadedMessages.isEmpty {
-                    task.messages = loadedMessages
-                    // Propagate loaded history to agent.messages so ChatPanel displays them
-                    agent.messages = loadedMessages + agent.messages
+                let msgs = try sessionStorage.loadSessionHistory(sessionId: currentSessionId)
+                if !msgs.isEmpty {
+                    loadedMessages = msgs
+                    print("[TaskReconnect] Loaded \(msgs.count) messages from current session \(currentSessionId)")
+                } else {
+                    print("[TaskReconnect] Session \(currentSessionId) exists but has no messages")
                 }
             } catch {
-                print("[TaskManager] Failed to load session history for \(sessionId): \(error)")
+                print("[TaskReconnect] Failed to load history from current session \(currentSessionId): \(error)")
+            }
+
+            // If no messages yet and we had a different original session ID, try that
+            if loadedMessages.isEmpty && currentSessionId != sessionId {
+                do {
+                    let msgs = try sessionStorage.loadSessionHistory(sessionId: sessionId)
+                    if !msgs.isEmpty {
+                        loadedMessages = msgs
+                        print("[TaskReconnect] Loaded \(msgs.count) messages from original session \(sessionId)")
+                    } else {
+                        print("[TaskReconnect] Original session \(sessionId) exists but has no messages")
+                    }
+                } catch {
+                    print("[TaskReconnect] Failed to load history from original session \(sessionId): \(error)")
+                }
+            }
+
+            // Workspace-based fallback: try other sessions for the same workspace
+            if loadedMessages.isEmpty {
+                print("[TaskReconnect] Trying workspace-based session fallback for: \(task.workspacePath.path)")
+                loadedMessages = sessionStorage.loadSessionHistoryWithWorkspaceFallback(
+                    sessionId: currentSessionId,
+                    workspacePath: task.workspacePath
+                )
+                if !loadedMessages.isEmpty {
+                    print("[TaskReconnect] Workspace fallback loaded \(loadedMessages.count) messages")
+                }
+            }
+
+            if !loadedMessages.isEmpty {
+                task.messages = loadedMessages
+                // Propagate loaded history to agent.messages so ChatPanel displays them
+                agent.messages = loadedMessages + agent.messages
+                print("[TaskReconnect] Applied \(loadedMessages.count) messages to task and agent")
+            } else {
+                print("[TaskReconnect] No chat history found for task '\(task.name)'")
             }
 
             // If the session was replaced (fresh session), add a system message
@@ -336,15 +379,58 @@ public final class TaskManager {
             // Load conversation history BEFORE setting task.status = .working
             // so that ChatPanel has messages available when the view transitions
             let sessionStorage = SessionStorage()
+            let currentSessionId = agent.sessionId?.value ?? sessionId
+            var loadedMessages: [ChatMessage] = []
+
+            print("[TaskReconnect] Loading chat history for session: \(currentSessionId) (original: \(sessionId))")
+
+            // Try loading from the current (possibly new) session ID first
             do {
-                let loadedMessages = try sessionStorage.loadSessionHistory(sessionId: sessionId)
-                if !loadedMessages.isEmpty {
-                    task.messages = loadedMessages
-                    // Propagate loaded history to agent.messages so ChatPanel displays them
-                    agent.messages = loadedMessages + agent.messages
+                let msgs = try sessionStorage.loadSessionHistory(sessionId: currentSessionId)
+                if !msgs.isEmpty {
+                    loadedMessages = msgs
+                    print("[TaskReconnect] Loaded \(msgs.count) messages from current session \(currentSessionId)")
+                } else {
+                    print("[TaskReconnect] Session \(currentSessionId) exists but has no messages")
                 }
             } catch {
-                print("[TaskManager] Failed to load session history for \(sessionId): \(error)")
+                print("[TaskReconnect] Failed to load history from current session \(currentSessionId): \(error)")
+            }
+
+            // If no messages yet and we had a different original session ID, try that
+            if loadedMessages.isEmpty && currentSessionId != sessionId {
+                do {
+                    let msgs = try sessionStorage.loadSessionHistory(sessionId: sessionId)
+                    if !msgs.isEmpty {
+                        loadedMessages = msgs
+                        print("[TaskReconnect] Loaded \(msgs.count) messages from original session \(sessionId)")
+                    } else {
+                        print("[TaskReconnect] Original session \(sessionId) exists but has no messages")
+                    }
+                } catch {
+                    print("[TaskReconnect] Failed to load history from original session \(sessionId): \(error)")
+                }
+            }
+
+            // Workspace-based fallback: try other sessions for the same workspace
+            if loadedMessages.isEmpty {
+                print("[TaskReconnect] Trying workspace-based session fallback for: \(task.workspacePath.path)")
+                loadedMessages = sessionStorage.loadSessionHistoryWithWorkspaceFallback(
+                    sessionId: currentSessionId,
+                    workspacePath: task.workspacePath
+                )
+                if !loadedMessages.isEmpty {
+                    print("[TaskReconnect] Workspace fallback loaded \(loadedMessages.count) messages")
+                }
+            }
+
+            if !loadedMessages.isEmpty {
+                task.messages = loadedMessages
+                // Propagate loaded history to agent.messages so ChatPanel displays them
+                agent.messages = loadedMessages + agent.messages
+                print("[TaskReconnect] Applied \(loadedMessages.count) messages to task and agent")
+            } else {
+                print("[TaskReconnect] No chat history found for task '\(task.name)'")
             }
 
             // If the session was replaced (fresh session), add a system message

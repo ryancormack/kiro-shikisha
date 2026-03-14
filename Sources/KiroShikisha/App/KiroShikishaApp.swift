@@ -52,27 +52,13 @@ struct KiroShikishaApp: App {
                     .map { (name: $0.name, id: $0.id) }
 
                 Task {
-                    await withTaskGroup(of: Void.self) { group in
-                        for taskInfo in tasksToReconnect {
-                            group.addTask {
-                                print("[TaskReconnect] Starting reconnect for: \(taskInfo.name)")
-                                do {
-                                    try await withThrowingTaskGroup(of: Void.self) { inner in
-                                        inner.addTask {
-                                            try await taskManager.reopenTask(id: taskInfo.id)
-                                        }
-                                        inner.addTask {
-                                            try await Task.sleep(for: .seconds(30))
-                                            throw CancellationError()
-                                        }
-                                        try await inner.next()
-                                        inner.cancelAll()
-                                    }
-                                    print("[TaskReconnect] Successfully reconnected: \(taskInfo.name)")
-                                } catch {
-                                    print("[TaskReconnect] Failed for \(taskInfo.name): \(error)")
-                                }
-                            }
+                    for taskInfo in tasksToReconnect {
+                        print("[TaskReconnect] Starting reconnect for: \(taskInfo.name)")
+                        do {
+                            try await taskManager.reopenTask(id: taskInfo.id)
+                            print("[TaskReconnect] Successfully reconnected: \(taskInfo.name)")
+                        } catch {
+                            print("[TaskReconnect] Failed for \(taskInfo.name): \(error)")
                         }
                     }
                 }
