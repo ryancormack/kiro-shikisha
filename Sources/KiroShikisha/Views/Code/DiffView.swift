@@ -21,26 +21,29 @@ struct DiffView: View {
             } else if fileDiff.hunks.isEmpty {
                 emptyDiffState
             } else {
-                ScrollView([.horizontal, .vertical]) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(fileDiff.hunks.enumerated()), id: \.element.id) { index, hunk in
-                            // Hunk header bar
-                            hunkHeaderView(hunk: hunk)
+                GeometryReader { geometry in
+                    ScrollView([.horizontal, .vertical]) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(fileDiff.hunks.enumerated()), id: \.element.id) { index, hunk in
+                                // Hunk header bar
+                                hunkHeaderView(hunk: hunk)
+                                    .frame(minWidth: geometry.size.width, alignment: .leading)
 
-                            // Hunk lines (collapsible)
-                            if !collapsedHunks.contains(hunk.id) {
-                                let wordDiffMap = computeWordDiffs(for: hunk)
-                                ForEach(Array(hunk.lines.enumerated()), id: \.element.id) { lineIndex, line in
-                                    DiffHunkLineView(
-                                        line: line,
-                                        wordHighlight: wordDiffMap[line.id]
-                                    )
+                                // Hunk lines (collapsible)
+                                if !collapsedHunks.contains(hunk.id) {
+                                    let wordDiffMap = computeWordDiffs(for: hunk)
+                                    ForEach(Array(hunk.lines.enumerated()), id: \.element.id) { lineIndex, line in
+                                        DiffHunkLineView(
+                                            line: line,
+                                            wordHighlight: wordDiffMap[line.id]
+                                        )
+                                        .frame(minWidth: geometry.size.width, alignment: .leading)
+                                    }
                                 }
                             }
                         }
+                        .textSelection(.enabled)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
                 }
             }
         }
