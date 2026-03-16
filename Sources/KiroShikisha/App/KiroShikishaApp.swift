@@ -58,6 +58,18 @@ struct KiroShikishaApp: App {
                             try await taskManager.reopenTask(id: taskInfo.id)
                             print("[TaskReconnect] Successfully reconnected: \(taskInfo.name)")
                         } catch {
+                            if let acpError = error as? ACPConnectionError,
+                               case .notLoggedIn = acpError {
+                                print("[TaskReconnect] Auth error for \(taskInfo.name): not logged in")
+                                appStateManager.addGlobalError(ErrorItem(
+                                    message: "Not logged in. Please run `kiro-cli login` in your terminal, then relaunch the app."
+                                ))
+                                if let task = taskManager.getTask(id: taskInfo.id) {
+                                    task.status = .needsAttention
+                                    task.attentionReason = "Not logged in"
+                                }
+                                break
+                            }
                             print("[TaskReconnect] Failed for \(taskInfo.name): \(error)")
                         }
                     }

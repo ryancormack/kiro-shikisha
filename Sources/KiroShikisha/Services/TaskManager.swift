@@ -355,29 +355,40 @@ public final class TaskManager {
 
         // Now load the agent with the effective session ID so ACP has the correct context
         print("[TaskReconnect] Loading agent with effective session ID: \(effectiveSessionId)")
-        let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: effectiveSessionId)
-        task.agentId = agent.id
-        task.sessionId = agent.sessionId?.value  // Update sessionId in case a fresh session was created
+        do {
+            let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: effectiveSessionId)
+            task.agentId = agent.id
+            task.sessionId = agent.sessionId?.value  // Update sessionId in case a fresh session was created
 
-        if !loadedMessages.isEmpty {
-            task.messages = loadedMessages
-            // Replace agent.messages entirely with loaded history to prevent
-            // duplication from session replay chunks
-            agent.messages = loadedMessages
-            agent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
-            print("[TaskReconnect] Applied \(loadedMessages.count) messages to task and agent")
-        } else {
-            print("[TaskReconnect] No chat history found for task '\(task.name)'")
+            if !loadedMessages.isEmpty {
+                task.messages = loadedMessages
+                // Replace agent.messages entirely with loaded history to prevent
+                // duplication from session replay chunks
+                agent.messages = loadedMessages
+                agent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
+                print("[TaskReconnect] Applied \(loadedMessages.count) messages to task and agent")
+            } else {
+                print("[TaskReconnect] No chat history found for task '\(task.name)'")
+            }
+
+            // If the session was replaced (fresh session), add a system message
+            if agent.sessionId?.value != effectiveSessionId {
+                task.messages.append(ChatMessage(role: .system, content: "Session reconnected with a fresh session."))
+            }
+
+            task.status = .working
+            task.lastActivityAt = Date()
+            persistCurrentState()
+        } catch {
+            if let acpError = error as? ACPConnectionError,
+               case .notLoggedIn = acpError {
+                task.status = .needsAttention
+                task.attentionReason = "Not logged in - please run kiro-cli login"
+                task.lastActivityAt = Date()
+                persistCurrentState()
+            }
+            throw error
         }
-
-        // If the session was replaced (fresh session), add a system message
-        if agent.sessionId?.value != effectiveSessionId {
-            task.messages.append(ChatMessage(role: .system, content: "Session reconnected with a fresh session."))
-        }
-
-        task.status = .working
-        task.lastActivityAt = Date()
-        persistCurrentState()
     }
 }
 

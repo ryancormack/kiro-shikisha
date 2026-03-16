@@ -237,7 +237,12 @@ public struct TaskAgentView: View {
                             do {
                                 try await taskManager.reopenTask(id: task.id)
                             } catch {
-                                actionError = error.localizedDescription
+                                if let acpError = error as? ACPConnectionError,
+                                   case .notLoggedIn = acpError {
+                                    actionError = "Not logged in. Please run `kiro-cli login` in your terminal to authenticate."
+                                } else {
+                                    actionError = error.localizedDescription
+                                }
                             }
                         }
                     }
@@ -250,7 +255,12 @@ public struct TaskAgentView: View {
                             do {
                                 try await taskManager.resumeTask(id: task.id)
                             } catch {
-                                actionError = error.localizedDescription
+                                if let acpError = error as? ACPConnectionError,
+                                   case .notLoggedIn = acpError {
+                                    actionError = "Not logged in. Please run `kiro-cli login` in your terminal to authenticate."
+                                } else {
+                                    actionError = error.localizedDescription
+                                }
                             }
                         }
                     }
@@ -469,7 +479,12 @@ struct TaskCompletedView: View {
                             do {
                                 try await taskManager.reopenTask(id: task.id)
                             } catch {
-                                reopenError = error.localizedDescription
+                                if let acpError = error as? ACPConnectionError,
+                                   case .notLoggedIn = acpError {
+                                    reopenError = "Not logged in. Please run `kiro-cli login` in your terminal to authenticate."
+                                } else {
+                                    reopenError = error.localizedDescription
+                                }
                             }
                             isReopening = false
                         }
@@ -587,7 +602,12 @@ struct TaskPausedView: View {
                                 do {
                                     try await taskManager.reopenTask(id: task.id)
                                 } catch {
-                                    resumeError = error.localizedDescription
+                                    if let acpError = error as? ACPConnectionError,
+                                       case .notLoggedIn = acpError {
+                                        resumeError = "Not logged in. Please run `kiro-cli login` in your terminal to authenticate."
+                                    } else {
+                                        resumeError = error.localizedDescription
+                                    }
                                 }
                                 isResuming = false
                             }
@@ -602,7 +622,12 @@ struct TaskPausedView: View {
                                 do {
                                     try await taskManager.resumeTask(id: task.id)
                                 } catch {
-                                    resumeError = error.localizedDescription
+                                    if let acpError = error as? ACPConnectionError,
+                                       case .notLoggedIn = acpError {
+                                        resumeError = "Not logged in. Please run `kiro-cli login` in your terminal to authenticate."
+                                    } else {
+                                        resumeError = error.localizedDescription
+                                    }
                                 }
                                 isResuming = false
                             }
@@ -699,7 +724,12 @@ struct TaskPausedView: View {
                     pendingMessage = nil
                 }
             } catch {
-                resumeError = error.localizedDescription
+                if let acpError = error as? ACPConnectionError,
+                   case .notLoggedIn = acpError {
+                    resumeError = "Not logged in. Please run `kiro-cli login` in your terminal to authenticate."
+                } else {
+                    resumeError = error.localizedDescription
+                }
             }
             isResuming = false
         }

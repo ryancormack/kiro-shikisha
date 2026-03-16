@@ -28,6 +28,7 @@ public struct MainView: View {
     public var body: some View {
         @Bindable var stateManager = appStateManager
 
+        ErrorBannerContainer(errors: $stateManager.globalErrors) {
         NavigationSplitView {
             SidebarView(
                 selectedTaskId: $stateManager.selectedTaskId,
@@ -89,6 +90,7 @@ public struct MainView: View {
                 showNewTaskSheet = false
             }
         }
+        } // ErrorBannerContainer
     }
 }
 

@@ -1,3 +1,5 @@
+import Foundation
+
 #if os(macOS)
 import SwiftUI
 
@@ -124,23 +126,6 @@ public struct ErrorBannerContainer<Content: View>: View {
     }
 }
 
-/// Model for error items displayed in the banner container
-public struct ErrorItem: Identifiable {
-    public let id: UUID
-    public let message: String
-    public let retryAction: (() -> Void)?
-    
-    public init(
-        id: UUID = UUID(),
-        message: String,
-        retryAction: (() -> Void)? = nil
-    ) {
-        self.id = id
-        self.message = message
-        self.retryAction = retryAction
-    }
-}
-
 #Preview("Error Banner") {
     VStack(spacing: 20) {
         ErrorBanner(
@@ -188,3 +173,20 @@ public struct ErrorItem: Identifiable {
     return PreviewContent()
 }
 #endif
+
+/// Model for error items displayed in the banner container
+public struct ErrorItem: Identifiable {
+    public let id: UUID
+    public let message: String
+    public let retryAction: (() -> Void)?
+    
+    public init(
+        id: UUID = UUID(),
+        message: String,
+        retryAction: (() -> Void)? = nil
+    ) {
+        self.id = id
+        self.message = message
+        self.retryAction = retryAction
+    }
+}

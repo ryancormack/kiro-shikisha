@@ -243,6 +243,27 @@ public final class AppStateManager {
         selectedTaskId = id
         saveState()
     }
+    
+    // MARK: - Global Error Management
+    
+    /// Global errors displayed as banners at the top of the app
+    public var globalErrors: [ErrorItem] = []
+    
+    /// Adds a global error, deduplicating by message
+    public func addGlobalError(_ error: ErrorItem) {
+        guard !globalErrors.contains(where: { $0.message == error.message }) else { return }
+        globalErrors.append(error)
+    }
+    
+    /// Removes a global error by ID
+    public func removeGlobalError(id: UUID) {
+        globalErrors.removeAll { $0.id == id }
+    }
+    
+    /// Clears all global errors
+    public func clearGlobalErrors() {
+        globalErrors.removeAll()
+    }
 }
 
 #else
@@ -315,6 +336,18 @@ public final class AppStateManager {
     public func clearSessionForWorkspace(_ workspaceId: UUID) {}
     public func selectWorkspace(_ id: UUID?) {}
     public func selectTask(_ id: UUID?) {}
+    
+    public var globalErrors: [ErrorItem] = []
+    public func addGlobalError(_ error: ErrorItem) {
+        guard !globalErrors.contains(where: { $0.message == error.message }) else { return }
+        globalErrors.append(error)
+    }
+    public func removeGlobalError(id: UUID) {
+        globalErrors.removeAll { $0.id == id }
+    }
+    public func clearGlobalErrors() {
+        globalErrors.removeAll()
+    }
 }
 #else
 @MainActor
@@ -378,6 +411,18 @@ public final class AppStateManager {
     public func clearSessionForWorkspace(_ workspaceId: UUID) {}
     public func selectWorkspace(_ id: UUID?) {}
     public func selectTask(_ id: UUID?) {}
+    
+    public var globalErrors: [ErrorItem] = []
+    public func addGlobalError(_ error: ErrorItem) {
+        guard !globalErrors.contains(where: { $0.message == error.message }) else { return }
+        globalErrors.append(error)
+    }
+    public func removeGlobalError(id: UUID) {
+        globalErrors.removeAll { $0.id == id }
+    }
+    public func clearGlobalErrors() {
+        globalErrors.removeAll()
+    }
 }
 #endif
 

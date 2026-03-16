@@ -147,6 +147,9 @@ public final class AgentManager {
             if let connection = connections.removeValue(forKey: agent.id) {
                 await connection.disconnect()
             }
+            if isNotLoggedInError(error) {
+                throw error
+            }
             throw error
         }
     }
@@ -203,6 +206,11 @@ public final class AgentManager {
             agents.removeValue(forKey: agent.id)
             if let connection = connections.removeValue(forKey: agent.id) {
                 await connection.disconnect()
+            }
+            
+            // Auth errors should not be retried or recovered
+            if isNotLoggedInError(error) {
+                throw error
             }
             
             // If the error is a stale session lock, retry session/load before falling back
@@ -287,7 +295,14 @@ public final class AgentManager {
         return false
     }
     
-    /// Stop and remove an agent
+    /// Checks if an error is a 'not logged in' authentication error
+    func isNotLoggedInError(_ error: Error) -> Bool {
+        if let acpError = error as? ACPConnectionError,
+           case .notLoggedIn = acpError {
+            return true
+        }
+        return false
+    }
     /// - Parameter id: The agent ID to stop
     public func stopAgent(id: UUID) async {
         // Cancel prompt task
@@ -740,6 +755,14 @@ public final class AgentManager {
         }
         return false
     }
+    
+    func isNotLoggedInError(_ error: Error) -> Bool {
+        if let acpError = error as? ACPConnectionError,
+           case .notLoggedIn = acpError {
+            return true
+        }
+        return false
+    }
 }
 #else
 // Fallback for platforms without Observation framework
@@ -818,6 +841,14 @@ public final class AgentManager {
         if case .jsonRpcError(_, _, let data) = protocolError,
            let message = data?.stringValue,
            message.contains("Session is active in another process") {
+            return true
+        }
+        return false
+    }
+    
+    func isNotLoggedInError(_ error: Error) -> Bool {
+        if let acpError = error as? ACPConnectionError,
+           case .notLoggedIn = acpError {
             return true
         }
         return false
