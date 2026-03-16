@@ -1499,4 +1499,128 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(messages[3].role, .assistant)
         XCTAssertEqual(messages[3].content, "Reply after")
     }
+
+    // MARK: - Workspace Fallback Effective Session ID Tests
+
+    func testWorkspaceFallbackReturnsEffectiveSessionIdOnFallback() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let workspaceCwd = "/tmp/my-project"
+        let primarySessionId = "session-empty"
+        let fallbackSessionId = "session-with-data"
+
+        // Create metadata for both sessions pointing to the same workspace
+        let metadata1 = """
+        {"session_id":"\(primarySessionId)","cwd":"\(workspaceCwd)","last_modified":1700000000}
+        """
+        let metadata2 = """
+        {"session_id":"\(fallbackSessionId)","cwd":"\(workspaceCwd)","last_modified":1700000100}
+        """
+        try metadata1.write(to: tempDir.appendingPathComponent("\(primarySessionId).json"), atomically: true, encoding: .utf8)
+        try metadata2.write(to: tempDir.appendingPathComponent("\(fallbackSessionId).json"), atomically: true, encoding: .utf8)
+
+        // Create JSONL only for the fallback session (primary has no history file)
+        let events = [
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello from fallback"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Fallback reply"}]}}"#
+        ]
+        try events.joined(separator: "\n").write(
+            to: tempDir.appendingPathComponent("\(fallbackSessionId).jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let workspaceURL = URL(fileURLWithPath: workspaceCwd)
+        let result = storage.loadSessionHistoryWithWorkspaceFallbackResult(
+            sessionId: primarySessionId,
+            workspacePath: workspaceURL
+        )
+
+        XCTAssertEqual(result.messages.count, 2)
+        XCTAssertEqual(result.effectiveSessionId, fallbackSessionId,
+            "effectiveSessionId should be the fallback session that had messages")
+        XCTAssertEqual(result.messages[0].content, "Hello from fallback")
+        XCTAssertEqual(result.messages[1].content, "Fallback reply")
+    }
+
+    func testWorkspaceFallbackReturnsNilEffectiveSessionIdWhenNoMessages() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let workspaceURL = URL(fileURLWithPath: "/tmp/nonexistent-project")
+        let result = storage.loadSessionHistoryWithWorkspaceFallbackResult(
+            sessionId: "nonexistent-session",
+            workspacePath: workspaceURL
+        )
+
+        XCTAssertTrue(result.messages.isEmpty)
+        XCTAssertNil(result.effectiveSessionId,
+            "effectiveSessionId should be nil when no messages are found")
+    }
+
+    func testWorkspaceFallbackReturnsPrimarySessionIdWhenPrimaryHasHistory() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let workspaceCwd = "/tmp/my-project"
+        let primarySessionId = "session-with-data"
+
+        // Create metadata for the primary session
+        let metadata = """
+        {"session_id":"\(primarySessionId)","cwd":"\(workspaceCwd)","last_modified":1700000000}
+        """
+        try metadata.write(to: tempDir.appendingPathComponent("\(primarySessionId).json"), atomically: true, encoding: .utf8)
+
+        // Create JSONL for the primary session
+        let events = [
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Hi there"}]}}"#
+        ]
+        try events.joined(separator: "\n").write(
+            to: tempDir.appendingPathComponent("\(primarySessionId).jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let workspaceURL = URL(fileURLWithPath: workspaceCwd)
+        let result = storage.loadSessionHistoryWithWorkspaceFallbackResult(
+            sessionId: primarySessionId,
+            workspacePath: workspaceURL
+        )
+
+        XCTAssertEqual(result.messages.count, 2)
+        XCTAssertEqual(result.effectiveSessionId, primarySessionId,
+            "effectiveSessionId should be the primary session when it has history")
+    }
+
+    // MARK: - Agent isReplayingSession Tests
+
+    func testAgentIsReplayingSessionDefaultsFalse() async throws {
+        await MainActor.run {
+            let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+            let agent = Agent(name: "Test Agent", workspace: workspace)
+            XCTAssertFalse(agent.isReplayingSession,
+                "isReplayingSession should default to false")
+        }
+    }
+
+    func testAgentIsReplayingSessionIsSettable() async throws {
+        await MainActor.run {
+            let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+            let agent = Agent(name: "Test Agent", workspace: workspace)
+
+            agent.isReplayingSession = true
+            XCTAssertTrue(agent.isReplayingSession)
+
+            agent.isReplayingSession = false
+            XCTAssertFalse(agent.isReplayingSession)
+        }
+    }
 }

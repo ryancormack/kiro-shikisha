@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 /// Centralized UI constants for consistent styling across the application
@@ -26,7 +27,6 @@ enum DesignConstants {
     static let lineNumberGutterWidth: CGFloat = 44
     static let changeIndicatorWidth: CGFloat = 4
 
-    #if os(macOS)
     // MARK: - Background Colors (macOS only)
 
     static var controlBackground: Color {
@@ -40,5 +40,5 @@ enum DesignConstants {
     static var separatorColor: Color {
         Color(nsColor: .separatorColor)
     }
-    #endif
 }
+#endif

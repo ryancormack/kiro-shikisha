@@ -332,6 +332,26 @@ public final class SessionStorage: Sendable {
     ///   - workspacePath: The workspace path to find alternative sessions
     /// - Returns: Array of ChatMessage, or empty array if nothing found
     public func loadSessionHistoryWithWorkspaceFallback(sessionId: String, workspacePath: URL) -> [ChatMessage] {
+        let result = loadSessionHistoryWithWorkspaceFallbackResult(sessionId: sessionId, workspacePath: workspacePath)
+        return result.messages
+    }
+
+    /// Result of loading session history with workspace fallback, including the effective session ID
+    public struct SessionHistoryResult {
+        /// The loaded chat messages
+        public let messages: [ChatMessage]
+        /// The session ID that the messages came from, or nil if no messages were found.
+        /// This may differ from the requested sessionId if a workspace fallback was used.
+        public let effectiveSessionId: String?
+    }
+
+    /// Load session history with workspace-based fallback, returning the effective session ID
+    /// If the given session has no history, tries other sessions for the same workspace
+    /// - Parameters:
+    ///   - sessionId: The primary session ID to try first
+    ///   - workspacePath: The workspace path to find alternative sessions
+    /// - Returns: SessionHistoryResult containing messages and the effective session ID
+    public func loadSessionHistoryWithWorkspaceFallbackResult(sessionId: String, workspacePath: URL) -> SessionHistoryResult {
         print("[SessionStorage] loadSessionHistoryWithWorkspaceFallback: sessionId=\(sessionId), workspace=\(workspacePath.path)")
         
         // First try the given session ID
@@ -339,7 +359,7 @@ public final class SessionStorage: Sendable {
             let messages = try loadSessionHistory(sessionId: sessionId)
             if !messages.isEmpty {
                 print("[SessionStorage] Found \(messages.count) messages from primary session \(sessionId)")
-                return messages
+                return SessionHistoryResult(messages: messages, effectiveSessionId: sessionId)
             }
             print("[SessionStorage] Primary session \(sessionId) exists but has no messages")
         } catch {
@@ -366,7 +386,7 @@ public final class SessionStorage: Sendable {
                 let messages = try loadSessionHistory(sessionId: candidate.sessionId)
                 if !messages.isEmpty {
                     print("[SessionStorage] Workspace fallback found \(messages.count) messages from session \(candidate.sessionId)")
-                    return messages
+                    return SessionHistoryResult(messages: messages, effectiveSessionId: candidate.sessionId)
                 }
                 print("[SessionStorage] Fallback session \(candidate.sessionId) has no messages")
             } catch {
@@ -375,7 +395,7 @@ public final class SessionStorage: Sendable {
         }
         
         print("[SessionStorage] No chat history found via workspace fallback")
-        return []
+        return SessionHistoryResult(messages: [], effectiveSessionId: nil)
     }
     
     // MARK: - Private Helpers

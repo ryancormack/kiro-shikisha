@@ -188,10 +188,12 @@ public final class AgentManager {
             sessionStorage.removeSessionLockFile(sessionId: sessionId)
             print("[ACP] Proactively cleaned up lock file for session \(sessionId)")
             
+            agent.isReplayingSession = true
             _ = try await connection.loadSession(
                 sessionId: sessionIdValue,
                 cwd: workspace.path.path
             )
+            agent.isReplayingSession = false
             
             agent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
             agent.status = .idle
@@ -241,10 +243,12 @@ public final class AgentManager {
                     )
                     connections[retryAgent.id] = retryConnection
                     
+                    retryAgent.isReplayingSession = true
                     _ = try await retryConnection.loadSession(
                         sessionId: sessionIdValue,
                         cwd: workspace.path.path
                     )
+                    retryAgent.isReplayingSession = false
                     
                     print("[ACP] Session loaded successfully on retry: \(sessionId)")
                     retryAgent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
@@ -514,6 +518,9 @@ public final class AgentManager {
     // MARK: - Private Session Update Handlers
     
     private func handleAgentMessageChunk(_ chunk: AgentMessageChunk, for agent: Agent) {
+        // Discard replay chunks during session loading to prevent duplicating loaded history
+        guard !agent.isReplayingSession else { return }
+        
         guard case .text(let textContent) = chunk.content else { return }
         let text = textContent.text
         
