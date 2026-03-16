@@ -38,6 +38,7 @@ struct DebugLogView: View {
                         }
                     }
                     .padding(.vertical, DesignConstants.spacingXS)
+                    .frame(minHeight: geometry.size.height, alignment: .top)
                 }
                 .onChange(of: agent.debugLog.count) { _, _ in
                     if let last = agent.debugLog.last {
