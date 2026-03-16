@@ -277,7 +277,7 @@ public actor ACPConnection {
         // Log stderr in background and accumulate for error detection
         nonisolated(unsafe) var stderrBuffer = ""
         nonisolated(unsafe) var stderrFinished = false
-        Task.detached { [stderr] in
+        Task.detached { @Sendable [stderr] in
             while true {
                 let data = stderr.fileHandleForReading.availableData
                 if data.isEmpty {
