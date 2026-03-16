@@ -43,6 +43,7 @@ struct DiffView: View {
                             }
                         }
                         .textSelection(.enabled)
+                        .frame(minHeight: geometry.size.height, alignment: .top)
                     }
                 }
             }
