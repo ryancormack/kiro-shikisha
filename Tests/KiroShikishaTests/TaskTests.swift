@@ -1623,4 +1623,99 @@ final class TaskTests: XCTestCase {
             XCTAssertFalse(agent.isReplayingSession)
         }
     }
+
+    // MARK: - Delete Task Safety Tests
+
+    @MainActor
+    func testDeleteTaskDoesNotRemoveSessionFiles() async throws {
+        // Create a temp directory with a fake session JSONL file
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "session-to-preserve"
+        let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
+        let jsonFile = tempDir.appendingPathComponent("\(sessionId).json")
+
+        // Write fake session files
+        let events = [
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello agent"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Hi there!"}]}}"#
+        ]
+        try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
+        try "{\"session_id\":\"\(sessionId)\",\"cwd\":\"/tmp/project\"}".write(to: jsonFile, atomically: true, encoding: .utf8)
+
+        // Verify files exist before deletion
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonlFile.path), "JSONL file should exist before deleteTask")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonFile.path), "JSON file should exist before deleteTask")
+
+        // Create a TaskManager and a task with the session ID
+        let taskManager = TaskManager()
+        let appStateManager = AppStateManager()
+        taskManager.appStateManager = appStateManager
+
+        let path = URL(fileURLWithPath: "/tmp/project")
+        let request = TaskCreationRequest(name: "Task to delete", workspacePath: path)
+        let task = taskManager.createTask(from: request)
+        task.sessionId = sessionId
+        task.status = .working
+
+        XCTAssertEqual(taskManager.tasks.count, 1)
+        XCTAssertNotNil(taskManager.tasks[task.id])
+
+        // Delete the task
+        await taskManager.deleteTask(id: task.id)
+
+        // Verify the task is removed from the dictionary
+        XCTAssertEqual(taskManager.tasks.count, 0, "Task should be removed from tasks dictionary")
+        XCTAssertNil(taskManager.tasks[task.id], "Deleted task should not be found")
+
+        // Verify session files are still intact (deleteTask only removes app tracking data)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonlFile.path),
+            "Session JSONL file must be preserved after deleteTask")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonFile.path),
+            "Session JSON metadata file must be preserved after deleteTask")
+
+        // Verify the JSONL content is unchanged
+        let content = try String(contentsOf: jsonlFile, encoding: .utf8)
+        XCTAssertTrue(content.contains("Hello agent"), "Session JSONL content should be untouched")
+        XCTAssertTrue(content.contains("Hi there!"), "Session JSONL content should be untouched")
+    }
+
+    @MainActor
+    func testDeleteTaskRemovesFromAllTaskLists() async throws {
+        let taskManager = TaskManager()
+        let appStateManager = AppStateManager()
+        taskManager.appStateManager = appStateManager
+
+        let path = URL(fileURLWithPath: "/tmp/project")
+
+        // Create tasks in different states
+        let workingTask = taskManager.createTask(from: TaskCreationRequest(name: "Working", workspacePath: path))
+        workingTask.status = .working
+        workingTask.sessionId = "session-working"
+
+        let completedTask = taskManager.createTask(from: TaskCreationRequest(name: "Completed", workspacePath: path))
+        completedTask.status = .completed
+        completedTask.sessionId = "session-completed"
+
+        let pausedTask = taskManager.createTask(from: TaskCreationRequest(name: "Paused", workspacePath: path))
+        pausedTask.status = .paused
+        pausedTask.sessionId = "session-paused"
+
+        XCTAssertEqual(taskManager.tasks.count, 3)
+
+        // Delete each task and verify removal
+        await taskManager.deleteTask(id: workingTask.id)
+        XCTAssertEqual(taskManager.tasks.count, 2)
+        XCTAssertNil(taskManager.tasks[workingTask.id])
+
+        await taskManager.deleteTask(id: completedTask.id)
+        XCTAssertEqual(taskManager.tasks.count, 1)
+        XCTAssertNil(taskManager.tasks[completedTask.id])
+
+        await taskManager.deleteTask(id: pausedTask.id)
+        XCTAssertEqual(taskManager.tasks.count, 0)
+        XCTAssertNil(taskManager.tasks[pausedTask.id])
+    }
 }

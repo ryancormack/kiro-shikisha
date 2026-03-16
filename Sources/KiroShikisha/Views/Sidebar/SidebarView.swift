@@ -70,6 +70,9 @@ public struct SidebarView: View {
                                 Button("Cancel Task", role: .destructive) {
                                     Task { await taskManager.cancelTask(id: task.id) }
                                 }
+                                Button("Delete Task", role: .destructive) {
+                                    taskToDelete = task
+                                }
                             }
                     }
                 }
@@ -89,6 +92,9 @@ public struct SidebarView: View {
                                 }
                                 Button("Cancel Task", role: .destructive) {
                                     Task { await taskManager.cancelTask(id: task.id) }
+                                }
+                                Button("Delete Task", role: .destructive) {
+                                    taskToDelete = task
                                 }
                             }
                     }
@@ -124,6 +130,9 @@ public struct SidebarView: View {
                                 }
                                 Button("Cancel Task", role: .destructive) {
                                     Task { await taskManager.cancelTask(id: task.id) }
+                                }
+                                Button("Delete Task", role: .destructive) {
+                                    taskToDelete = task
                                 }
                             }
                     }
@@ -181,7 +190,14 @@ public struct SidebarView: View {
             }
         } message: {
             if let task = taskToDelete {
-                Text("Delete \"\(task.name)\"? This action cannot be undone.")
+                switch task.status {
+                case .starting, .working, .needsAttention:
+                    Text("This task is currently in progress. Its agent will be stopped. Are you sure you want to delete it?\n\nThe kiro session data will be preserved.")
+                case .paused:
+                    Text("This task is paused. Are you sure you want to delete it?\n\nThe kiro session data will be preserved.")
+                case .completed, .failed, .cancelled, .pending:
+                    Text("Delete \"\(task.name)\"?\n\nThe kiro session data will be preserved.")
+                }
             }
         }
     }
