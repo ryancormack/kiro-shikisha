@@ -69,7 +69,7 @@ public struct SessionRow: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color.secondary.opacity(0.15))
-                            .cornerRadius(4)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                     }
                 }
                 

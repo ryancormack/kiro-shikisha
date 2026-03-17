@@ -1499,4 +1499,223 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(messages[3].role, .assistant)
         XCTAssertEqual(messages[3].content, "Reply after")
     }
+
+    // MARK: - Workspace Fallback Effective Session ID Tests
+
+    func testWorkspaceFallbackReturnsEffectiveSessionIdOnFallback() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let workspaceCwd = "/tmp/my-project"
+        let primarySessionId = "session-empty"
+        let fallbackSessionId = "session-with-data"
+
+        // Create metadata for both sessions pointing to the same workspace
+        let metadata1 = """
+        {"session_id":"\(primarySessionId)","cwd":"\(workspaceCwd)","last_modified":1700000000}
+        """
+        let metadata2 = """
+        {"session_id":"\(fallbackSessionId)","cwd":"\(workspaceCwd)","last_modified":1700000100}
+        """
+        try metadata1.write(to: tempDir.appendingPathComponent("\(primarySessionId).json"), atomically: true, encoding: .utf8)
+        try metadata2.write(to: tempDir.appendingPathComponent("\(fallbackSessionId).json"), atomically: true, encoding: .utf8)
+
+        // Create JSONL only for the fallback session (primary has no history file)
+        let events = [
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello from fallback"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Fallback reply"}]}}"#
+        ]
+        try events.joined(separator: "\n").write(
+            to: tempDir.appendingPathComponent("\(fallbackSessionId).jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let workspaceURL = URL(fileURLWithPath: workspaceCwd)
+        let result = storage.loadSessionHistoryWithWorkspaceFallbackResult(
+            sessionId: primarySessionId,
+            workspacePath: workspaceURL
+        )
+
+        XCTAssertEqual(result.messages.count, 2)
+        XCTAssertEqual(result.effectiveSessionId, fallbackSessionId,
+            "effectiveSessionId should be the fallback session that had messages")
+        XCTAssertEqual(result.messages[0].content, "Hello from fallback")
+        XCTAssertEqual(result.messages[1].content, "Fallback reply")
+    }
+
+    func testWorkspaceFallbackReturnsNilEffectiveSessionIdWhenNoMessages() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let workspaceURL = URL(fileURLWithPath: "/tmp/nonexistent-project")
+        let result = storage.loadSessionHistoryWithWorkspaceFallbackResult(
+            sessionId: "nonexistent-session",
+            workspacePath: workspaceURL
+        )
+
+        XCTAssertTrue(result.messages.isEmpty)
+        XCTAssertNil(result.effectiveSessionId,
+            "effectiveSessionId should be nil when no messages are found")
+    }
+
+    func testWorkspaceFallbackReturnsPrimarySessionIdWhenPrimaryHasHistory() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let workspaceCwd = "/tmp/my-project"
+        let primarySessionId = "session-with-data"
+
+        // Create metadata for the primary session
+        let metadata = """
+        {"session_id":"\(primarySessionId)","cwd":"\(workspaceCwd)","last_modified":1700000000}
+        """
+        try metadata.write(to: tempDir.appendingPathComponent("\(primarySessionId).json"), atomically: true, encoding: .utf8)
+
+        // Create JSONL for the primary session
+        let events = [
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Hi there"}]}}"#
+        ]
+        try events.joined(separator: "\n").write(
+            to: tempDir.appendingPathComponent("\(primarySessionId).jsonl"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let workspaceURL = URL(fileURLWithPath: workspaceCwd)
+        let result = storage.loadSessionHistoryWithWorkspaceFallbackResult(
+            sessionId: primarySessionId,
+            workspacePath: workspaceURL
+        )
+
+        XCTAssertEqual(result.messages.count, 2)
+        XCTAssertEqual(result.effectiveSessionId, primarySessionId,
+            "effectiveSessionId should be the primary session when it has history")
+    }
+
+    // MARK: - Agent isReplayingSession Tests
+
+    func testAgentIsReplayingSessionDefaultsFalse() async throws {
+        await MainActor.run {
+            let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+            let agent = Agent(name: "Test Agent", workspace: workspace)
+            XCTAssertFalse(agent.isReplayingSession,
+                "isReplayingSession should default to false")
+        }
+    }
+
+    func testAgentIsReplayingSessionIsSettable() async throws {
+        await MainActor.run {
+            let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+            let agent = Agent(name: "Test Agent", workspace: workspace)
+
+            agent.isReplayingSession = true
+            XCTAssertTrue(agent.isReplayingSession)
+
+            agent.isReplayingSession = false
+            XCTAssertFalse(agent.isReplayingSession)
+        }
+    }
+
+    // MARK: - Delete Task Safety Tests
+
+    @MainActor
+    func testDeleteTaskDoesNotRemoveSessionFiles() async throws {
+        // Create a temp directory with a fake session JSONL file
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "session-to-preserve"
+        let jsonlFile = tempDir.appendingPathComponent("\(sessionId).jsonl")
+        let jsonFile = tempDir.appendingPathComponent("\(sessionId).json")
+
+        // Write fake session files
+        let events = [
+            #"{"version":"v1","kind":"Prompt","data":{"message_id":"msg-001","content":[{"kind":"text","data":"Hello agent"}]}}"#,
+            #"{"version":"v1","kind":"AssistantMessage","data":{"message_id":"msg-002","content":[{"kind":"text","data":"Hi there!"}]}}"#
+        ]
+        try events.joined(separator: "\n").write(to: jsonlFile, atomically: true, encoding: .utf8)
+        try "{\"session_id\":\"\(sessionId)\",\"cwd\":\"/tmp/project\"}".write(to: jsonFile, atomically: true, encoding: .utf8)
+
+        // Verify files exist before deletion
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonlFile.path), "JSONL file should exist before deleteTask")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonFile.path), "JSON file should exist before deleteTask")
+
+        // Create a TaskManager and a task with the session ID
+        let taskManager = TaskManager()
+        let appStateManager = AppStateManager()
+        taskManager.appStateManager = appStateManager
+
+        let path = URL(fileURLWithPath: "/tmp/project")
+        let request = TaskCreationRequest(name: "Task to delete", workspacePath: path)
+        let task = taskManager.createTask(from: request)
+        task.sessionId = sessionId
+        task.status = .working
+
+        XCTAssertEqual(taskManager.tasks.count, 1)
+        XCTAssertNotNil(taskManager.tasks[task.id])
+
+        // Delete the task
+        await taskManager.deleteTask(id: task.id)
+
+        // Verify the task is removed from the dictionary
+        XCTAssertEqual(taskManager.tasks.count, 0, "Task should be removed from tasks dictionary")
+        XCTAssertNil(taskManager.tasks[task.id], "Deleted task should not be found")
+
+        // Verify session files are still intact (deleteTask only removes app tracking data)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonlFile.path),
+            "Session JSONL file must be preserved after deleteTask")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: jsonFile.path),
+            "Session JSON metadata file must be preserved after deleteTask")
+
+        // Verify the JSONL content is unchanged
+        let content = try String(contentsOf: jsonlFile, encoding: .utf8)
+        XCTAssertTrue(content.contains("Hello agent"), "Session JSONL content should be untouched")
+        XCTAssertTrue(content.contains("Hi there!"), "Session JSONL content should be untouched")
+    }
+
+    @MainActor
+    func testDeleteTaskRemovesFromAllTaskLists() async throws {
+        let taskManager = TaskManager()
+        let appStateManager = AppStateManager()
+        taskManager.appStateManager = appStateManager
+
+        let path = URL(fileURLWithPath: "/tmp/project")
+
+        // Create tasks in different states
+        let workingTask = taskManager.createTask(from: TaskCreationRequest(name: "Working", workspacePath: path))
+        workingTask.status = .working
+        workingTask.sessionId = "session-working"
+
+        let completedTask = taskManager.createTask(from: TaskCreationRequest(name: "Completed", workspacePath: path))
+        completedTask.status = .completed
+        completedTask.sessionId = "session-completed"
+
+        let pausedTask = taskManager.createTask(from: TaskCreationRequest(name: "Paused", workspacePath: path))
+        pausedTask.status = .paused
+        pausedTask.sessionId = "session-paused"
+
+        XCTAssertEqual(taskManager.tasks.count, 3)
+
+        // Delete each task and verify removal
+        await taskManager.deleteTask(id: workingTask.id)
+        XCTAssertEqual(taskManager.tasks.count, 2)
+        XCTAssertNil(taskManager.tasks[workingTask.id])
+
+        await taskManager.deleteTask(id: completedTask.id)
+        XCTAssertEqual(taskManager.tasks.count, 1)
+        XCTAssertNil(taskManager.tasks[completedTask.id])
+
+        await taskManager.deleteTask(id: pausedTask.id)
+        XCTAssertEqual(taskManager.tasks.count, 0)
+        XCTAssertNil(taskManager.tasks[pausedTask.id])
+    }
 }

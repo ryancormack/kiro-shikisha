@@ -103,13 +103,13 @@ struct InlineToolCallView: View {
                 .frame(maxHeight: 200)
                 .padding(8)
                 .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                 .padding(.horizontal, 10)
                 .padding(.bottom, 6)
             }
         }
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
     }
 }
 #endif

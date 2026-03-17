@@ -197,7 +197,7 @@ struct WorkspaceAgentRow: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(Color.secondary.opacity(0.2))
-                        .cornerRadius(4)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                 }
                 
                 Image(systemName: "chevron.right")
@@ -207,11 +207,11 @@ struct WorkspaceAgentRow: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
                     .fill(isHovered ? Color.accentColor.opacity(0.1) : Color(nsColor: .windowBackgroundColor))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
                     .stroke(isHovered ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1)
             )
         }

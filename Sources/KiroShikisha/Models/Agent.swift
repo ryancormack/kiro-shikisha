@@ -46,6 +46,9 @@ public final class Agent: Identifiable {
     public var debugLog: [DebugLogEntry] = []
     /// All tool calls by ID, persisted after completion for chat history
     public var toolCallHistory: [String: ToolCallUpdate] = [:]
+    /// Whether this agent is currently replaying a session (loading session state from ACP).
+    /// When true, incoming message chunks from session replay should be discarded.
+    public var isReplayingSession: Bool = false
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
@@ -94,6 +97,9 @@ public final class Agent: Identifiable {
     public var activeToolCalls: [ToolCallUpdate]
     public var fileChanges: [FileChange]
     public var errorMessage: String?
+    /// Whether this agent is currently replaying a session (loading session state from ACP).
+    /// When true, incoming message chunks from session replay should be discarded.
+    public var isReplayingSession: Bool = false
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {

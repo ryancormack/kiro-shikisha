@@ -147,6 +147,9 @@ public final class AgentManager {
             if let connection = connections.removeValue(forKey: agent.id) {
                 await connection.disconnect()
             }
+            if isNotLoggedInError(error) {
+                throw error
+            }
             throw error
         }
     }
@@ -188,10 +191,12 @@ public final class AgentManager {
             sessionStorage.removeSessionLockFile(sessionId: sessionId)
             print("[ACP] Proactively cleaned up lock file for session \(sessionId)")
             
+            agent.isReplayingSession = true
             _ = try await connection.loadSession(
                 sessionId: sessionIdValue,
                 cwd: workspace.path.path
             )
+            agent.isReplayingSession = false
             
             agent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
             agent.status = .idle
@@ -201,6 +206,11 @@ public final class AgentManager {
             agents.removeValue(forKey: agent.id)
             if let connection = connections.removeValue(forKey: agent.id) {
                 await connection.disconnect()
+            }
+            
+            // Auth errors should not be retried or recovered
+            if isNotLoggedInError(error) {
+                throw error
             }
             
             // If the error is a stale session lock, retry session/load before falling back
@@ -241,10 +251,12 @@ public final class AgentManager {
                     )
                     connections[retryAgent.id] = retryConnection
                     
+                    retryAgent.isReplayingSession = true
                     _ = try await retryConnection.loadSession(
                         sessionId: sessionIdValue,
                         cwd: workspace.path.path
                     )
+                    retryAgent.isReplayingSession = false
                     
                     print("[ACP] Session loaded successfully on retry: \(sessionId)")
                     retryAgent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
@@ -283,7 +295,14 @@ public final class AgentManager {
         return false
     }
     
-    /// Stop and remove an agent
+    /// Checks if an error is a 'not logged in' authentication error
+    func isNotLoggedInError(_ error: Error) -> Bool {
+        if let acpError = error as? ACPConnectionError,
+           case .notLoggedIn = acpError {
+            return true
+        }
+        return false
+    }
     /// - Parameter id: The agent ID to stop
     public func stopAgent(id: UUID) async {
         // Cancel prompt task
@@ -514,6 +533,9 @@ public final class AgentManager {
     // MARK: - Private Session Update Handlers
     
     private func handleAgentMessageChunk(_ chunk: AgentMessageChunk, for agent: Agent) {
+        // Discard replay chunks during session loading to prevent duplicating loaded history
+        guard !agent.isReplayingSession else { return }
+        
         guard case .text(let textContent) = chunk.content else { return }
         let text = textContent.text
         
@@ -733,6 +755,14 @@ public final class AgentManager {
         }
         return false
     }
+    
+    func isNotLoggedInError(_ error: Error) -> Bool {
+        if let acpError = error as? ACPConnectionError,
+           case .notLoggedIn = acpError {
+            return true
+        }
+        return false
+    }
 }
 #else
 // Fallback for platforms without Observation framework
@@ -811,6 +841,14 @@ public final class AgentManager {
         if case .jsonRpcError(_, _, let data) = protocolError,
            let message = data?.stringValue,
            message.contains("Session is active in another process") {
+            return true
+        }
+        return false
+    }
+    
+    func isNotLoggedInError(_ error: Error) -> Bool {
+        if let acpError = error as? ACPConnectionError,
+           case .notLoggedIn = acpError {
             return true
         }
         return false

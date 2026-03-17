@@ -79,7 +79,7 @@ public struct WorkspaceRow: View {
                             .padding(.vertical, 1)
                             .background(Color.purple.opacity(0.15))
                             .foregroundColor(.purple)
-                            .cornerRadius(3)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                     }
                 }
                 
@@ -109,7 +109,7 @@ public struct WorkspaceRow: View {
                     .padding(.vertical, 3)
                     .background(Color.blue.opacity(0.15))
                     .foregroundColor(.blue)
-                    .cornerRadius(4)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                 }
                 .buttonStyle(.plain)
                 .help("View \(count) previous session\(count == 1 ? "" : "s")")
@@ -137,7 +137,7 @@ public struct WorkspaceRow: View {
         .padding(.vertical, 3)
         .background(Color.blue)
         .foregroundColor(.white)
-        .cornerRadius(8)
+        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
         .help("\(activeAgentCount) active agent\(activeAgentCount == 1 ? "" : "s") in workspace")
     }
 }

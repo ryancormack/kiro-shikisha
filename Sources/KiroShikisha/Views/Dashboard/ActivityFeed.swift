@@ -163,7 +163,7 @@ struct ActivityEventRow: View {
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(Color.purple.opacity(0.1))
-                            .cornerRadius(3)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                         }
                     }
                     

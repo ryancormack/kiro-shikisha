@@ -126,7 +126,7 @@ public struct AgentCard: View {
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge)
                     .fill(Color(nsColor: .controlBackgroundColor))
                     .shadow(
                         color: isHovered ? .black.opacity(0.15) : .black.opacity(0.05),
@@ -135,7 +135,7 @@ public struct AgentCard: View {
                     )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge)
                     .stroke(isHovered ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 2)
             )
             .scaleEffect(isHovered ? 1.02 : 1.0)

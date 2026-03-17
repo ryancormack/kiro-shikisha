@@ -8,6 +8,7 @@ public enum ACPConnectionError: Error, Sendable, LocalizedError {
     case processSpawnFailed(String)
     case processTerminated(Int32)
     case platformNotSupported
+    case notLoggedIn
     
     public var errorDescription: String? {
         switch self {
@@ -15,6 +16,7 @@ public enum ACPConnectionError: Error, Sendable, LocalizedError {
         case .processSpawnFailed(let msg): return "Failed to start kiro-cli: \(msg)"
         case .processTerminated(let code): return "kiro-cli exited with code \(code)"
         case .platformNotSupported: return "Platform not supported"
+        case .notLoggedIn: return "Not logged in. Please run `kiro-cli login` in your terminal to authenticate."
         }
     }
 }
@@ -272,13 +274,19 @@ public actor ACPConnection {
             throw ACPConnectionError.processSpawnFailed(error.localizedDescription)
         }
         
-        // Log stderr in background
-        Task.detached { [stderr] in
+        // Log stderr in background and accumulate for error detection
+        nonisolated(unsafe) var stderrBuffer = ""
+        nonisolated(unsafe) var stderrFinished = false
+        Task.detached { @Sendable [stderr] in
             while true {
                 let data = stderr.fileHandleForReading.availableData
-                if data.isEmpty { break }
+                if data.isEmpty {
+                    stderrFinished = true
+                    break
+                }
                 if let text = String(data: data, encoding: .utf8) {
                     print("[ACP-stderr] \(text)")
+                    stderrBuffer += text
                 }
             }
         }
@@ -297,7 +305,19 @@ public actor ACPConnection {
         clientConnection = connection
         
         // Connect performs initialization
-        _ = try await connection.connect()
+        do {
+            _ = try await connection.connect()
+        } catch {
+            // Brief delay to let stderr data accumulate
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            
+            let stderrText = stderrBuffer
+            if stderrText.localizedCaseInsensitiveContains("not logged in") ||
+               stderrText.localizedCaseInsensitiveContains("please log in with kiro-cli login") {
+                throw ACPConnectionError.notLoggedIn
+            }
+            throw error
+        }
     }
 
     /// Synchronously kill the kiro-cli process (for app quit)

@@ -15,7 +15,7 @@ public struct CodePanel: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Tab picker
+            // Compact tab picker
             Picker("", selection: $selectedTab) {
                 ForEach(CodePanelTab.allCases, id: \.self) { tab in
                     Text(tab.title)
@@ -23,14 +23,16 @@ public struct CodePanel: View {
                 }
             }
             .pickerStyle(.segmented)
-            .padding()
+            .padding(.horizontal, DesignConstants.spacingMD)
+            .padding(.vertical, DesignConstants.spacingSM)
 
             Divider()
 
-            // Tab content
+            // Tab content - fills available space
             switch selectedTab {
             case .filesChanged:
                 FilesChangedView(workspacePath: workspacePath)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .terminal:
                 TerminalOutputView(agent: agent)
             case .debug:
@@ -82,6 +84,6 @@ enum CodePanelTab: String, CaseIterable {
     )
 
     return CodePanel(agent: agent, workspacePath: URL(fileURLWithPath: "/Users/test/Projects/test-project"))
-        .frame(width: 300, height: 400)
+        .frame(width: 1000, height: 650)
 }
 #endif

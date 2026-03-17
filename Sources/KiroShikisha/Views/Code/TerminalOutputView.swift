@@ -131,9 +131,9 @@ struct TerminalEntryView: View {
                 .background(Color(nsColor: .textBackgroundColor))
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
                 .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
         )
     }
@@ -236,7 +236,7 @@ struct StatusIndicator: View {
     )
     
     TerminalOutputView(agent: agent)
-        .frame(width: 500, height: 400)
+        .frame(width: 1000, height: 650)
 }
 
 #Preview("Empty State") {
@@ -250,6 +250,6 @@ struct StatusIndicator: View {
     )
     
     TerminalOutputView(agent: agent)
-        .frame(width: 400, height: 300)
+        .frame(width: 1000, height: 650)
 }
 #endif

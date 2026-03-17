@@ -1,3 +1,5 @@
+import Foundation
+
 #if os(macOS)
 import SwiftUI
 
@@ -52,7 +54,7 @@ public struct ErrorBanner: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 4)
                                 .background(Color.white.opacity(0.2))
-                                .cornerRadius(4)
+                                .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                         }
                         .buttonStyle(.plain)
                     }
@@ -82,7 +84,7 @@ public struct ErrorBanner: View {
                     endPoint: .trailing
                 )
             )
-            .cornerRadius(8)
+            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
             .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
             .transition(.move(edge: .top).combined(with: .opacity))
         }
@@ -121,23 +123,6 @@ public struct ErrorBannerContainer<Content: View>: View {
             }
             .padding()
         }
-    }
-}
-
-/// Model for error items displayed in the banner container
-public struct ErrorItem: Identifiable {
-    public let id: UUID
-    public let message: String
-    public let retryAction: (() -> Void)?
-    
-    public init(
-        id: UUID = UUID(),
-        message: String,
-        retryAction: (() -> Void)? = nil
-    ) {
-        self.id = id
-        self.message = message
-        self.retryAction = retryAction
     }
 }
 
@@ -188,3 +173,20 @@ public struct ErrorItem: Identifiable {
     return PreviewContent()
 }
 #endif
+
+/// Model for error items displayed in the banner container
+public struct ErrorItem: Identifiable {
+    public let id: UUID
+    public let message: String
+    public let retryAction: (() -> Void)?
+    
+    public init(
+        id: UUID = UUID(),
+        message: String,
+        retryAction: (() -> Void)? = nil
+    ) {
+        self.id = id
+        self.message = message
+        self.retryAction = retryAction
+    }
+}

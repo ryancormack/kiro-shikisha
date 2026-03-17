@@ -72,7 +72,7 @@ public struct TaskCard: View {
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.orange.opacity(0.1))
-                    .cornerRadius(6)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
                 }
 
                 Divider()
@@ -108,7 +108,7 @@ public struct TaskCard: View {
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge)
                     .fill(Color(nsColor: .controlBackgroundColor))
                     .shadow(
                         color: isHovered ? .black.opacity(0.15) : .black.opacity(0.05),
@@ -117,7 +117,7 @@ public struct TaskCard: View {
                     )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge)
                     .stroke(
                         task.status == .needsAttention ? Color.orange.opacity(0.5) :
                         (isHovered ? Color.accentColor.opacity(0.5) : Color.clear),

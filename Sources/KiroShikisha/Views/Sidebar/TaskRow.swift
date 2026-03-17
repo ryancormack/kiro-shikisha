@@ -30,7 +30,7 @@ public struct TaskRow: View {
                             .padding(.vertical, 1)
                             .background(Color.purple.opacity(0.15))
                             .foregroundColor(.purple)
-                            .cornerRadius(3)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                     }
                 }
 
@@ -59,7 +59,7 @@ public struct TaskRow: View {
                     .padding(.vertical, 2)
                     .background(Color.blue.opacity(0.15))
                     .foregroundColor(.blue)
-                    .cornerRadius(4)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
             }
 
             // Last activity time
