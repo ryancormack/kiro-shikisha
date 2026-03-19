@@ -29,7 +29,6 @@ struct DebugLogView: View {
                                 Text(entry.summary)
                                     .font(.system(.caption, design: .monospaced))
                                     .foregroundColor(.primary)
-                                    .textSelection(.enabled)
                             }
                             .frame(minWidth: geometry.size.width, alignment: .leading)
                             .id(entry.id)
