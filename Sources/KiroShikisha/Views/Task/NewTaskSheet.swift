@@ -5,6 +5,7 @@ import AppKit
 /// Sheet content for creating a new task
 public struct NewTaskSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppSettings.self) private var appSettings
 
     @State private var taskName: String = ""
     @State private var selectedDirectory: URL?
@@ -16,6 +17,7 @@ public struct NewTaskSheet: View {
     @State private var createWorktree: Bool = false
     @State private var newBranchName: String = ""
     @State private var startImmediately: Bool = true
+    @State private var selectedAgentConfigId: UUID?
 
     private let gitService = GitService()
 
@@ -75,7 +77,7 @@ public struct NewTaskSheet: View {
             }
             .padding()
         }
-        .frame(width: 500, height: detectedRepository != nil ? 480 : 360)
+        .frame(width: 500, height: detectedRepository != nil ? 520 : 400)
     }
 
     @ViewBuilder
@@ -173,6 +175,23 @@ public struct NewTaskSheet: View {
     private var optionsSection: some View {
         Section {
             Toggle("Start task immediately", isOn: $startImmediately)
+            
+            if !appSettings.agentConfigurations.isEmpty {
+                Picker("Agent Configuration", selection: $selectedAgentConfigId) {
+                    Text("Default").tag(UUID?.none)
+                    ForEach(appSettings.agentConfigurations) { config in
+                        HStack {
+                            Text(config.name)
+                            if !config.tags.isEmpty {
+                                Text(config.tags.joined(separator: ", "))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .tag(Optional(config.id))
+                    }
+                }
+            }
         } header: {
             Text("Options")
         }
@@ -253,7 +272,8 @@ public struct NewTaskSheet: View {
             gitBranch: branch,
             useWorktree: createWorktree,
             worktreeBranchName: worktreeBranch,
-            startImmediately: startImmediately
+            startImmediately: startImmediately,
+            agentConfigurationId: selectedAgentConfigId
         )
 
         onCreate(request)
@@ -265,5 +285,6 @@ public struct NewTaskSheet: View {
     NewTaskSheet { request in
         print("Created task: \(request.name)")
     }
+    .environment(AppSettings())
 }
 #endif

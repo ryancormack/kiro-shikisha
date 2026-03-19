@@ -22,7 +22,7 @@ public struct SettingsView: View {
                     Label("Appearance", systemImage: "paintbrush")
                 }
         }
-        .frame(width: 500, height: 350)
+        .frame(width: 500, minHeight: 350, maxHeight: 500)
         .padding()
     }
 }
@@ -38,17 +38,37 @@ public struct AgentSettingsView: View {
         
         Form {
             Section {
-                TextField("Default Agent Config", text: $settings.defaultAgentConfig)
-                    .textFieldStyle(.roundedBorder)
-                    .help("Path to agent configuration file (passed via --agent flag)")
+                if settings.agentConfigurations.isEmpty {
+                    Text("No agent configurations. Add one to get started.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(settings.agentConfigurations.indices, id: \.self) { index in
+                        AgentConfigRow(
+                            config: $settings.agentConfigurations[index],
+                            onSetDefault: { setDefault(index: index) },
+                            onDelete: { deleteConfig(index: index) }
+                        )
+                    }
+                }
                 
-                Toggle("Auto-start agent when workspace is selected", isOn: $settings.autoStartAgent)
+                Button {
+                    addConfiguration()
+                } label: {
+                    Label("Add Configuration", systemImage: "plus")
+                }
             } header: {
-                Text("Agent Configuration")
+                Text("Agent Configurations")
             }
             
             Section {
-                Text("Agent configurations define the model, tools, and behavior for the AI agent. Leave empty to use the default kiro-cli configuration.")
+                Toggle("Auto-start agent when workspace is selected", isOn: $settings.autoStartAgent)
+            } header: {
+                Text("Behavior")
+            }
+            
+            Section {
+                Text("Agent configurations define which kiro-cli agent profile to use. The agent flag value is passed via the --agent flag. Tags help categorize configurations.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             } header: {
@@ -57,6 +77,87 @@ public struct AgentSettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
+    }
+    
+    private func addConfiguration() {
+        let config = AgentConfiguration(
+            name: "New Configuration",
+            agentFlag: "",
+            tags: [],
+            isDefault: settings.agentConfigurations.isEmpty
+        )
+        settings.agentConfigurations.append(config)
+    }
+    
+    private func setDefault(index: Int) {
+        for i in settings.agentConfigurations.indices {
+            settings.agentConfigurations[i].isDefault = (i == index)
+        }
+    }
+    
+    private func deleteConfig(index: Int) {
+        let wasDefault = settings.agentConfigurations[index].isDefault
+        settings.agentConfigurations.remove(at: index)
+        if wasDefault, let first = settings.agentConfigurations.indices.first {
+            settings.agentConfigurations[first].isDefault = true
+        }
+    }
+}
+
+struct AgentConfigRow: View {
+    @Binding var config: AgentConfiguration
+    let onSetDefault: () -> Void
+    let onDelete: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                if config.isDefault {
+                    Image(systemName: "star.fill")
+                        .foregroundColor(.yellow)
+                        .font(.caption)
+                }
+                TextField("Name", text: $config.name)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 200)
+            }
+            
+            HStack {
+                Text("--agent")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("Agent flag", text: $config.agentFlag)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+            }
+            
+            if !config.tags.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(config.tags, id: \.self) { tag in
+                        Text(tag)
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.15))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+            
+            HStack(spacing: 12) {
+                if !config.isDefault {
+                    Button("Set as Default") { onSetDefault() }
+                        .font(.caption)
+                        .buttonStyle(.plain)
+                        .foregroundColor(.blue)
+                }
+                Button("Delete") { onDelete() }
+                    .font(.caption)
+                    .buttonStyle(.plain)
+                    .foregroundColor(.red)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 

@@ -491,6 +491,34 @@ public final class AgentManager {
         return try await startAgent(workspace: newWorkspace, sessionName: sessionName, agentConfig: agentConfig)
     }
     
+    /// Set the mode for an agent's session
+    public func setMode(agentId: UUID, modeId: String) async throws {
+        guard let agent = agents[agentId] else {
+            throw AgentManagerError.agentNotFound(agentId)
+        }
+        guard let sessionId = agent.sessionId else {
+            throw AgentManagerError.noSessionId
+        }
+        guard let connection = connections[agentId] else {
+            throw AgentManagerError.notConnected
+        }
+        try await connection.setSessionMode(sessionId: sessionId, modeId: SessionModeId(value: modeId))
+    }
+
+    /// Set the model for an agent's session
+    public func setModel(agentId: UUID, modelId: String) async throws {
+        guard let agent = agents[agentId] else {
+            throw AgentManagerError.agentNotFound(agentId)
+        }
+        guard let sessionId = agent.sessionId else {
+            throw AgentManagerError.noSessionId
+        }
+        guard let connection = connections[agentId] else {
+            throw AgentManagerError.notConnected
+        }
+        try await connection.setSessionModel(sessionId: sessionId, modelId: ModelId(value: modelId))
+    }
+
     /// Handle a session update for an agent
     /// - Parameters:
     ///   - update: The session update from the SDK
@@ -747,6 +775,14 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
+    public func setMode(agentId: UUID, modeId: String) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func setModel(agentId: UUID, modelId: String) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
     public func handleSessionUpdate(_ update: SessionUpdate, for agent: Agent) {
         // No-op on non-macOS
     }
@@ -835,6 +871,14 @@ public final class AgentManager {
     }
     
     public func startFreshAgent(workspace: Workspace, agentConfig: String? = nil) async throws -> Agent {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func setMode(agentId: UUID, modeId: String) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func setModel(agentId: UUID, modelId: String) async throws {
         throw AgentManagerError.platformNotSupported
     }
     
