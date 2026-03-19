@@ -22,7 +22,7 @@ public struct SettingsView: View {
                     Label("Appearance", systemImage: "paintbrush")
                 }
         }
-        .frame(width: 500, minHeight: 350, maxHeight: 500)
+        .frame(minHeight: 350, maxHeight: 500)
         .padding()
     }
 }
