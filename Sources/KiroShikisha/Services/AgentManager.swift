@@ -376,7 +376,7 @@ public final class AgentManager {
     /// - Parameters:
     ///   - agentId: The agent to send the prompt to
     ///   - prompt: The prompt text
-    public func sendPrompt(agentId: UUID, prompt: String) async throws {
+    public func sendPrompt(agentId: UUID, prompt: String, imageAttachments: [Data] = []) async throws {
         guard let agent = agents[agentId] else {
             throw AgentManagerError.agentNotFound(agentId)
         }
@@ -409,7 +409,11 @@ public final class AgentManager {
         // Send prompt and wait for response
         let task = Task { [weak self] in
             do {
-                let contentBlocks = [ContentBlock.text(TextContent(text: prompt))]
+                var contentBlocks: [ContentBlock] = [.text(TextContent(text: prompt))]
+                for imageData in imageAttachments {
+                    let base64String = imageData.base64EncodedString()
+                    contentBlocks.append(.image(ImageContent(data: base64String, mimeType: "image/png")))
+                }
                 let response = try await connection.prompt(sessionId: sessionId, prompt: contentBlocks)
                 
                 // Handle completion based on stop reason
@@ -437,12 +441,16 @@ public final class AgentManager {
     /// Cancel the current prompt for an agent
     /// - Parameter agentId: The agent ID
     public func cancelPrompt(agentId: UUID) async throws {
+        // Send session/cancel to the server if we have a session
+        if let agent = agents[agentId],
+           let sessionId = agent.sessionId,
+           let connection = connections[agentId] {
+            try await connection.cancelSession(sessionId: sessionId)
+        }
+        
         // Cancel the prompt task
         promptTasks[agentId]?.cancel()
         promptTasks.removeValue(forKey: agentId)
-        
-        // Note: The SDK's ClientConnection doesn't expose a cancel method directly
-        // We could add support for session/cancel if needed
     }
     
     /// Start a new agent in a git worktree
@@ -519,6 +527,25 @@ public final class AgentManager {
         try await connection.setSessionModel(sessionId: sessionId, modelId: ModelId(value: modelId))
     }
 
+    /// Execute a slash command for an agent
+    public func executeSlashCommand(agentId: UUID, command: String, args: String?) async throws {
+        guard let agent = agents[agentId] else {
+            throw AgentManagerError.agentNotFound(agentId)
+        }
+        guard let sessionId = agent.sessionId else {
+            throw AgentManagerError.noSessionId
+        }
+        guard let connection = connections[agentId] else {
+            throw AgentManagerError.notConnected
+        }
+        
+        // Show the command as a user message
+        agent.messages.append(ChatMessage(role: .user, content: "/\(command)\(args.map { " \($0)" } ?? "")"))
+        agent.status = .active
+        
+        try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+    }
+
     /// Handle a session update for an agent
     /// - Parameters:
     ///   - update: The session update from the SDK
@@ -552,12 +579,17 @@ public final class AgentManager {
             entry = DebugLogEntry(type: "plan", summary: "")
         case .availableCommandsUpdate(let c):
             entry = DebugLogEntry(type: "commands", summary: c.availableCommands.map(\.name).joined(separator: ", "))
-        case .currentModeUpdate:
-            entry = DebugLogEntry(type: "mode_update", summary: "")
+            agent.availableCommands = c.availableCommands
+        case .currentModeUpdate(let m):
+            entry = DebugLogEntry(type: "mode_update", summary: m.currentModeId.value)
+            agent.currentModeId = m.currentModeId
         case .configOptionUpdate:
             entry = DebugLogEntry(type: "config_update", summary: "")
-        case .sessionInfoUpdate:
-            entry = DebugLogEntry(type: "session_info", summary: "")
+        case .sessionInfoUpdate(let info):
+            entry = DebugLogEntry(type: "session_info", summary: info.title ?? "")
+            if let title = info.title {
+                agent.sessionTitle = title
+            }
         }
         agent.debugLog.append(entry)
     }
@@ -754,11 +786,15 @@ public final class AgentManager {
         return []
     }
     
-    public func sendPrompt(agentId: UUID, prompt: String) async throws {
+    public func sendPrompt(agentId: UUID, prompt: String, imageAttachments: [Data] = []) async throws {
         throw AgentManagerError.platformNotSupported
     }
     
     public func cancelPrompt(agentId: UUID) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func executeSlashCommand(agentId: UUID, command: String, args: String?) async throws {
         throw AgentManagerError.platformNotSupported
     }
     
@@ -853,11 +889,15 @@ public final class AgentManager {
         return []
     }
     
-    public func sendPrompt(agentId: UUID, prompt: String) async throws {
+    public func sendPrompt(agentId: UUID, prompt: String, imageAttachments: [Data] = []) async throws {
         throw AgentManagerError.platformNotSupported
     }
     
     public func cancelPrompt(agentId: UUID) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func executeSlashCommand(agentId: UUID, command: String, args: String?) async throws {
         throw AgentManagerError.platformNotSupported
     }
     

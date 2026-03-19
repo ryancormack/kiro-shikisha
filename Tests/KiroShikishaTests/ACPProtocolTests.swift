@@ -243,4 +243,49 @@ final class ACPProtocolTests: XCTestCase {
         set.insert(id2)
         XCTAssertEqual(set.count, 1)
     }
+    
+    // MARK: - Image Content Tests
+    
+    func testImageContentEncoding() throws {
+        let imageContent = ImageContent(data: "base64data==", mimeType: "image/png")
+        let block = ContentBlock.image(imageContent)
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(block)
+        let json = String(data: data, encoding: .utf8)!
+        
+        XCTAssertTrue(json.contains("\"type\":\"image\""))
+        XCTAssertTrue(json.contains("\"data\":\"base64data==\""))
+        // Verify mimeType via round-trip decode since JSON may escape slashes
+        let decoded = try JSONDecoder().decode(ContentBlock.self, from: data)
+        if case .image(let img) = decoded {
+            XCTAssertEqual(img.mimeType, "image/png")
+            XCTAssertEqual(img.data, "base64data==")
+        } else {
+            XCTFail("Expected image content block")
+        }
+    }
+    
+    // MARK: - Cancel Notification Tests
+    
+    func testCancelNotificationEncoding() throws {
+        let notification = CancelNotification(sessionId: SessionId(value: "sess_cancel_test"))
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(notification)
+        let json = String(data: data, encoding: .utf8)!
+        
+        XCTAssertTrue(json.contains("\"sessionId\":\"sess_cancel_test\""))
+    }
+    
+    // MARK: - Available Command Tests
+    
+    func testAvailableCommandProperties() throws {
+        let cmd = AvailableCommand(name: "/help", description: "Shows help")
+        XCTAssertEqual(cmd.name, "/help")
+        XCTAssertEqual(cmd.description, "Shows help")
+        XCTAssertNil(cmd.input)
+    }
 }

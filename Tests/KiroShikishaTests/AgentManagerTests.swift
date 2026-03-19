@@ -140,4 +140,17 @@ final class AgentManagerTests: XCTestCase {
         XCTAssertTrue(error.errorDescription!.contains("login"), "Error description should mention logging in")
         XCTAssertTrue(error.errorDescription!.contains("kiro-cli"), "Error description should mention kiro-cli")
     }
+    
+    // MARK: - Agent New Properties Tests
+    
+    @MainActor
+    func testAgentNewProperties() async throws {
+        let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+        let agent = Agent(name: "Test Agent", workspace: workspace)
+        
+        // Verify new properties have correct defaults
+        XCTAssertTrue(agent.availableCommands.isEmpty)
+        XCTAssertNil(agent.currentModeId)
+        XCTAssertNil(agent.sessionTitle)
+    }
 }

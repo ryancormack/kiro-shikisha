@@ -77,8 +77,8 @@ public struct ChatPanel: View {
                     }
                     .padding()
                 } else {
-                    ChatInputView { message in
-                        sendMessage(message)
+                    ChatInputView { message, images in
+                        sendMessage(message, images: images)
                     }
                     .padding()
                 }
@@ -108,11 +108,30 @@ public struct ChatPanel: View {
         }
     }
     
-    private func sendMessage(_ content: String) {
+    private func sendMessage(_ content: String, images: [Data] = []) {
         errorMessage = nil
+        
+        // Detect slash commands
+        if content.hasPrefix("/") {
+            let parts = content.dropFirst().split(separator: " ", maxSplits: 1)
+            let command = String(parts.first ?? "")
+            let args = parts.count > 1 ? String(parts[1]) : nil
+            
+            if !command.isEmpty {
+                Task {
+                    do {
+                        try await agentManager.executeSlashCommand(agentId: agent.id, command: command, args: args)
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+                return
+            }
+        }
+        
         Task {
             do {
-                try await agentManager.sendPrompt(agentId: agent.id, prompt: content)
+                try await agentManager.sendPrompt(agentId: agent.id, prompt: content, imageAttachments: images)
             } catch {
                 errorMessage = error.localizedDescription
             }
