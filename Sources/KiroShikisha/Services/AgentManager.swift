@@ -101,7 +101,7 @@ public final class AgentManager {
     ///   - workspace: The workspace to create an agent for
     ///   - sessionName: Optional custom session name
     /// - Returns: The newly created and connected agent
-    public func startAgent(workspace: Workspace, sessionName: String? = nil) async throws -> Agent {
+    public func startAgent(workspace: Workspace, sessionName: String? = nil, agentConfig: String? = nil) async throws -> Agent {
         let agent = Agent(
             name: workspace.name,
             sessionName: sessionName,
@@ -127,6 +127,7 @@ public final class AgentManager {
             
             try await connection.connect(
                 kirocliPath: kirocliPath,
+                agentConfig: agentConfig,
                 onSessionUpdate: sessionUpdateHandler
             )
             connections[agent.id] = connection
@@ -159,7 +160,7 @@ public final class AgentManager {
     ///   - workspace: The workspace for the agent
     ///   - sessionId: The session ID to load
     /// - Returns: The agent with the loaded session
-    public func loadAgent(workspace: Workspace, sessionId: String) async throws -> Agent {
+    public func loadAgent(workspace: Workspace, sessionId: String, agentConfig: String? = nil) async throws -> Agent {
         let sessionIdValue = SessionId(value: sessionId)
         let agent = Agent(
             name: workspace.name,
@@ -182,6 +183,7 @@ public final class AgentManager {
             
             try await connection.connect(
                 kirocliPath: kirocliPath,
+                agentConfig: agentConfig,
                 onSessionUpdate: sessionUpdateHandler
             )
             connections[agent.id] = connection
@@ -247,6 +249,7 @@ public final class AgentManager {
                     
                     try await retryConnection.connect(
                         kirocliPath: kirocliPath,
+                        agentConfig: agentConfig,
                         onSessionUpdate: retrySessionUpdateHandler
                     )
                     connections[retryAgent.id] = retryConnection
@@ -270,7 +273,7 @@ public final class AgentManager {
                     }
                     
                     print("[ACP] Retry failed for session \(sessionId), falling back to fresh session...")
-                    return try await startFreshAgent(workspace: workspace)
+                    return try await startFreshAgent(workspace: workspace, agentConfig: agentConfig)
                 }
             }
             
@@ -280,8 +283,8 @@ public final class AgentManager {
     
     /// Start a fresh agent with a new session for the given workspace.
     /// Used as a fallback when loading an existing session fails due to stale locks.
-    public func startFreshAgent(workspace: Workspace) async throws -> Agent {
-        return try await startAgent(workspace: workspace)
+    public func startFreshAgent(workspace: Workspace, agentConfig: String? = nil) async throws -> Agent {
+        return try await startAgent(workspace: workspace, agentConfig: agentConfig)
     }
     
     /// Checks if an error is a stale session lock error from kiro-cli
@@ -451,7 +454,8 @@ public final class AgentManager {
     public func startAgentInWorktree(
         sourceWorkspace: Workspace,
         branchName: String,
-        worktreePath: URL? = nil
+        worktreePath: URL? = nil,
+        agentConfig: String? = nil
     ) async throws -> Agent {
         // 1. Detect git repository at sourceWorkspace.path
         let gitService = GitService()
@@ -484,9 +488,37 @@ public final class AgentManager {
         let sessionName = branchNameToDisplayName(branchName)
         
         // 6. Start agent in new workspace with generated session name
-        return try await startAgent(workspace: newWorkspace, sessionName: sessionName)
+        return try await startAgent(workspace: newWorkspace, sessionName: sessionName, agentConfig: agentConfig)
     }
     
+    /// Set the mode for an agent's session
+    public func setMode(agentId: UUID, modeId: String) async throws {
+        guard let agent = agents[agentId] else {
+            throw AgentManagerError.agentNotFound(agentId)
+        }
+        guard let sessionId = agent.sessionId else {
+            throw AgentManagerError.noSessionId
+        }
+        guard let connection = connections[agentId] else {
+            throw AgentManagerError.notConnected
+        }
+        try await connection.setSessionMode(sessionId: sessionId, modeId: SessionModeId(value: modeId))
+    }
+
+    /// Set the model for an agent's session
+    public func setModel(agentId: UUID, modelId: String) async throws {
+        guard let agent = agents[agentId] else {
+            throw AgentManagerError.agentNotFound(agentId)
+        }
+        guard let sessionId = agent.sessionId else {
+            throw AgentManagerError.noSessionId
+        }
+        guard let connection = connections[agentId] else {
+            throw AgentManagerError.notConnected
+        }
+        try await connection.setSessionModel(sessionId: sessionId, modelId: ModelId(value: modelId))
+    }
+
     /// Handle a session update for an agent
     /// - Parameters:
     ///   - update: The session update from the SDK
@@ -694,11 +726,11 @@ public final class AgentManager {
         // No-op on non-macOS
     }
     
-    public func startAgent(workspace: Workspace, sessionName: String? = nil) async throws -> Agent {
+    public func startAgent(workspace: Workspace, sessionName: String? = nil, agentConfig: String? = nil) async throws -> Agent {
         throw AgentManagerError.platformNotSupported
     }
     
-    public func loadAgent(workspace: Workspace, sessionId: String) async throws -> Agent {
+    public func loadAgent(workspace: Workspace, sessionId: String, agentConfig: String? = nil) async throws -> Agent {
         throw AgentManagerError.platformNotSupported
     }
     
@@ -733,12 +765,21 @@ public final class AgentManager {
     public func startAgentInWorktree(
         sourceWorkspace: Workspace,
         branchName: String,
-        worktreePath: URL? = nil
+        worktreePath: URL? = nil,
+        agentConfig: String? = nil
     ) async throws -> Agent {
         throw AgentManagerError.platformNotSupported
     }
     
-    public func startFreshAgent(workspace: Workspace) async throws -> Agent {
+    public func startFreshAgent(workspace: Workspace, agentConfig: String? = nil) async throws -> Agent {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func setMode(agentId: UUID, modeId: String) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func setModel(agentId: UUID, modelId: String) async throws {
         throw AgentManagerError.platformNotSupported
     }
     
@@ -784,11 +825,11 @@ public final class AgentManager {
         // No-op on non-macOS
     }
     
-    public func startAgent(workspace: Workspace, sessionName: String? = nil) async throws -> Agent {
+    public func startAgent(workspace: Workspace, sessionName: String? = nil, agentConfig: String? = nil) async throws -> Agent {
         throw AgentManagerError.platformNotSupported
     }
     
-    public func loadAgent(workspace: Workspace, sessionId: String) async throws -> Agent {
+    public func loadAgent(workspace: Workspace, sessionId: String, agentConfig: String? = nil) async throws -> Agent {
         throw AgentManagerError.platformNotSupported
     }
     
@@ -823,12 +864,21 @@ public final class AgentManager {
     public func startAgentInWorktree(
         sourceWorkspace: Workspace,
         branchName: String,
-        worktreePath: URL? = nil
+        worktreePath: URL? = nil,
+        agentConfig: String? = nil
     ) async throws -> Agent {
         throw AgentManagerError.platformNotSupported
     }
     
-    public func startFreshAgent(workspace: Workspace) async throws -> Agent {
+    public func startFreshAgent(workspace: Workspace, agentConfig: String? = nil) async throws -> Agent {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func setMode(agentId: UUID, modeId: String) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func setModel(agentId: UUID, modelId: String) async throws {
         throw AgentManagerError.platformNotSupported
     }
     

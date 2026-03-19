@@ -44,6 +44,8 @@ public final class AgentTask: Identifiable {
     public var attentionReason: String?
     /// Conversation history for this task
     public var messages: [ChatMessage]
+    /// Agent configuration ID for this task
+    public var agentConfigurationId: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -62,7 +64,8 @@ public final class AgentTask: Identifiable {
         completedAt: Date? = nil,
         lastActivityAt: Date? = nil,
         attentionReason: String? = nil,
-        messages: [ChatMessage] = []
+        messages: [ChatMessage] = [],
+        agentConfigurationId: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -81,6 +84,7 @@ public final class AgentTask: Identifiable {
         self.lastActivityAt = lastActivityAt
         self.attentionReason = attentionReason
         self.messages = messages
+        self.agentConfigurationId = agentConfigurationId
     }
 }
 #else
@@ -103,6 +107,7 @@ public final class AgentTask: Identifiable {
     public var lastActivityAt: Date?
     public var attentionReason: String?
     public var messages: [ChatMessage]
+    public var agentConfigurationId: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -121,7 +126,8 @@ public final class AgentTask: Identifiable {
         completedAt: Date? = nil,
         lastActivityAt: Date? = nil,
         attentionReason: String? = nil,
-        messages: [ChatMessage] = []
+        messages: [ChatMessage] = [],
+        agentConfigurationId: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -140,6 +146,7 @@ public final class AgentTask: Identifiable {
         self.lastActivityAt = lastActivityAt
         self.attentionReason = attentionReason
         self.messages = messages
+        self.agentConfigurationId = agentConfigurationId
     }
 }
 #endif
@@ -158,6 +165,8 @@ public struct TaskCreationRequest: Sendable {
     public let worktreeBranchName: String?
     /// Whether to start the task immediately after creation
     public let startImmediately: Bool
+    /// Agent configuration ID for this task
+    public let agentConfigurationId: UUID?
 
     public init(
         name: String,
@@ -165,7 +174,8 @@ public struct TaskCreationRequest: Sendable {
         gitBranch: String? = nil,
         useWorktree: Bool = false,
         worktreeBranchName: String? = nil,
-        startImmediately: Bool = true
+        startImmediately: Bool = true,
+        agentConfigurationId: UUID? = nil
     ) {
         self.name = name
         self.workspacePath = workspacePath
@@ -173,5 +183,6 @@ public struct TaskCreationRequest: Sendable {
         self.useWorktree = useWorktree
         self.worktreeBranchName = worktreeBranchName
         self.startImmediately = startImmediately
+        self.agentConfigurationId = agentConfigurationId
     }
 }

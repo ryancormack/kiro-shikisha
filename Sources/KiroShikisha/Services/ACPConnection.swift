@@ -393,6 +393,24 @@ public actor ACPConnection {
         return try await connection.prompt(request: request)
     }
     
+    /// Set the session mode (e.g., switch between agent configurations like "code" vs "chat")
+    public func setSessionMode(sessionId: SessionId, modeId: SessionModeId) async throws {
+        guard let connection = clientConnection else {
+            throw ACPConnectionError.notConnected
+        }
+        let request = SetSessionModeRequest(sessionId: sessionId, modeId: modeId)
+        _ = try await connection.setSessionMode(request: request)
+    }
+
+    /// Set the model for the session
+    public func setSessionModel(sessionId: SessionId, modelId: ModelId) async throws {
+        guard let connection = clientConnection else {
+            throw ACPConnectionError.notConnected
+        }
+        let request = SetSessionModelRequest(sessionId: sessionId, modelId: modelId)
+        _ = try await connection.setSessionModel(request: request)
+    }
+
     /// Get the agent capabilities from initialization
     public func getAgentCapabilities() -> AgentCapabilities? {
         // ClientConnection stores this after connect()
@@ -438,6 +456,14 @@ public actor ACPConnection {
         throw ACPConnectionError.platformNotSupported
     }
     
+    public func setSessionMode(sessionId: SessionId, modeId: SessionModeId) async throws {
+        throw ACPConnectionError.platformNotSupported
+    }
+
+    public func setSessionModel(sessionId: SessionId, modelId: ModelId) async throws {
+        throw ACPConnectionError.platformNotSupported
+    }
+
     public func getAgentCapabilities() -> AgentCapabilities? {
         return nil
     }
