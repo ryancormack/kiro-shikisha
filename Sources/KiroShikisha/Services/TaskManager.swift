@@ -18,7 +18,8 @@ public final class TaskManager {
     /// Reference to the app state manager for reactive persistence
     public var appStateManager: AppStateManager?
 
-    // MARK: - Computed Properties
+    /// Reference to app settings for agent configuration lookup
+    public var appSettings: AppSettings?
 
     /// Tasks that are currently active (starting, working, or needs attention)
     public var activeTasks: [AgentTask] {
@@ -63,7 +64,8 @@ public final class TaskManager {
             workspacePath: request.workspacePath,
             gitBranch: request.gitBranch,
             useWorktree: request.useWorktree,
-            worktreeBranchName: request.worktreeBranchName
+            worktreeBranchName: request.worktreeBranchName,
+            agentConfigurationId: request.agentConfigurationId
         )
         tasks[task.id] = task
         persistCurrentState()
@@ -110,7 +112,14 @@ public final class TaskManager {
             gitBranch: task.gitBranch
         )
 
-        let agent = try await agentManager.startAgent(workspace: workspace)
+        let agentConfigFlag: String? = {
+            if let configId = task.agentConfigurationId {
+                return appSettings?.agentConfiguration(forId: configId)?.agentFlag
+            }
+            return nil
+        }()
+
+        let agent = try await agentManager.startAgent(workspace: workspace, agentConfig: agentConfigFlag)
         task.agentId = agent.id
         task.sessionId = agent.sessionId?.value
         task.status = .working
@@ -272,6 +281,7 @@ public final class TaskManager {
                 lastActivityAt: entry.lastActivityAt
             )
             task.sessionId = entry.sessionId
+            task.agentConfigurationId = entry.agentConfigurationId
             tasks[task.id] = task
         }
         persistCurrentState()
@@ -354,9 +364,16 @@ public final class TaskManager {
         }
 
         // Now load the agent with the effective session ID so ACP has the correct context
+        let agentConfigFlag: String? = {
+            if let configId = task.agentConfigurationId {
+                return appSettings?.agentConfiguration(forId: configId)?.agentFlag
+            }
+            return nil
+        }()
+
         print("[TaskReconnect] Loading agent with effective session ID: \(effectiveSessionId)")
         do {
-            let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: effectiveSessionId)
+            let agent = try await agentManager.loadAgent(workspace: workspace, sessionId: effectiveSessionId, agentConfig: agentConfigFlag)
             task.agentId = agent.id
             task.sessionId = agent.sessionId?.value  // Update sessionId in case a fresh session was created
 
@@ -402,6 +419,7 @@ public final class TaskManager {
     public private(set) var tasks: [UUID: AgentTask] = [:]
     public var agentManager: AgentManager?
     public var appStateManager: AppStateManager?
+    public var appSettings: AppSettings?
 
     public var activeTasks: [AgentTask] {
         tasks.values.filter { $0.status.isActive }
@@ -429,7 +447,8 @@ public final class TaskManager {
             workspacePath: request.workspacePath,
             gitBranch: request.gitBranch,
             useWorktree: request.useWorktree,
-            worktreeBranchName: request.worktreeBranchName
+            worktreeBranchName: request.worktreeBranchName,
+            agentConfigurationId: request.agentConfigurationId
         )
         tasks[task.id] = task
         persistCurrentState()
@@ -516,6 +535,7 @@ public final class TaskManager {
                 lastActivityAt: entry.lastActivityAt
             )
             task.sessionId = entry.sessionId
+            task.agentConfigurationId = entry.agentConfigurationId
             tasks[task.id] = task
         }
         persistCurrentState()
@@ -532,6 +552,7 @@ public final class TaskManager {
     public private(set) var tasks: [UUID: AgentTask] = [:]
     public var agentManager: AgentManager?
     public var appStateManager: AppStateManager?
+    public var appSettings: AppSettings?
 
     public var activeTasks: [AgentTask] {
         tasks.values.filter { $0.status.isActive }
@@ -559,7 +580,8 @@ public final class TaskManager {
             workspacePath: request.workspacePath,
             gitBranch: request.gitBranch,
             useWorktree: request.useWorktree,
-            worktreeBranchName: request.worktreeBranchName
+            worktreeBranchName: request.worktreeBranchName,
+            agentConfigurationId: request.agentConfigurationId
         )
         tasks[task.id] = task
         persistCurrentState()
@@ -646,6 +668,7 @@ public final class TaskManager {
                 lastActivityAt: entry.lastActivityAt
             )
             task.sessionId = entry.sessionId
+            task.agentConfigurationId = entry.agentConfigurationId
             tasks[task.id] = task
         }
         persistCurrentState()

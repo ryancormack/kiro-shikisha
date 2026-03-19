@@ -159,4 +159,88 @@ final class ACPProtocolTests: XCTestCase {
         XCTAssertTrue(json.contains("type"), "JSON should contain type: \(json)")
         XCTAssertTrue(json.contains("diff"), "JSON should contain diff: \(json)")
     }
+
+    // MARK: - Session Mode & Model Tests
+
+    func testSetSessionModeRequestEncoding() throws {
+        let request = SetSessionModeRequest(
+            sessionId: SessionId(value: "sess_test"),
+            modeId: SessionModeId(value: "agent")
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(request)
+        let json = String(data: data, encoding: .utf8)!
+
+        XCTAssertTrue(json.contains("\"sessionId\":\"sess_test\""), "JSON should contain sessionId: \(json)")
+        XCTAssertTrue(json.contains("\"modeId\":\"agent\""), "JSON should contain modeId: \(json)")
+    }
+
+    func testSetSessionModelRequestEncoding() throws {
+        let request = SetSessionModelRequest(
+            sessionId: SessionId(value: "sess_test"),
+            modelId: ModelId(value: "gpt-4")
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(request)
+        let json = String(data: data, encoding: .utf8)!
+
+        XCTAssertTrue(json.contains("\"sessionId\":\"sess_test\""), "JSON should contain sessionId: \(json)")
+        XCTAssertTrue(json.contains("\"modelId\":\"gpt-4\""), "JSON should contain modelId: \(json)")
+    }
+
+    func testSessionModeIdValueType() throws {
+        let modeId = SessionModeId(value: "agent")
+        XCTAssertEqual(modeId.value, "agent")
+        XCTAssertEqual(modeId.description, "agent")
+
+        // Test Codable round-trip
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(modeId)
+        let decoded = try JSONDecoder().decode(SessionModeId.self, from: data)
+        XCTAssertEqual(decoded.value, "agent")
+    }
+
+    func testModelIdValueType() throws {
+        let modelId = ModelId(value: "claude-3-opus")
+        XCTAssertEqual(modelId.value, "claude-3-opus")
+        XCTAssertEqual(modelId.description, "claude-3-opus")
+
+        // Test Codable round-trip
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(modelId)
+        let decoded = try JSONDecoder().decode(ModelId.self, from: data)
+        XCTAssertEqual(decoded.value, "claude-3-opus")
+    }
+
+    func testSessionModeIdHashable() throws {
+        let id1 = SessionModeId(value: "agent")
+        let id2 = SessionModeId(value: "agent")
+        let id3 = SessionModeId(value: "chat")
+
+        XCTAssertEqual(id1, id2)
+        XCTAssertNotEqual(id1, id3)
+
+        var set = Set<SessionModeId>()
+        set.insert(id1)
+        set.insert(id2)
+        XCTAssertEqual(set.count, 1)
+    }
+
+    func testModelIdHashable() throws {
+        let id1 = ModelId(value: "gpt-4")
+        let id2 = ModelId(value: "gpt-4")
+        let id3 = ModelId(value: "claude-3")
+
+        XCTAssertEqual(id1, id2)
+        XCTAssertNotEqual(id1, id3)
+
+        var set = Set<ModelId>()
+        set.insert(id1)
+        set.insert(id2)
+        XCTAssertEqual(set.count, 1)
+    }
 }

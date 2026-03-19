@@ -49,6 +49,8 @@ public final class Agent: Identifiable {
     /// Whether this agent is currently replaying a session (loading session state from ACP).
     /// When true, incoming message chunks from session replay should be discarded.
     public var isReplayingSession: Bool = false
+    /// Agent configuration ID used to start this agent
+    public var agentConfigurationId: UUID?
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
@@ -70,7 +72,8 @@ public final class Agent: Identifiable {
         messages: [ChatMessage] = [],
         activeToolCalls: [ToolCallUpdate] = [],
         fileChanges: [FileChange] = [],
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        agentConfigurationId: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -82,6 +85,7 @@ public final class Agent: Identifiable {
         self.activeToolCalls = activeToolCalls
         self.fileChanges = fileChanges
         self.errorMessage = errorMessage
+        self.agentConfigurationId = agentConfigurationId
     }
 }
 #else
@@ -100,6 +104,8 @@ public final class Agent: Identifiable {
     /// Whether this agent is currently replaying a session (loading session state from ACP).
     /// When true, incoming message chunks from session replay should be discarded.
     public var isReplayingSession: Bool = false
+    /// Agent configuration ID used to start this agent
+    public var agentConfigurationId: UUID?
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
@@ -121,7 +127,8 @@ public final class Agent: Identifiable {
         messages: [ChatMessage] = [],
         activeToolCalls: [ToolCallUpdate] = [],
         fileChanges: [FileChange] = [],
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        agentConfigurationId: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -133,6 +140,7 @@ public final class Agent: Identifiable {
         self.activeToolCalls = activeToolCalls
         self.fileChanges = fileChanges
         self.errorMessage = errorMessage
+        self.agentConfigurationId = agentConfigurationId
     }
 }
 #endif

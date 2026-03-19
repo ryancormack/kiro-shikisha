@@ -1624,6 +1624,274 @@ final class TaskTests: XCTestCase {
         }
     }
 
+    // MARK: - AgentConfiguration Tests
+
+    func testAgentConfigurationCreation() throws {
+        let config = AgentConfiguration(
+            name: "Custom Agent",
+            agentFlag: "custom-agent",
+            tags: ["dev", "test"],
+            isDefault: true
+        )
+
+        XCTAssertEqual(config.name, "Custom Agent")
+        XCTAssertEqual(config.agentFlag, "custom-agent")
+        XCTAssertEqual(config.tags, ["dev", "test"])
+        XCTAssertTrue(config.isDefault)
+        XCTAssertNotNil(config.id)
+    }
+
+    func testAgentConfigurationDefaults() throws {
+        let config = AgentConfiguration(
+            name: "Basic Agent",
+            agentFlag: "basic"
+        )
+
+        XCTAssertEqual(config.name, "Basic Agent")
+        XCTAssertEqual(config.agentFlag, "basic")
+        XCTAssertTrue(config.tags.isEmpty)
+        XCTAssertFalse(config.isDefault)
+    }
+
+    func testAgentConfigurationCodableRoundTrip() throws {
+        let config = AgentConfiguration(
+            name: "Codable Agent",
+            agentFlag: "codable-agent",
+            tags: ["a", "b"],
+            isDefault: true
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(config)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(AgentConfiguration.self, from: data)
+
+        XCTAssertEqual(decoded.id, config.id)
+        XCTAssertEqual(decoded.name, "Codable Agent")
+        XCTAssertEqual(decoded.agentFlag, "codable-agent")
+        XCTAssertEqual(decoded.tags, ["a", "b"])
+        XCTAssertTrue(decoded.isDefault)
+    }
+
+    func testAgentConfigurationHashable() throws {
+        let id = UUID()
+        let config1 = AgentConfiguration(id: id, name: "Agent", agentFlag: "flag")
+        let config2 = AgentConfiguration(id: id, name: "Agent", agentFlag: "flag")
+        let config3 = AgentConfiguration(name: "Other", agentFlag: "other")
+
+        XCTAssertEqual(config1, config2)
+        XCTAssertNotEqual(config1, config3)
+
+        var set = Set<AgentConfiguration>()
+        set.insert(config1)
+        set.insert(config2)
+        XCTAssertEqual(set.count, 1)
+    }
+
+    func testAgentConfigurationIdentifiable() throws {
+        let config = AgentConfiguration(name: "Test", agentFlag: "test")
+        // Identifiable requires id property, which is a UUID
+        let _: UUID = config.id
+        XCTAssertNotNil(config.id)
+    }
+
+    // MARK: - AgentTask with AgentConfigurationId Tests
+
+    func testAgentTaskWithAgentConfigurationId() async throws {
+        await MainActor.run {
+            let configId = UUID()
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let task = AgentTask(
+                name: "Configured task",
+                workspacePath: path,
+                agentConfigurationId: configId
+            )
+
+            XCTAssertEqual(task.agentConfigurationId, configId)
+            XCTAssertEqual(task.name, "Configured task")
+        }
+    }
+
+    func testAgentTaskAgentConfigurationIdDefaultsToNil() async throws {
+        await MainActor.run {
+            let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+            let task = AgentTask(
+                name: "No config task",
+                workspacePath: path
+            )
+
+            XCTAssertNil(task.agentConfigurationId)
+        }
+    }
+
+    // MARK: - TaskCreationRequest with AgentConfigurationId Tests
+
+    func testTaskCreationRequestWithAgentConfigurationId() throws {
+        let configId = UUID()
+        let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+
+        let request = TaskCreationRequest(
+            name: "Configured request",
+            workspacePath: path,
+            agentConfigurationId: configId
+        )
+
+        XCTAssertEqual(request.agentConfigurationId, configId)
+        XCTAssertEqual(request.name, "Configured request")
+    }
+
+    func testTaskCreationRequestAgentConfigurationIdDefaultsToNil() throws {
+        let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+
+        let request = TaskCreationRequest(
+            name: "No config request",
+            workspacePath: path
+        )
+
+        XCTAssertNil(request.agentConfigurationId)
+    }
+
+    // MARK: - TaskPersistenceEntry with AgentConfigurationId Tests
+
+    func testTaskPersistenceEntryWithAgentConfigurationId() throws {
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+        let configId = UUID()
+        let entryId = UUID()
+
+        let entry = AppStateManager.TaskPersistenceEntry(
+            id: entryId,
+            name: "Config persist task",
+            statusRawValue: "working",
+            workspacePath: "/Users/test/projects/repo",
+            createdAt: fixedDate,
+            agentConfigurationId: configId
+        )
+
+        XCTAssertEqual(entry.agentConfigurationId, configId)
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(entry)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AppStateManager.TaskPersistenceEntry.self, from: data)
+
+        XCTAssertEqual(decoded.id, entryId)
+        XCTAssertEqual(decoded.agentConfigurationId, configId)
+        XCTAssertEqual(decoded.name, "Config persist task")
+    }
+
+    func testTaskPersistenceEntryAgentConfigurationIdDefaultsToNil() throws {
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+        let entry = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "No config entry",
+            statusRawValue: "pending",
+            workspacePath: "/Users/test/projects/repo",
+            createdAt: fixedDate
+        )
+
+        XCTAssertNil(entry.agentConfigurationId)
+
+        // Verify round-trip preserves nil
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(entry)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(AppStateManager.TaskPersistenceEntry.self, from: data)
+
+        XCTAssertNil(decoded.agentConfigurationId)
+    }
+
+    // MARK: - restoreTasks with AgentConfigurationId Tests
+
+    func testRestoreTasksPreservesAgentConfigurationId() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+            let configId = UUID()
+
+            let entryWithConfig = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Task with config",
+                statusRawValue: "working",
+                workspacePath: "/Users/test/projects/repo1",
+                sessionId: "session-1",
+                createdAt: fixedDate,
+                agentConfigurationId: configId
+            )
+
+            let entryWithoutConfig = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Task without config",
+                statusRawValue: "completed",
+                workspacePath: "/Users/test/projects/repo2",
+                createdAt: fixedDate
+            )
+
+            taskManager.restoreTasks(from: [entryWithConfig, entryWithoutConfig])
+
+            XCTAssertEqual(taskManager.tasks.count, 2)
+
+            let restoredWithConfig = taskManager.tasks[entryWithConfig.id]
+            XCTAssertNotNil(restoredWithConfig)
+            XCTAssertEqual(restoredWithConfig?.agentConfigurationId, configId)
+            XCTAssertEqual(restoredWithConfig?.status, .paused) // active -> paused
+
+            let restoredWithoutConfig = taskManager.tasks[entryWithoutConfig.id]
+            XCTAssertNotNil(restoredWithoutConfig)
+            XCTAssertNil(restoredWithoutConfig?.agentConfigurationId)
+            XCTAssertEqual(restoredWithoutConfig?.status, .completed)
+        }
+    }
+
+    // MARK: - AppSettings AgentConfiguration Tests
+
+    func testAppSettingsDefaultAgentConfiguration() async throws {
+        await MainActor.run {
+            let settings = AppSettings()
+            XCTAssertTrue(settings.agentConfigurations.isEmpty)
+            XCTAssertNil(settings.defaultAgentConfiguration)
+
+            let config1 = AgentConfiguration(name: "First", agentFlag: "first")
+            let config2 = AgentConfiguration(name: "Second", agentFlag: "second", isDefault: true)
+
+            settings.agentConfigurations = [config1, config2]
+
+            // Should return config2 since it is marked as default
+            XCTAssertEqual(settings.defaultAgentConfiguration?.id, config2.id)
+        }
+    }
+
+    func testAppSettingsDefaultAgentConfigurationFallsBackToFirst() async throws {
+        await MainActor.run {
+            let settings = AppSettings()
+            let config1 = AgentConfiguration(name: "First", agentFlag: "first")
+            let config2 = AgentConfiguration(name: "Second", agentFlag: "second")
+
+            settings.agentConfigurations = [config1, config2]
+
+            // No default set, should fall back to first
+            XCTAssertEqual(settings.defaultAgentConfiguration?.id, config1.id)
+        }
+    }
+
+    func testAppSettingsAgentConfigurationForId() async throws {
+        await MainActor.run {
+            let settings = AppSettings()
+            let config = AgentConfiguration(name: "Lookup", agentFlag: "lookup")
+            settings.agentConfigurations = [config]
+
+            XCTAssertEqual(settings.agentConfiguration(forId: config.id)?.name, "Lookup")
+            XCTAssertNil(settings.agentConfiguration(forId: UUID()))
+        }
+    }
+
     // MARK: - Delete Task Safety Tests
 
     @MainActor

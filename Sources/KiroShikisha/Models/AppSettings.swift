@@ -63,6 +63,30 @@ public final class AppSettings {
         didSet { UserDefaults.standard.set(codePanelPosition, forKey: "codePanelPosition") }
     }
     
+    // MARK: - Agent Configuration Profiles
+    
+    /// Named agent configuration profiles
+    public var agentConfigurations: [AgentConfiguration] = {
+        guard let data = UserDefaults.standard.data(forKey: "agentConfigurations") else { return [] }
+        return (try? JSONDecoder().decode([AgentConfiguration].self, from: data)) ?? []
+    }() {
+        didSet {
+            if let data = try? JSONEncoder().encode(agentConfigurations) {
+                UserDefaults.standard.set(data, forKey: "agentConfigurations")
+            }
+        }
+    }
+    
+    /// The default agent configuration, or the first one if none is marked default
+    public var defaultAgentConfiguration: AgentConfiguration? {
+        return agentConfigurations.first(where: { $0.isDefault }) ?? agentConfigurations.first
+    }
+    
+    /// Looks up an agent configuration by ID
+    public func agentConfiguration(forId id: UUID) -> AgentConfiguration? {
+        return agentConfigurations.first(where: { $0.id == id })
+    }
+    
     // MARK: - Computed Properties
     
     /// Expands the kiro-cli path, resolving ~ to the user's home directory
@@ -165,6 +189,16 @@ public final class AppSettings {
             return defaultWorkspaceDirectory.replacingOccurrences(of: "~", with: homePath, options: .anchored)
         }
         return defaultWorkspaceDirectory
+    }
+    
+    public var agentConfigurations: [AgentConfiguration] = []
+    
+    public var defaultAgentConfiguration: AgentConfiguration? {
+        return agentConfigurations.first(where: { $0.isDefault }) ?? agentConfigurations.first
+    }
+    
+    public func agentConfiguration(forId id: UUID) -> AgentConfiguration? {
+        return agentConfigurations.first(where: { $0.id == id })
     }
     
     public init() {}

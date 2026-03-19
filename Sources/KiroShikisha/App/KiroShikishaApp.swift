@@ -40,6 +40,8 @@ struct KiroShikishaApp: App {
                 taskManager.agentManager = agentManager
                 // Wire TaskManager to AppStateManager for reactive persistence
                 taskManager.appStateManager = appStateManager
+                // Wire TaskManager to AppSettings for agent configuration lookup
+                taskManager.appSettings = appSettings
                 // Kill only our own kiro-cli processes from previous runs
                 killOwnedProcesses()
                 // Restore persisted tasks

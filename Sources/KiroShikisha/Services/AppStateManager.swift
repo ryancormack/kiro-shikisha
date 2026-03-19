@@ -41,6 +41,7 @@ public final class AppStateManager {
         public var createdAt: Date
         public var completedAt: Date?
         public var lastActivityAt: Date?
+        public var agentConfigurationId: UUID?
 
         public init(
             id: UUID,
@@ -51,7 +52,8 @@ public final class AppStateManager {
             sessionId: String? = nil,
             createdAt: Date,
             completedAt: Date? = nil,
-            lastActivityAt: Date? = nil
+            lastActivityAt: Date? = nil,
+            agentConfigurationId: UUID? = nil
         ) {
             self.id = id
             self.name = name
@@ -62,6 +64,7 @@ public final class AppStateManager {
             self.createdAt = createdAt
             self.completedAt = completedAt
             self.lastActivityAt = lastActivityAt
+            self.agentConfigurationId = agentConfigurationId
         }
     }
     
@@ -101,7 +104,8 @@ public final class AppStateManager {
                 sessionId: task.sessionId,
                 createdAt: task.createdAt,
                 completedAt: task.completedAt,
-                lastActivityAt: task.lastActivityAt
+                lastActivityAt: task.lastActivityAt,
+                agentConfigurationId: task.agentConfigurationId
             )
         }
         scheduleSave()
@@ -287,6 +291,7 @@ public final class AppStateManager {
         public var createdAt: Date
         public var completedAt: Date?
         public var lastActivityAt: Date?
+        public var agentConfigurationId: UUID?
 
         public init(
             id: UUID,
@@ -297,7 +302,8 @@ public final class AppStateManager {
             sessionId: String? = nil,
             createdAt: Date,
             completedAt: Date? = nil,
-            lastActivityAt: Date? = nil
+            lastActivityAt: Date? = nil,
+            agentConfigurationId: UUID? = nil
         ) {
             self.id = id
             self.name = name
@@ -308,6 +314,7 @@ public final class AppStateManager {
             self.createdAt = createdAt
             self.completedAt = completedAt
             self.lastActivityAt = lastActivityAt
+            self.agentConfigurationId = agentConfigurationId
         }
     }
 
@@ -362,6 +369,7 @@ public final class AppStateManager {
         public var createdAt: Date
         public var completedAt: Date?
         public var lastActivityAt: Date?
+        public var agentConfigurationId: UUID?
 
         public init(
             id: UUID,
@@ -372,7 +380,8 @@ public final class AppStateManager {
             sessionId: String? = nil,
             createdAt: Date,
             completedAt: Date? = nil,
-            lastActivityAt: Date? = nil
+            lastActivityAt: Date? = nil,
+            agentConfigurationId: UUID? = nil
         ) {
             self.id = id
             self.name = name
@@ -383,6 +392,7 @@ public final class AppStateManager {
             self.createdAt = createdAt
             self.completedAt = completedAt
             self.lastActivityAt = lastActivityAt
+            self.agentConfigurationId = agentConfigurationId
         }
     }
 
