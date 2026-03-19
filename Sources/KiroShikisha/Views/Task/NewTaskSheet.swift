@@ -177,23 +177,47 @@ public struct NewTaskSheet: View {
             Toggle("Start task immediately", isOn: $startImmediately)
             
             if !appSettings.agentConfigurations.isEmpty {
-                Picker("Agent Configuration", selection: $selectedAgentConfigId) {
-                    Text("Default").tag(UUID?.none)
-                    ForEach(appSettings.agentConfigurations) { config in
-                        HStack {
-                            Text(config.name)
-                            if !config.tags.isEmpty {
-                                Text(config.tags.joined(separator: ", "))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Picker("Agent Configuration", selection: $selectedAgentConfigId) {
+                        defaultPickerLabel
+                            .tag(UUID?.none)
+                        ForEach(appSettings.agentConfigurations) { config in
+                            HStack {
+                                Text(config.name)
+                                if !config.tags.isEmpty {
+                                    Text(config.tags.joined(separator: ", "))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
+                            .tag(Optional(config.id))
                         }
-                        .tag(Optional(config.id))
                     }
+                    Text("Choose which AI agent profile to use for this task.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("No agent profiles configured. The default agent will be used.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("You can add agent profiles in Settings > Agents.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
         } header: {
             Text("Options")
+        }
+    }
+    
+    @ViewBuilder
+    private var defaultPickerLabel: some View {
+        if let defaultConfig = appSettings.defaultAgentConfiguration {
+            Text("Use Default (\(defaultConfig.name))")
+        } else {
+            Text("Use Default Configuration")
         }
     }
 
