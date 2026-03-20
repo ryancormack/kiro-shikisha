@@ -153,4 +153,11 @@ final class AgentManagerTests: XCTestCase {
         XCTAssertNil(agent.currentModeId)
         XCTAssertNil(agent.sessionTitle)
     }
+    
+    @MainActor
+    func testAgentConfigOptionsDefault() async throws {
+        let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+        let agent = Agent(name: "Test Agent", workspace: workspace)
+        XCTAssertTrue(agent.configOptions.isEmpty, "Agent configOptions should default to empty")
+    }
 }

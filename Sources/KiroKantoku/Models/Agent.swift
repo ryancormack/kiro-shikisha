@@ -57,6 +57,8 @@ public final class Agent: Identifiable {
     public var currentModeId: SessionModeId? = nil
     /// Server-generated session title
     public var sessionTitle: String? = nil
+    /// Available configuration options from the server
+    public var configOptions: [SessionConfigOption] = []
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
@@ -118,6 +120,8 @@ public final class Agent: Identifiable {
     public var currentModeId: SessionModeId? = nil
     /// Server-generated session title
     public var sessionTitle: String? = nil
+    /// Available configuration options from the server
+    public var configOptions: [SessionConfigOption] = []
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {

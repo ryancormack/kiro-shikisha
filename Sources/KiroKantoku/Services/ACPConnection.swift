@@ -411,6 +411,15 @@ public actor ACPConnection {
         _ = try await connection.setSessionModel(request: request)
     }
 
+    /// Set a configuration option for the session
+    public func setSessionConfigOption(sessionId: SessionId, configId: SessionConfigId, value: SessionConfigValueId) async throws {
+        guard let connection = clientConnection else {
+            throw ACPConnectionError.notConnected
+        }
+        let request = SetSessionConfigOptionRequest(sessionId: sessionId, configId: configId, value: value)
+        _ = try await connection.setSessionConfigOption(request: request)
+    }
+
     /// Send a session/cancel notification to the server
     public func cancelSession(sessionId: SessionId) async throws {
         guard let transport = transport else {
@@ -497,6 +506,10 @@ public actor ACPConnection {
     }
 
     public func setSessionModel(sessionId: SessionId, modelId: ModelId) async throws {
+        throw ACPConnectionError.platformNotSupported
+    }
+
+    public func setSessionConfigOption(sessionId: SessionId, configId: SessionConfigId, value: SessionConfigValueId) async throws {
         throw ACPConnectionError.platformNotSupported
     }
 
