@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.kiro.shikisha</string>
+    <string>com.kiro.kantoku</string>
     <key>CFBundleName</key>
-    <string>KiroShikisha</string>
+    <string>KiroKantoku</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

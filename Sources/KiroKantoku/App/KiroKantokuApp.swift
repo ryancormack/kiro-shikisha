@@ -4,7 +4,7 @@ import SwiftUI
 import AppKit
 
 @main
-struct KiroShikishaApp: App {
+struct KiroKantokuApp: App {
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
@@ -215,7 +215,7 @@ struct AppCommands: Commands {
 
         // Help menu additions
         CommandGroup(replacing: .help) {
-            Button("Kiro Shikisha Help") {
+            Button("Kiro Kantoku Help") {
                 // Would open help documentation
             }
 
@@ -285,9 +285,9 @@ struct AppCommands: Commands {
 }
 #else
 @main
-struct KiroShikishaApp {
+struct KiroKantokuApp {
     static func main() {
-        print("Kiro Shikisha - macOS application")
+        print("Kiro Kantoku - macOS application")
         print("Run on macOS for full GUI experience")
     }
 }

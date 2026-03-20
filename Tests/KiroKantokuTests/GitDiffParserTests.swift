@@ -1,5 +1,5 @@
 import XCTest
-@testable import KiroShikisha
+@testable import KiroKantoku
 
 final class GitDiffParserTests: XCTestCase {
 

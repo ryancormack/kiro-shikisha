@@ -1,6 +1,6 @@
 import XCTest
 import ACPModel
-@testable import KiroShikisha
+@testable import KiroKantoku
 
 final class ACPProtocolTests: XCTestCase {
     

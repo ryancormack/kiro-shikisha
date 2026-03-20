@@ -25,7 +25,7 @@ public final class AppStateManager {
     // MARK: - Private Properties
     
     private let userDefaults: UserDefaults
-    private let storageKey = "com.kiroshikisha.appState"
+    private let storageKey = "com.kirokantoku.appState"
     private var saveWorkItem: DispatchWorkItem?
     
     // MARK: - Codable State Container

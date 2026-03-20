@@ -98,7 +98,7 @@ public struct OnboardingView: View {
                     endPoint: .bottomTrailing
                 ))
             
-            Text("Welcome to Kiro Shikisha")
+            Text("Welcome to Kiro Kantoku")
                 .font(.largeTitle)
                 .fontWeight(.bold)
             
@@ -128,7 +128,7 @@ public struct OnboardingView: View {
                 .font(.title)
                 .fontWeight(.semibold)
             
-            Text("Kiro Shikisha needs to know where kiro-cli is installed on your system.")
+            Text("Kiro Kantoku needs to know where kiro-cli is installed on your system.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)

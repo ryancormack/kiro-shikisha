@@ -68,7 +68,7 @@ public struct GeneralSettingsView: View {
             
             Section {
                 Toggle("Launch at Login", isOn: $settings.launchAtStartup)
-                    .help("Automatically start Kiro Shikisha when you log in")
+                    .help("Automatically start Kiro Kantoku when you log in")
             } header: {
                 Text("Startup")
             }

@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="screenshots/logo.png" alt="Kiro Shikisha" width="200">
+  <img src="screenshots/logo.png" alt="Kiro Kantoku" width="200">
 </p>
 
-# Kiro Shikisha
+# Kiro Kantoku
 
-A native macOS desktop app for managing multiple AI coding agents in parallel. Kiro Shikisha gives you a visual interface to create tasks, assign them to AI agents powered by [kiro-cli](https://github.com/aptove/swift-sdk), and monitor their progress — all from a single window.
+A native macOS desktop app for managing multiple AI coding agents in parallel. Kiro Kantoku gives you a visual interface to create tasks, assign them to AI agents powered by [kiro-cli](https://github.com/aptove/swift-sdk), and monitor their progress — all from a single window.
 
 ![Main View](screenshots/main-view.png)
 
@@ -40,7 +40,7 @@ See what the agent is doing in real time:
 
 ### Git Worktree Support
 
-When creating a task, Kiro Shikisha detects git repositories automatically. You can optionally create a new git worktree so the agent works on an isolated branch without touching your main working tree.
+When creating a task, Kiro Kantoku detects git repositories automatically. You can optionally create a new git worktree so the agent works on an isolated branch without touching your main working tree.
 
 ### Agent Configuration Profiles
 
@@ -70,10 +70,10 @@ cd kiro-shikisha
 swift build
 ```
 
-The built binary will be at `.build/debug/KiroShikisha`. You can run it directly:
+The built binary will be at `.build/debug/KiroKantoku`. You can run it directly:
 
 ```bash
-.build/debug/KiroShikisha
+.build/debug/KiroKantoku
 ```
 
 For a release build:
@@ -82,11 +82,11 @@ For a release build:
 swift build -c release
 ```
 
-The optimised binary will be at `.build/release/KiroShikisha`.
+The optimised binary will be at `.build/release/KiroKantoku`.
 
 ### kiro-cli Setup
 
-Kiro Shikisha expects `kiro-cli` at `~/.local/bin/kiro-cli` by default. You can change this in Settings → General.
+Kiro Kantoku expects `kiro-cli` at `~/.local/bin/kiro-cli` by default. You can change this in Settings → General.
 
 Make sure you're authenticated before launching:
 
@@ -116,7 +116,7 @@ kiro-cli login
 ## Project Structure
 
 ```
-Sources/KiroShikisha/
+Sources/KiroKantoku/
 ├── App/                  # App entry point and lifecycle
 ├── Models/               # Data models (Agent, AgentTask, Workspace, etc.)
 ├── Services/             # Core services

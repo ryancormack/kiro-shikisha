@@ -1,7 +1,7 @@
 import XCTest
 import ACPModel
 import ACP
-@testable import KiroShikisha
+@testable import KiroKantoku
 
 final class AgentManagerTests: XCTestCase {
     

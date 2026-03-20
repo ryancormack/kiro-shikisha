@@ -27,7 +27,7 @@ private actor TerminalStore {
     }
 }
 
-/// Client implementation for KiroShikisha that conforms to the ACP SDK's Client protocol.
+/// Client implementation for KiroKantoku that conforms to the ACP SDK's Client protocol.
 public final class KiroClient: Client, ClientSessionOperations, @unchecked Sendable {
     public var onSessionUpdateCallback: (@Sendable (SessionUpdate) async -> Void)?
     public var onConnectedCallback: (@Sendable () async -> Void)?
@@ -47,7 +47,7 @@ public final class KiroClient: Client, ClientSessionOperations, @unchecked Senda
     }
 
     public var info: Implementation? {
-        Implementation(name: "KiroShikisha", version: "1.0.0")
+        Implementation(name: "KiroKantoku", version: "1.0.0")
     }
 
     public func onSessionUpdate(_ update: SessionUpdate) async {
