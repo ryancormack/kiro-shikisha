@@ -51,6 +51,12 @@ public final class Agent: Identifiable {
     public var isReplayingSession: Bool = false
     /// Agent configuration ID used to start this agent
     public var agentConfigurationId: UUID?
+    /// Available slash commands from the server
+    public var availableCommands: [AvailableCommand] = []
+    /// Current session mode ID
+    public var currentModeId: SessionModeId? = nil
+    /// Server-generated session title
+    public var sessionTitle: String? = nil
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
@@ -106,6 +112,12 @@ public final class Agent: Identifiable {
     public var isReplayingSession: Bool = false
     /// Agent configuration ID used to start this agent
     public var agentConfigurationId: UUID?
+    /// Available slash commands from the server
+    public var availableCommands: [AvailableCommand] = []
+    /// Current session mode ID
+    public var currentModeId: SessionModeId? = nil
+    /// Server-generated session title
+    public var sessionTitle: String? = nil
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {

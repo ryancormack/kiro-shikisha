@@ -28,16 +28,24 @@ public struct CodePanel: View {
 
             Divider()
 
-            // Tab content - fills available space
-            switch selectedTab {
-            case .filesChanged:
+            // Tab content - all views stay alive to preserve scroll state
+            ZStack {
                 FilesChangedView(workspacePath: workspacePath)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .terminal:
+                    .opacity(selectedTab == .filesChanged ? 1 : 0)
+                    .allowsHitTesting(selectedTab == .filesChanged)
+
                 TerminalOutputView(agent: agent)
-            case .debug:
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(selectedTab == .terminal ? 1 : 0)
+                    .allowsHitTesting(selectedTab == .terminal)
+
                 DebugLogView(agent: agent)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(selectedTab == .debug ? 1 : 0)
+                    .allowsHitTesting(selectedTab == .debug)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color(nsColor: .controlBackgroundColor))
     }

@@ -53,13 +53,20 @@ public struct ChatMessageView: View {
                 }
                 
                 VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                    Text(LocalizedStringKey(message.content))
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(backgroundColor)
-                        .foregroundColor(textColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    Group {
+                        if isUser {
+                            Text(message.content)
+                                .textSelection(.enabled)
+                        } else {
+                            MarkdownContentView(content: message.content)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(backgroundColor)
+                    .foregroundColor(textColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
                     
                     Text(timestampFormatter.string(from: message.timestamp))
                         .font(.caption2)
@@ -83,7 +90,7 @@ public struct ChatMessageView: View {
         
         ChatMessageView(message: ChatMessage(
             role: .assistant,
-            content: "Of course! I'd be happy to help with SwiftUI.\n\n**What would you like to know?**\n\n- Views and modifiers\n- State management\n- Navigation\n- Animations"
+            content: "# Analysis Complete\n\nHere's what I found:\n\n## Key Points\n\n- **Memory usage** is high\n- *Performance* is acceptable\n- Check `AppDelegate.swift` for details\n\n```swift\nfunc optimize() {\n    let cache = Cache()\n    cache.clear()\n}\n```\n\n> Note: This requires a restart\n\n1. First, backup your data\n2. Then run the migration\n3. Finally, verify the results\n\n```mermaid\ngraph TD\n    A[Start] --> B[Process]\n    B --> C[End]\n```"
         ))
         
         ChatMessageView(message: ChatMessage(

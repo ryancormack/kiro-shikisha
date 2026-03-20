@@ -39,9 +39,15 @@ public struct AgentSettingsView: View {
         Form {
             Section {
                 if settings.agentConfigurations.isEmpty {
-                    Text("No agent configurations. Add one to get started.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("No agent profiles configured yet.")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                        Text("Agent profiles let you save different AI agent setups so you can quickly switch between them when creating tasks. Add one below to get started.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 4)
                 } else {
                     ForEach(settings.agentConfigurations.indices, id: \.self) { index in
                         AgentConfigRow(
@@ -58,7 +64,12 @@ public struct AgentSettingsView: View {
                     Label("Add Configuration", systemImage: "plus")
                 }
             } header: {
-                Text("Agent Configurations")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Agent Configurations")
+                    Text("Named profiles that determine which AI agent is used when starting a task.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
             
             Section {
@@ -68,7 +79,7 @@ public struct AgentSettingsView: View {
             }
             
             Section {
-                Text("Agent configurations define which kiro-cli agent profile to use. The agent flag value is passed via the --agent flag. Tags help categorize configurations.")
+                Text("Agent configurations are named profiles that determine which AI agent is used when you start a task. Each profile has an identifier that tells the app which agent to run. You can organize profiles with tags and set one as the default for quick access.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             } header: {
@@ -109,55 +120,122 @@ struct AgentConfigRow: View {
     let onSetDefault: () -> Void
     let onDelete: () -> Void
     
+    @State private var newTag: String = ""
+    @State private var isAddingTag: Bool = false
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                if config.isDefault {
+        VStack(alignment: .leading, spacing: 8) {
+            // Default indicator
+            if config.isDefault {
+                HStack(spacing: 4) {
                     Image(systemName: "star.fill")
                         .foregroundColor(.yellow)
                         .font(.caption)
+                    Text("Default")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
                 }
-                TextField("Name", text: $config.name)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 200)
             }
             
-            HStack {
-                Text("--agent")
+            // Profile Name
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Profile Name")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                TextField("Agent flag", text: $config.agentFlag)
+                TextField("Enter a name for this profile", text: $config.name)
                     .textFieldStyle(.roundedBorder)
-                    .font(.caption)
+                    .frame(maxWidth: 250)
             }
             
+            // Agent Identifier
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Agent Identifier")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("e.g. my-agent-profile", text: $config.agentFlag)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 250)
+                Text("The identifier used to select which agent profile to run.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            
+            // Tags
             if !config.tags.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(config.tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.blue.opacity(0.15))
-                            .clipShape(Capsule())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Tags")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        ForEach(config.tags, id: \.self) { tag in
+                            Text(tag)
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.blue.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
                     }
                 }
+            } else if isAddingTag {
+                HStack(spacing: 4) {
+                    TextField("Tag name", text: $newTag)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption)
+                        .frame(maxWidth: 120)
+                    Button("Add") {
+                        let trimmed = newTag.trimmingCharacters(in: .whitespaces)
+                        if !trimmed.isEmpty {
+                            config.tags.append(trimmed)
+                            newTag = ""
+                            isAddingTag = false
+                        }
+                    }
+                    .font(.caption)
+                    .disabled(newTag.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Cancel") {
+                        newTag = ""
+                        isAddingTag = false
+                    }
+                    .font(.caption)
+                }
+            } else {
+                Button {
+                    isAddingTag = true
+                } label: {
+                    Label("Add Tags", systemImage: "tag")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.blue)
             }
+            
+            // Action buttons
+            Divider()
             
             HStack(spacing: 12) {
                 if !config.isDefault {
-                    Button("Set as Default") { onSetDefault() }
-                        .font(.caption)
-                        .buttonStyle(.plain)
-                        .foregroundColor(.blue)
+                    Button {
+                        onSetDefault()
+                    } label: {
+                        Label("Set as Default", systemImage: "star")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-                Button("Delete") { onDelete() }
-                    .font(.caption)
-                    .buttonStyle(.plain)
-                    .foregroundColor(.red)
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 }
 

@@ -411,6 +411,42 @@ public actor ACPConnection {
         _ = try await connection.setSessionModel(request: request)
     }
 
+    /// Send a session/cancel notification to the server
+    public func cancelSession(sessionId: SessionId) async throws {
+        guard let transport = transport else {
+            throw ACPConnectionError.notConnected
+        }
+        
+        let notification = CancelNotification(sessionId: sessionId)
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(notification)
+        let paramsValue = try JSONDecoder().decode(JsonValue.self, from: data)
+        
+        let rpcNotification = JsonRpcNotification(method: "session/cancel", params: paramsValue)
+        try await transport.send(.notification(rpcNotification))
+    }
+    
+    /// Execute a slash command via the Kiro extension protocol
+    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: String?) async throws {
+        guard let transport = transport else {
+            throw ACPConnectionError.notConnected
+        }
+        
+        struct ExecuteCommandParams: Codable {
+            let sessionId: String
+            let commandName: String
+            let args: String?
+        }
+        
+        let params = ExecuteCommandParams(sessionId: sessionId.value, commandName: commandName, args: args)
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(params)
+        let paramsValue = try JSONDecoder().decode(JsonValue.self, from: data)
+        
+        let request = JsonRpcRequest(id: .int(Int.random(in: 10000...99999)), method: "_kiro.dev/commands/execute", params: paramsValue)
+        try await transport.send(.request(request))
+    }
+    
     /// Get the agent capabilities from initialization
     public func getAgentCapabilities() -> AgentCapabilities? {
         // ClientConnection stores this after connect()
@@ -464,6 +500,14 @@ public actor ACPConnection {
         throw ACPConnectionError.platformNotSupported
     }
 
+    public func cancelSession(sessionId: SessionId) async throws {
+        throw ACPConnectionError.platformNotSupported
+    }
+    
+    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: String?) async throws {
+        throw ACPConnectionError.platformNotSupported
+    }
+    
     public func getAgentCapabilities() -> AgentCapabilities? {
         return nil
     }
