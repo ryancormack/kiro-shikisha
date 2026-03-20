@@ -677,7 +677,7 @@ struct TaskPausedView: View {
 
                         Divider()
 
-                        ChatInputView { message in
+                        ChatInputView { message, _ in
                             resumeAndSend(message: message)
                         }
                         .padding()
