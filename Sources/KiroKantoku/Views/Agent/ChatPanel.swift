@@ -77,6 +77,10 @@ public struct ChatPanel: View {
                     }
                     .padding()
                 } else {
+                    ConfigSelectorBar(agent: agent, onError: { error in
+                        errorMessage = error
+                    })
+
                     ChatInputView { message, images in
                         sendMessage(message, images: images)
                     }
