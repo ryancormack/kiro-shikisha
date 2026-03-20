@@ -146,3 +146,9 @@ Contributions are welcome. Please open an issue first to discuss what you'd like
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Why "Kiro Kantoku"?
+
+**Kiro** rhymes with "hero" — the team behind Kiro chose the name to evoke a tireless, hardworking partner for developers. It also happens to be a Japanese word (岐路) meaning "crossroads."
+
+**Kantoku** (監督) is Japanese for "director" or "supervisor" — the standard term for film directors, sports coaches, and project managers. Kiro Kantoku is exactly that: the supervisor and director for your Kiro agents, giving you a single UI to manage them all.
