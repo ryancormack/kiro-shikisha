@@ -59,6 +59,8 @@ public final class Agent: Identifiable {
     public var sessionTitle: String? = nil
     /// Available configuration options from the server
     public var configOptions: [SessionConfigOption] = []
+    /// Available skills discovered from workspace and global directories
+    public var availableSkills: [Skill] = []
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
@@ -122,6 +124,8 @@ public final class Agent: Identifiable {
     public var sessionTitle: String? = nil
     /// Available configuration options from the server
     public var configOptions: [SessionConfigOption] = []
+    /// Available skills discovered from workspace and global directories
+    public var availableSkills: [Skill] = []
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {

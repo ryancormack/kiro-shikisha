@@ -141,6 +141,9 @@ public final class AgentManager {
             agent.messages.append(ChatMessage(role: .system, content: "Agent connected and ready."))
             agent.status = .active
             
+            let skillDiscovery = SkillDiscoveryService()
+            agent.availableSkills = skillDiscovery.discoverSkills(workspacePath: workspace.path)
+            
             return agent
         } catch {
             print("[ACP] ERROR: \(error)")
@@ -202,6 +205,9 @@ public final class AgentManager {
             
             agent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
             agent.status = .idle
+            
+            let skillDiscovery = SkillDiscoveryService()
+            agent.availableSkills = skillDiscovery.discoverSkills(workspacePath: workspace.path)
             
             return agent
         } catch {
@@ -627,6 +633,24 @@ public final class AgentManager {
             agent.messages[lastIndex].content += text
         } else {
             agent.messages.append(ChatMessage(role: .assistant, content: text))
+        }
+        
+        // Detect skill activation patterns like [skill: <name> activated]
+        detectSkillActivation(in: text, for: agent)
+    }
+    
+    private func detectSkillActivation(in text: String, for agent: Agent) {
+        var searchRange = text.startIndex..<text.endIndex
+        while let startRange = text.range(of: "[skill: ", range: searchRange) {
+            let nameStart = startRange.upperBound
+            guard let endRange = text.range(of: " activated]", range: nameStart..<text.endIndex) else {
+                break
+            }
+            let skillName = String(text[nameStart..<endRange.lowerBound])
+            if let idx = agent.availableSkills.firstIndex(where: { $0.name == skillName }) {
+                agent.availableSkills[idx].isActive = true
+            }
+            searchRange = endRange.upperBound..<text.endIndex
         }
     }
     
