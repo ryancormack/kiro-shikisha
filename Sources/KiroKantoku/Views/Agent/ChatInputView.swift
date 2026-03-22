@@ -4,9 +4,9 @@ import UniformTypeIdentifiers
 
 /// Text input area for composing and sending chat messages with slash command autocomplete
 public struct ChatInputView: View {
-    let agent: Agent
+    let agent: Agent?
     let onSend: (String, [Data]) -> Void
-    let onSlashCommand: (SlashCommand, String?) -> Void
+    let onSlashCommand: ((SlashCommand, String?) -> Void)?
     
     @Environment(AgentManager.self) private var agentManager
     
@@ -26,9 +26,9 @@ public struct ChatInputView: View {
     @State private var isLoadingOptions: Bool = false
     
     public init(
-        agent: Agent,
+        agent: Agent? = nil,
         onSend: @escaping (String, [Data]) -> Void,
-        onSlashCommand: @escaping (SlashCommand, String?) -> Void
+        onSlashCommand: ((SlashCommand, String?) -> Void)? = nil
     ) {
         self.agent = agent
         self.onSend = onSend
@@ -41,7 +41,8 @@ public struct ChatInputView: View {
     
     /// Merged list of all available slash commands
     private var allCommands: [SlashCommand] {
-        mergeSlashCommands(
+        guard let agent else { return [] }
+        return mergeSlashCommands(
             acpCommands: agent.availableCommands,
             kiroCommands: agent.kiroAvailableCommands
         )
@@ -180,6 +181,11 @@ public struct ChatInputView: View {
     // MARK: - Slash Command Logic
     
     private func updateSlashPickerState(_ text: String) {
+        guard agent != nil else {
+            showSlashPicker = false
+            slashFilterText = ""
+            return
+        }
         if text.hasPrefix("/") && !showOptionsPicker {
             let afterSlash = String(text.dropFirst())
             // Only show picker if no space (user is still typing the command name)
@@ -202,7 +208,7 @@ public struct ChatInputView: View {
         case .local:
             // Handle local commands client-side
             inputText = ""
-            onSlashCommand(command, nil)
+            onSlashCommand?(command, nil)
             
         case .selection:
             // Show options picker
@@ -211,6 +217,7 @@ public struct ChatInputView: View {
             showOptionsPicker = true
             isLoadingOptions = true
             Task {
+                guard let agent else { return }
                 do {
                     let options = try await agentManager.requestCommandOptions(
                         agentId: agent.id,
@@ -232,7 +239,7 @@ public struct ChatInputView: View {
         case .panel, .simple:
             // Execute directly
             inputText = ""
-            onSlashCommand(command, nil)
+            onSlashCommand?(command, nil)
         }
     }
     
@@ -240,7 +247,7 @@ public struct ChatInputView: View {
         guard let command = currentOptionsCommand else { return }
         dismissOptionsPicker()
         inputText = ""
-        onSlashCommand(command, option.value)
+        onSlashCommand?(command, option.value)
     }
     
     private func dismissSlashPicker() {
