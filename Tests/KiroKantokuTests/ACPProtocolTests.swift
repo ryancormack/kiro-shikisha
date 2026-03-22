@@ -653,4 +653,84 @@ final class ACPProtocolTests: XCTestCase {
             XCTAssertEqual(option.kind, kind)
         }
     }
+    
+    // MARK: - Kiro Plan and Thought Tests
+    
+    func testKiroPlanStepRoundTrip() throws {
+        let step = KiroPlanStep(description: "Read the config file", status: "completed")
+        
+        let data = try JSONEncoder().encode(step)
+        let decoded = try JSONDecoder().decode(KiroPlanStep.self, from: data)
+        
+        XCTAssertEqual(decoded.description, "Read the config file")
+        XCTAssertEqual(decoded.status, "completed")
+    }
+    
+    func testKiroPlanUpdateRoundTrip() throws {
+        let steps = [
+            KiroPlanStep(description: "Read the config file", status: "completed"),
+            KiroPlanStep(description: "Add the new field", status: "in_progress"),
+            KiroPlanStep(description: "Update tests", status: "pending")
+        ]
+        let planUpdate = KiroPlanUpdate(sessionUpdate: "plan", title: "Implementation Plan", steps: steps)
+        
+        let data = try JSONEncoder().encode(planUpdate)
+        let decoded = try JSONDecoder().decode(KiroPlanUpdate.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionUpdate, "plan")
+        XCTAssertEqual(decoded.title, "Implementation Plan")
+        XCTAssertEqual(decoded.steps.count, 3)
+        XCTAssertEqual(decoded.steps[0].description, "Read the config file")
+        XCTAssertEqual(decoded.steps[0].status, "completed")
+        XCTAssertEqual(decoded.steps[1].status, "in_progress")
+        XCTAssertEqual(decoded.steps[2].status, "pending")
+    }
+    
+    func testKiroPlanUpdateNilTitle() throws {
+        let planUpdate = KiroPlanUpdate(sessionUpdate: "plan", title: nil, steps: [])
+        
+        let data = try JSONEncoder().encode(planUpdate)
+        let decoded = try JSONDecoder().decode(KiroPlanUpdate.self, from: data)
+        
+        XCTAssertNil(decoded.title)
+        XCTAssertTrue(decoded.steps.isEmpty)
+    }
+    
+    func testKiroAgentThoughtChunkUpdateRoundTrip() throws {
+        let content = KiroThoughtContent(type: "text", text: "Let me analyze the code structure.")
+        let update = KiroAgentThoughtChunkUpdate(sessionUpdate: "agent_thought_chunk", content: content)
+        
+        let data = try JSONEncoder().encode(update)
+        let decoded = try JSONDecoder().decode(KiroAgentThoughtChunkUpdate.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionUpdate, "agent_thought_chunk")
+        XCTAssertEqual(decoded.content.type, "text")
+        XCTAssertEqual(decoded.content.text, "Let me analyze the code structure.")
+    }
+    
+    func testPlanEntryStatusValues() throws {
+        // Verify PlanEntryStatus can be decoded from expected string values
+        let testCases: [(String, PlanEntryStatus)] = [
+            ("\"pending\"", .pending),
+            ("\"in_progress\"", .inProgress),
+            ("\"completed\"", .completed)
+        ]
+        
+        for (json, expected) in testCases {
+            let data = json.data(using: .utf8)!
+            let decoded = try JSONDecoder().decode(PlanEntryStatus.self, from: data)
+            XCTAssertEqual(decoded, expected, "Failed to decode \(json)")
+        }
+    }
+    
+    func testPlanEntryRoundTrip() throws {
+        let entry = PlanEntry(content: "Read config", priority: .medium, status: .inProgress)
+        
+        let data = try JSONEncoder().encode(entry)
+        let decoded = try JSONDecoder().decode(PlanEntry.self, from: data)
+        
+        XCTAssertEqual(decoded.content, "Read config")
+        XCTAssertEqual(decoded.priority, .medium)
+        XCTAssertEqual(decoded.status, .inProgress)
+    }
 }

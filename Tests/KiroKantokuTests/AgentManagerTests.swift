@@ -428,4 +428,18 @@ final class AgentManagerTests: XCTestCase {
         XCTAssertNil(cmd.hint)
     }
     #endif
+
+    @MainActor
+    func testAgentCurrentPlanDefaultsToNil() async throws {
+        let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+        let agent = Agent(name: "Test Agent", workspace: workspace)
+        XCTAssertNil(agent.currentPlan, "Agent currentPlan should default to nil")
+    }
+    
+    @MainActor
+    func testAgentThoughtContentDefaultsToEmpty() async throws {
+        let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+        let agent = Agent(name: "Test Agent", workspace: workspace)
+        XCTAssertEqual(agent.thoughtContent, "", "Agent thoughtContent should default to empty string")
+    }
 }

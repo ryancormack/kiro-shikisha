@@ -108,6 +108,54 @@ public struct KiroToolCallChunkUpdate: Codable, Sendable {
     }
 }
 
+// MARK: - Kiro Plan Update
+
+/// A step in a Kiro plan update
+public struct KiroPlanStep: Codable, Sendable {
+    public let description: String
+    public let status: String
+    
+    public init(description: String, status: String) {
+        self.description = description
+        self.status = status
+    }
+}
+
+/// Parameters for _kiro.dev/session/update with plan type
+public struct KiroPlanUpdate: Codable, Sendable {
+    public let sessionUpdate: String
+    public let title: String?
+    public let steps: [KiroPlanStep]
+    
+    public init(sessionUpdate: String, title: String? = nil, steps: [KiroPlanStep]) {
+        self.sessionUpdate = sessionUpdate
+        self.title = title
+        self.steps = steps
+    }
+}
+
+/// Parameters for _kiro.dev/session/update with agent_thought_chunk type
+public struct KiroAgentThoughtChunkUpdate: Codable, Sendable {
+    public let sessionUpdate: String
+    public let content: KiroThoughtContent
+    
+    public init(sessionUpdate: String, content: KiroThoughtContent) {
+        self.sessionUpdate = sessionUpdate
+        self.content = content
+    }
+}
+
+/// Content of a thought chunk
+public struct KiroThoughtContent: Codable, Sendable {
+    public let type: String
+    public let text: String
+    
+    public init(type: String, text: String) {
+        self.type = type
+        self.text = text
+    }
+}
+
 // MARK: - Kiro Compaction Status
 
 /// Parameters for _kiro.dev/compaction/status notification

@@ -44,8 +44,20 @@ public struct ChatPanel: View {
                             .frame(maxWidth: .infinity)
                         }
 
+                        // Show agent plan if available
+                        if let plan = agent.currentPlan, !plan.entries.isEmpty {
+                            PlanView(plan: plan)
+                                .id("plan-view")
+                        }
+
+                        // Show agent thinking if active
+                        if !agent.thoughtContent.isEmpty, agent.status == .active {
+                            ThoughtBubbleView(content: agent.thoughtContent)
+                                .id("thought-view")
+                        }
+
                         if agent.status == .active {
-                            TypingIndicator(label: agent.messages.isEmpty ? "Agent is starting up…" : nil)
+                            TypingIndicator(label: agent.messages.isEmpty ? "Agent is starting up\u{2026}" : nil)
                                 .id("typing-indicator")
                         }
                     }

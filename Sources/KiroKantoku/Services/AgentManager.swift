@@ -794,11 +794,35 @@ public final class AgentManager {
             
         case "_kiro.dev/session/update":
             if let params = params {
-                if let data = try? JSONEncoder().encode(params),
-                   let parsed = try? JSONDecoder().decode(KiroToolCallChunkUpdate.self, from: data),
-                   parsed.sessionUpdate == "tool_call_chunk" {
-                    // Lightweight tool call progress - log only
-                    print("[Kiro] Tool call chunk: \(parsed.toolCallId) - \(parsed.title)")
+                if let data = try? JSONEncoder().encode(params) {
+                    // Try tool_call_chunk
+                    if let parsed = try? JSONDecoder().decode(KiroToolCallChunkUpdate.self, from: data),
+                       parsed.sessionUpdate == "tool_call_chunk" {
+                        print("[Kiro] Tool call chunk: \(parsed.toolCallId) - \(parsed.title)")
+                    }
+                    // Try plan update
+                    else if let parsed = try? JSONDecoder().decode(KiroPlanUpdate.self, from: data),
+                            parsed.sessionUpdate == "plan" {
+                        let entries = parsed.steps.map { step in
+                            let status: PlanEntryStatus
+                            switch step.status {
+                            case "completed": status = .completed
+                            case "in_progress": status = .inProgress
+                            default: status = .pending
+                            }
+                            return PlanEntry(content: step.description, priority: .medium, status: status)
+                        }
+                        agent.currentPlan = PlanUpdate(entries: entries)
+                        print("[Kiro] Plan update: \(entries.count) steps")
+                    }
+                    // Try agent_thought_chunk
+                    else if let parsed = try? JSONDecoder().decode(KiroAgentThoughtChunkUpdate.self, from: data),
+                            parsed.sessionUpdate == "agent_thought_chunk" {
+                        if !agent.isReplayingSession {
+                            agent.thoughtContent += parsed.content.text
+                        }
+                        print("[Kiro] Thought chunk: \(parsed.content.text.prefix(100))")
+                    }
                 }
             }
             agent.debugLog.append(DebugLogEntry(
@@ -881,13 +905,18 @@ public final class AgentManager {
         case .agentThoughtChunk(let chunk):
             if case .text(let t) = chunk.content {
                 entry = DebugLogEntry(type: "thought", summary: t.text.prefix(200).description)
+                // Accumulate thought text (skip during session replay)
+                if !agent.isReplayingSession {
+                    agent.thoughtContent += t.text
+                }
             } else {
                 entry = DebugLogEntry(type: "thought", summary: "(non-text)")
             }
         case .userMessageChunk:
             entry = DebugLogEntry(type: "user_echo", summary: "")
-        case .planUpdate:
-            entry = DebugLogEntry(type: "plan", summary: "")
+        case .planUpdate(let planUpdate):
+            agent.currentPlan = planUpdate
+            entry = DebugLogEntry(type: "plan", summary: "Plan: \(planUpdate.entries.count) steps")
         case .availableCommandsUpdate(let c):
             entry = DebugLogEntry(type: "commands", summary: c.availableCommands.map(\.name).joined(separator: ", "))
             agent.availableCommands = c.availableCommands
@@ -1037,6 +1066,7 @@ public final class AgentManager {
     private func handlePromptCompletion(stopReason: StopReason, for agent: Agent) {
         // Clear active tool calls
         agent.activeToolCalls.removeAll()
+        agent.thoughtContent = ""
         
         // Update agent status and add activity event
         switch stopReason {

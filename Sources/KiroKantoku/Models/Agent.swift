@@ -83,6 +83,10 @@ public final class Agent: Identifiable {
     public var pendingOAuthURL: String? = nil
     /// Pending permission request awaiting user response
     public var pendingPermissionRequest: PendingPermissionRequest? = nil
+    /// Current execution plan from the agent
+    public var currentPlan: PlanUpdate? = nil
+    /// Accumulated agent thought/reasoning text for current turn
+    public var thoughtContent: String = ""
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
@@ -170,6 +174,10 @@ public final class Agent: Identifiable {
     public var pendingOAuthURL: String? = nil
     /// Pending permission request awaiting user response
     public var pendingPermissionRequest: PendingPermissionRequest? = nil
+    /// Current execution plan from the agent
+    public var currentPlan: PlanUpdate? = nil
+    /// Accumulated agent thought/reasoning text for current turn
+    public var thoughtContent: String = ""
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
