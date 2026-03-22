@@ -543,4 +543,91 @@ final class ACPProtocolTests: XCTestCase {
         XCTAssertEqual(decoded.commands[1].name, "clear")
         XCTAssertNil(decoded.commands[1].meta)
     }
+    
+    // MARK: - Kiro Extension Notification Model Tests
+    
+    func testKiroMetadataParamsRoundTrip() throws {
+        let params = KiroMetadataParams(sessionId: "sess_meta", contextUsagePercentage: 42.5)
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroMetadataParams.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionId, "sess_meta")
+        XCTAssertEqual(decoded.contextUsagePercentage, 42.5, accuracy: 0.001)
+    }
+    
+    func testKiroAgentSwitchedParamsRoundTrip() throws {
+        let params = KiroAgentSwitchedParams(
+            sessionId: "sess_switch",
+            agentName: "CodeAgent",
+            previousAgentName: "ChatAgent",
+            welcomeMessage: "Hello from CodeAgent!"
+        )
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroAgentSwitchedParams.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionId, "sess_switch")
+        XCTAssertEqual(decoded.agentName, "CodeAgent")
+        XCTAssertEqual(decoded.previousAgentName, "ChatAgent")
+        XCTAssertEqual(decoded.welcomeMessage, "Hello from CodeAgent!")
+    }
+    
+    func testKiroAgentSwitchedParamsNilWelcomeMessage() throws {
+        let params = KiroAgentSwitchedParams(
+            sessionId: "sess_switch2",
+            agentName: "Agent2",
+            previousAgentName: "Agent1"
+        )
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroAgentSwitchedParams.self, from: data)
+        
+        XCTAssertEqual(decoded.agentName, "Agent2")
+        XCTAssertNil(decoded.welcomeMessage)
+    }
+    
+    func testKiroToolCallChunkUpdateRoundTrip() throws {
+        let update = KiroToolCallChunkUpdate(
+            sessionUpdate: "tool_call_chunk",
+            toolCallId: "tc_abc",
+            title: "Reading file",
+            kind: "read"
+        )
+        
+        let data = try JSONEncoder().encode(update)
+        let decoded = try JSONDecoder().decode(KiroToolCallChunkUpdate.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionUpdate, "tool_call_chunk")
+        XCTAssertEqual(decoded.toolCallId, "tc_abc")
+        XCTAssertEqual(decoded.title, "Reading file")
+        XCTAssertEqual(decoded.kind, "read")
+    }
+    
+    func testKiroCompactionStatusParamsRoundTrip() throws {
+        let params = KiroCompactionStatusParams(message: "Compacting context...")
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroCompactionStatusParams.self, from: data)
+        
+        XCTAssertEqual(decoded.message, "Compacting context...")
+    }
+    
+    func testKiroClearStatusParamsRoundTrip() throws {
+        let params = KiroClearStatusParams(message: "Clearing history...")
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroClearStatusParams.self, from: data)
+        
+        XCTAssertEqual(decoded.message, "Clearing history...")
+    }
+    
+    func testKiroMcpOAuthRequestParamsRoundTrip() throws {
+        let params = KiroMcpOAuthRequestParams(url: "https://example.com/oauth/authorize?state=abc123")
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroMcpOAuthRequestParams.self, from: data)
+        
+        XCTAssertEqual(decoded.url, "https://example.com/oauth/authorize?state=abc123")
+    }
 }

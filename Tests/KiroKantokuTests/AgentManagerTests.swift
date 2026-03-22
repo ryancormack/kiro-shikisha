@@ -161,6 +161,19 @@ final class AgentManagerTests: XCTestCase {
         XCTAssertTrue(agent.configOptions.isEmpty, "Agent configOptions should default to empty")
     }
     
+    @MainActor
+    func testAgentKiroNotificationPropertyDefaults() async throws {
+        let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+        let agent = Agent(name: "Test Agent", workspace: workspace)
+        
+        XCTAssertNil(agent.contextUsagePercentage, "contextUsagePercentage should default to nil")
+        XCTAssertFalse(agent.isCompacting, "isCompacting should default to false")
+        XCTAssertNil(agent.compactionMessage, "compactionMessage should default to nil")
+        XCTAssertFalse(agent.isClearingHistory, "isClearingHistory should default to false")
+        XCTAssertNil(agent.clearStatusMessage, "clearStatusMessage should default to nil")
+        XCTAssertNil(agent.pendingOAuthURL, "pendingOAuthURL should default to nil")
+    }
+    
     // MARK: - Kiro Available Commands Tests
     
     @MainActor

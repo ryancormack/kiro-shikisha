@@ -638,6 +638,15 @@ public final class AgentManager {
 
     /// Handle a Kiro vendor extension notification
     private func handleKiroNotification(method: String, params: JsonValue?, for agent: Agent) {
+        // Encode raw params to JSON string for debug logging
+        let rawJson: String?
+        if let params = params,
+           let jsonData = try? JSONEncoder().encode(params) {
+            rawJson = String(data: jsonData, encoding: .utf8)
+        } else {
+            rawJson = nil
+        }
+        
         switch method {
         case "_kiro.dev/commands/available":
             if let params = params {
@@ -647,8 +656,110 @@ public final class AgentManager {
                     agent.kiroAvailableCommands = parsed.commands
                 }
             }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_commands_available",
+                summary: "Commands available: \(agent.kiroAvailableCommands.map(\.name).joined(separator: ", "))",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/metadata":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroMetadataParams.self, from: data) {
+                    agent.contextUsagePercentage = parsed.contextUsagePercentage
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_metadata",
+                summary: "Context usage: \(agent.contextUsagePercentage.map { String(format: "%.1f%%", $0) } ?? "unknown")",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/agent/switched":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroAgentSwitchedParams.self, from: data) {
+                    agent.name = parsed.agentName
+                    agent.messages.append(ChatMessage(
+                        role: .system,
+                        content: "Agent switched from \(parsed.previousAgentName) to \(parsed.agentName)"
+                    ))
+                    if let welcomeMessage = parsed.welcomeMessage {
+                        agent.messages.append(ChatMessage(
+                            role: .system,
+                            content: welcomeMessage
+                        ))
+                    }
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_agent_switched",
+                summary: "Agent switched to \(agent.name)",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/session/update":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroToolCallChunkUpdate.self, from: data),
+                   parsed.sessionUpdate == "tool_call_chunk" {
+                    // Lightweight tool call progress - log only
+                    print("[Kiro] Tool call chunk: \(parsed.toolCallId) - \(parsed.title)")
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_session_update",
+                summary: "Kiro session update received",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/compaction/status":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroCompactionStatusParams.self, from: data) {
+                    agent.isCompacting = true
+                    agent.compactionMessage = parsed.message
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_compaction_status",
+                summary: "Compaction: \(agent.compactionMessage ?? "unknown")",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/clear/status":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroClearStatusParams.self, from: data) {
+                    agent.isClearingHistory = true
+                    agent.clearStatusMessage = parsed.message
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_clear_status",
+                summary: "Clear: \(agent.clearStatusMessage ?? "unknown")",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/mcp/oauth_request":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroMcpOAuthRequestParams.self, from: data) {
+                    agent.pendingOAuthURL = parsed.url
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_mcp_oauth_request",
+                summary: "OAuth request: \(agent.pendingOAuthURL ?? "unknown")",
+                rawJson: rawJson
+            ))
+            
         default:
-            break
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_unknown",
+                summary: "Unknown Kiro notification: \(method)",
+                rawJson: rawJson
+            ))
         }
     }
 
