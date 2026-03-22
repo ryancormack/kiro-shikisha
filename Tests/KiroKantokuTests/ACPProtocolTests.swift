@@ -733,4 +733,96 @@ final class ACPProtocolTests: XCTestCase {
         XCTAssertEqual(decoded.priority, .medium)
         XCTAssertEqual(decoded.status, .inProgress)
     }
+
+    // MARK: - Tool Call Content Type Tests
+
+    func testTerminalContentRoundTrip() throws {
+        let terminal = TerminalContent(terminalId: "term_xyz789")
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(terminal)
+        let decoded = try JSONDecoder().decode(TerminalContent.self, from: data)
+
+        XCTAssertEqual(decoded.terminalId, "term_xyz789")
+    }
+
+    func testToolCallLocationWithLine() throws {
+        let location = ToolCallLocation(path: "/path/to/main.py", line: 42)
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(location)
+        let decoded = try JSONDecoder().decode(ToolCallLocation.self, from: data)
+
+        XCTAssertEqual(decoded.path, "/path/to/main.py")
+        XCTAssertEqual(decoded.line, 42)
+    }
+
+    func testToolCallLocationWithoutLine() throws {
+        let location = ToolCallLocation(path: "/path/to/file.swift")
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(location)
+        let decoded = try JSONDecoder().decode(ToolCallLocation.self, from: data)
+
+        XCTAssertEqual(decoded.path, "/path/to/file.swift")
+        XCTAssertNil(decoded.line)
+    }
+
+    func testToolCallContentDiffDecoding() throws {
+        let json = """
+        {"type":"diff","path":"/path/to/file.json","newText":"new content","oldText":"old content"}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ToolCallContent.self, from: data)
+
+        if case .diff(let diff) = decoded {
+            XCTAssertEqual(diff.path, "/path/to/file.json")
+            XCTAssertEqual(diff.newText, "new content")
+            XCTAssertEqual(diff.oldText, "old content")
+        } else {
+            XCTFail("Expected diff content")
+        }
+    }
+
+    func testToolCallContentTerminalDecoding() throws {
+        let json = """
+        {"type":"terminal","terminalId":"term_abc123"}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ToolCallContent.self, from: data)
+
+        if case .terminal(let terminal) = decoded {
+            XCTAssertEqual(terminal.terminalId, "term_abc123")
+        } else {
+            XCTFail("Expected terminal content")
+        }
+    }
+
+    func testToolCallContentContentDecoding() throws {
+        let json = """
+        {"type":"content","content":{"type":"text","text":"hello world"}}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ToolCallContent.self, from: data)
+
+        if case .content(let c) = decoded, case .text(let t) = c.content {
+            XCTAssertEqual(t.text, "hello world")
+        } else {
+            XCTFail("Expected text content")
+        }
+    }
+
+    func testToolCallUpdateWithLocations() throws {
+        let json = """
+        {"sessionUpdate":"tool_call","toolCallId":"tc_1","title":"Read file","locations":[{"path":"/src/main.py","line":42},{"path":"/src/utils.py"}]}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ToolCallUpdate.self, from: data)
+
+        XCTAssertEqual(decoded.locations.count, 2)
+        XCTAssertEqual(decoded.locations[0].path, "/src/main.py")
+        XCTAssertEqual(decoded.locations[0].line, 42)
+        XCTAssertEqual(decoded.locations[1].path, "/src/utils.py")
+        XCTAssertNil(decoded.locations[1].line)
+    }
 }

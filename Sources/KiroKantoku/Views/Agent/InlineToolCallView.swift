@@ -54,19 +54,64 @@ struct InlineToolCallView: View {
         return "\(value)"
     }
 
-    private var detailText: String? {
-        guard let tc = toolCall else { return nil }
-        var parts: [String] = []
-        if let input = tc.rawInput { parts.append("Input:\n\(formatJson(input))") }
-        if let output = tc.rawOutput { parts.append("Output:\n\(formatJson(output))") }
-        if parts.isEmpty {
-            for item in tc.content {
-                if case .content(let c) = item, case .text(let t) = c.content {
-                    parts.append(t.text)
+    private func locationLabel(_ loc: ToolCallLocation) -> String {
+        let fileName = (loc.path as NSString).lastPathComponent
+        if let line = loc.line {
+            return "\(fileName):\(line)"
+        }
+        return fileName
+    }
+
+    @ViewBuilder
+    private func toolCallContentView(_ item: ToolCallContent) -> some View {
+        switch item {
+        case .content(let c):
+            if case .text(let t) = c.content {
+                Text(t.text)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+        case .diff(let diff):
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.text")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text(diff.path)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.secondary)
                 }
+                if let oldText = diff.oldText, !oldText.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        Text("- " + oldText.prefix(500))
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundColor(.red)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .padding(4)
+                    .background(Color.red.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Text("+ " + diff.newText.prefix(500))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.green)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .padding(4)
+                .background(Color.green.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+            }
+        case .terminal(let term):
+            HStack(spacing: 4) {
+                Image(systemName: "terminal")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("Terminal: \(term.terminalId)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.secondary)
             }
         }
-        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
     }
 
     var body: some View {
@@ -83,6 +128,21 @@ struct InlineToolCallView: View {
                     Text(toolCall?.title ?? "Tool call \(toolCallId.prefix(8))…")
                         .font(.caption)
                         .lineLimit(1)
+                    if let locations = toolCall?.locations, !locations.isEmpty {
+                        ForEach(Array(locations.prefix(3).enumerated()), id: \.offset) { _, loc in
+                            HStack(spacing: 2) {
+                                Image(systemName: "mappin")
+                                    .font(.system(size: 8))
+                                Text(locationLabel(loc))
+                                    .font(.caption2)
+                            }
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                        }
+                    }
                     Spacer()
                     Image(systemName: statusIcon)
                         .font(.caption)
@@ -93,14 +153,40 @@ struct InlineToolCallView: View {
             }
             .buttonStyle(.plain)
 
-            if isExpanded, let detail = detailText {
-                ScrollView(.horizontal, showsIndicators: true) {
-                    Text(detail)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: true, vertical: false)
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let input = toolCall?.rawInput {
+                        Text("Input:")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            Text(formatJson(input))
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .frame(maxHeight: 100)
+                    }
+
+                    if let output = toolCall?.rawOutput {
+                        Text("Output:")
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            Text(formatJson(output))
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .frame(maxHeight: 100)
+                    }
+
+                    if let tc = toolCall {
+                        ForEach(Array(tc.content.enumerated()), id: \.offset) { _, item in
+                            toolCallContentView(item)
+                        }
+                    }
                 }
-                .frame(maxHeight: 200)
                 .padding(8)
                 .background(Color(nsColor: .textBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
