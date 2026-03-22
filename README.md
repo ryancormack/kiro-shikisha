@@ -28,6 +28,10 @@ Converse with agents directly. The chat panel supports markdown rendering, inlin
 
 ![Chat](screenshots/chat.png)
 
+### Agent & Model Selector
+
+Switch between agents and models on the fly. A compact selector bar above the chat input lets you pick which agent (e.g. default, planner) and which model (e.g. Claude Opus, Sonnet, Haiku, DeepSeek, MiniMax, Qwen) to use for the current session. Changes take effect immediately via ACP.
+
 ### Code Panel
 
 See what the agent is doing in real time:

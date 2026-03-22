@@ -2,11 +2,13 @@
 import SwiftUI
 import ACPModel
 
-/// Compact selector bar for session mode and model, displayed above the chat input.
+/// Compact selector bar for session agent and model, displayed above the chat input.
 struct ConfigSelectorBar: View {
     let agent: Agent
     let onError: (String) -> Void
     @Environment(AgentManager.self) private var agentManager
+    @State private var selectedModeId: String = ""
+    @State private var selectedModelId: String = ""
 
     var body: some View {
         let hasModes = agent.availableModes.count > 1
@@ -15,115 +17,60 @@ struct ConfigSelectorBar: View {
         if hasModes || hasModels {
             HStack(spacing: DesignConstants.spacingSM) {
                 if hasModes {
-                    ModePicker(
-                        modes: agent.availableModes,
-                        currentModeId: agent.currentModeId,
-                        onChange: { modeId in
-                            Task {
-                                do {
-                                    try await agentManager.setMode(agentId: agent.id, modeId: modeId)
-                                } catch { onError(error.localizedDescription) }
-                            }
+                    Picker("Agent", selection: $selectedModeId) {
+                        ForEach(agent.availableModes, id: \.id.value) { mode in
+                            Text(mode.name).tag(mode.id.value)
                         }
-                    )
+                    }
+                    .pickerStyle(.menu)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .onChange(of: selectedModeId) { _, newValue in
+                        guard !newValue.isEmpty, newValue != agent.currentModeId?.value else { return }
+                        Task {
+                            do {
+                                try await agentManager.setMode(agentId: agent.id, modeId: newValue)
+                            } catch { onError(error.localizedDescription) }
+                        }
+                    }
                 }
                 if hasModels {
-                    ModelPicker(
-                        models: agent.availableModels,
-                        currentModelId: agent.currentModelId,
-                        onChange: { modelId in
-                            Task {
-                                do {
-                                    try await agentManager.setModel(agentId: agent.id, modelId: modelId)
-                                } catch { onError(error.localizedDescription) }
-                            }
+                    Picker("Model", selection: $selectedModelId) {
+                        ForEach(agent.availableModels, id: \.modelId.value) { model in
+                            Text(model.name).tag(model.modelId.value)
                         }
-                    )
+                    }
+                    .pickerStyle(.menu)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .onChange(of: selectedModelId) { _, newValue in
+                        guard !newValue.isEmpty, newValue != agent.currentModelId?.value else { return }
+                        Task {
+                            do {
+                                try await agentManager.setModel(agentId: agent.id, modelId: newValue)
+                            } catch { onError(error.localizedDescription) }
+                        }
+                    }
                 }
                 Spacer()
             }
             .padding(.horizontal, DesignConstants.spacingMD)
             .padding(.vertical, DesignConstants.spacingXS)
-        }
-    }
-}
-
-// MARK: - Pickers
-
-private struct ModePicker: View {
-    let modes: [SessionMode]
-    let currentModeId: SessionModeId?
-    let onChange: (String) -> Void
-
-    var body: some View {
-        Menu {
-            ForEach(modes, id: \.id.value) { mode in
-                Button {
-                    onChange(mode.id.value)
-                } label: {
-                    if mode.id.value == currentModeId?.value {
-                        Label(mode.name, systemImage: "checkmark")
-                    } else {
-                        Text(mode.name)
-                    }
+            .onAppear {
+                selectedModeId = agent.currentModeId?.value ?? ""
+                selectedModelId = agent.currentModelId?.value ?? ""
+            }
+            .onChange(of: agent.currentModeId?.value) { _, newValue in
+                if let newValue, newValue != selectedModeId {
+                    selectedModeId = newValue
                 }
             }
-        } label: {
-            pickerLabel(
-                title: "Agent",
-                value: modes.first(where: { $0.id.value == currentModeId?.value })?.name ?? "—"
-            )
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .controlSize(.small)
-    }
-}
-
-private struct ModelPicker: View {
-    let models: [ModelInfo]
-    let currentModelId: ModelId?
-    let onChange: (String) -> Void
-
-    var body: some View {
-        Menu {
-            ForEach(models, id: \.modelId.value) { model in
-                Button {
-                    onChange(model.modelId.value)
-                } label: {
-                    if model.modelId.value == currentModelId?.value {
-                        Label(model.name, systemImage: "checkmark")
-                    } else {
-                        Text(model.name)
-                    }
+            .onChange(of: agent.currentModelId?.value) { _, newValue in
+                if let newValue, newValue != selectedModelId {
+                    selectedModelId = newValue
                 }
             }
-        } label: {
-            pickerLabel(
-                title: "Model",
-                value: models.first(where: { $0.modelId.value == currentModelId?.value })?.name ?? "—"
-            )
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .controlSize(.small)
     }
-}
-
-// MARK: - Shared label
-
-private func pickerLabel(title: String, value: String) -> some View {
-    HStack(spacing: DesignConstants.spacingXS) {
-        Text(title)
-            .foregroundColor(.secondary)
-        Text(value)
-        Image(systemName: "chevron.up.chevron.down")
-            .foregroundColor(.secondary)
-    }
-    .font(.caption)
-    .padding(.horizontal, DesignConstants.spacingSM)
-    .padding(.vertical, DesignConstants.spacingXS)
-    .background(DesignConstants.controlBackground)
-    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
 }
 #endif

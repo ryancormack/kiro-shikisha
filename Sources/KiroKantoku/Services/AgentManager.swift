@@ -220,10 +220,16 @@ public final class AgentManager {
             if let modes = loadResult.modes {
                 agent.availableModes = modes.availableModes
                 agent.currentModeId = modes.currentModeId
+                print("[ACP] loadSession: set \(modes.availableModes.count) modes, currentModeId=\(modes.currentModeId)")
+            } else {
+                print("[ACP] loadSession: modes is nil")
             }
             if let models = loadResult.models {
                 agent.availableModels = models.availableModels
                 agent.currentModelId = models.currentModelId
+                print("[ACP] loadSession: set \(models.availableModels.count) models, currentModelId=\(models.currentModelId)")
+            } else {
+                print("[ACP] loadSession: models is nil")
             }
             agent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
             agent.status = .idle
@@ -539,6 +545,7 @@ public final class AgentManager {
             throw AgentManagerError.notConnected
         }
         try await connection.setSessionMode(sessionId: sessionId, modeId: SessionModeId(value: modeId))
+        agent.currentModeId = SessionModeId(value: modeId)
     }
 
     /// Set the model for an agent's session
@@ -553,6 +560,7 @@ public final class AgentManager {
             throw AgentManagerError.notConnected
         }
         try await connection.setSessionModel(sessionId: sessionId, modelId: ModelId(value: modelId))
+        agent.currentModelId = ModelId(value: modelId)
     }
 
     /// Set a configuration option for an agent's session
