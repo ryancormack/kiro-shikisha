@@ -38,6 +38,12 @@ public struct SlashCommand: Identifiable, Sendable {
     }
 }
 
+/// Commands we support in the GUI. Other Kiro commands are CLI-specific
+/// and either don't make sense in a GUI context or aren't implemented yet.
+private let supportedCommands: Set<String> = [
+    "compact", "context", "help", "tools", "usage"
+]
+
 /// Builds a merged list of SlashCommand from standard ACP commands and Kiro extension commands.
 public func mergeSlashCommands(
     acpCommands: [AvailableCommand],
@@ -48,8 +54,10 @@ public func mergeSlashCommands(
 
     // Kiro commands have richer metadata, so process them first
     for cmd in kiroCommands {
-        guard !seen.contains(cmd.name) else { continue }
-        seen.insert(cmd.name)
+        // Strip leading "/" from command name - Kiro sends names like "/agent"
+        let name = cmd.name.hasPrefix("/") ? String(cmd.name.dropFirst()) : cmd.name
+        guard !seen.contains(name) else { continue }
+        seen.insert(name)
 
         var inputType: SlashCommandInputType = .simple
         var optionsMethod: String?
@@ -71,7 +79,7 @@ public func mergeSlashCommands(
         }
 
         result.append(SlashCommand(
-            name: cmd.name,
+            name: name,
             description: cmd.description,
             inputType: inputType,
             optionsMethod: optionsMethod
@@ -80,8 +88,10 @@ public func mergeSlashCommands(
 
     // Add standard ACP commands that weren't already added from Kiro
     for cmd in acpCommands {
-        guard !seen.contains(cmd.name) else { continue }
-        seen.insert(cmd.name)
+        // Strip leading "/" from command name
+        let name = cmd.name.hasPrefix("/") ? String(cmd.name.dropFirst()) : cmd.name
+        guard !seen.contains(name) else { continue }
+        seen.insert(name)
 
         var hint: String?
         if case .unstructured(let ui) = cmd.input {
@@ -89,13 +99,15 @@ public func mergeSlashCommands(
         }
 
         result.append(SlashCommand(
-            name: cmd.name,
+            name: name,
             description: cmd.description,
             inputType: .simple,
             hint: hint
         ))
     }
 
-    return result.sorted { $0.name < $1.name }
+    // Filter to only supported commands
+    let filtered = result.filter { supportedCommands.contains($0.name) }
+    return filtered.sorted { $0.name < $1.name }
 }
 #endif

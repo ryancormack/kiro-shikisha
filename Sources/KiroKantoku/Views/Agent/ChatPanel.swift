@@ -227,17 +227,23 @@ public struct ChatPanel: View {
                     if let value = optionValue {
                         args["value"] = value
                     }
-                    try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
+                    let message = try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
+                    if let message, !message.isEmpty {
+                        agent.messages.append(ChatMessage(role: .assistant, content: message))
+                    }
                 } catch {
                     errorMessage = error.localizedDescription
                 }
             }
             
         case .panel:
-            // Execute and the response will appear via session updates
+            // Execute and show the response message in chat
             Task {
                 do {
-                    try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name)
+                    let message = try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name)
+                    if let message, !message.isEmpty {
+                        agent.messages.append(ChatMessage(role: .assistant, content: message))
+                    }
                 } catch {
                     errorMessage = error.localizedDescription
                 }
@@ -251,7 +257,10 @@ public struct ChatPanel: View {
                     if let value = optionValue {
                         args["value"] = value
                     }
-                    try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
+                    let message = try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
+                    if let message, !message.isEmpty {
+                        agent.messages.append(ChatMessage(role: .assistant, content: message))
+                    }
                 } catch {
                     errorMessage = error.localizedDescription
                 }

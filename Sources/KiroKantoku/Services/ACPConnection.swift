@@ -480,8 +480,9 @@ public actor ACPConnection {
         try await transport.send(.notification(rpcNotification))
     }
     
-    /// Execute a slash command via the Kiro extension protocol
-    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws {
+    /// Execute a slash command via the Kiro extension protocol.
+    /// Returns the response message string if the server provides one.
+    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws -> String? {
         guard let transport = transport else {
             throw ACPConnectionError.notConnected
         }
@@ -501,13 +502,36 @@ public actor ACPConnection {
             "args": .object(argsObject)
         ])
         
+        let requestId = Int.random(in: 10000...99999)
         let paramsValue: JsonValue = .object([
             "sessionId": .string(sessionId.value),
             "command": commandObject
         ])
         
-        let request = JsonRpcRequest(id: .int(Int.random(in: 10000...99999)), method: "_kiro.dev/commands/execute", params: paramsValue)
-        try await transport.send(.request(request))
+        let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/execute", params: paramsValue)
+        
+        // Register a pending response handler to capture the response message
+        let message: String? = try await withCheckedThrowingContinuation { continuation in
+            transport.registerPendingResponse(requestId: .int(requestId)) { result in
+                if let result = result,
+                   let obj = result.objectValue,
+                   let msg = obj["message"]?.stringValue {
+                    continuation.resume(returning: msg)
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
+            Task {
+                do {
+                    try await transport.send(.request(request))
+                } catch {
+                    transport.removePendingResponse(requestId: .int(requestId))
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+        
+        return message
     }
     
     /// Request available options for a selection-type slash command.
@@ -517,9 +541,12 @@ public actor ACPConnection {
             throw ACPConnectionError.notConnected
         }
         
+        // Strip leading "/" if present
+        let name = command.hasPrefix("/") ? String(command.dropFirst()) : command
+        
         let requestId = Int.random(in: 10000...99999)
         let paramsValue: JsonValue = .object([
-            "command": .string(command),
+            "command": .string(name),
             "sessionId": .string(sessionId.value),
             "partial": .string(partial)
         ])
@@ -617,7 +644,7 @@ public actor ACPConnection {
         throw ACPConnectionError.platformNotSupported
     }
     
-    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws {
+    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws -> String? {
         throw ACPConnectionError.platformNotSupported
     }
     

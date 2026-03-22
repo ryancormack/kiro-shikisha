@@ -661,8 +661,10 @@ public final class AgentManager {
         try await connection.setSessionConfigOption(sessionId: sessionId, configId: SessionConfigId(value: configId), value: SessionConfigValueId(value: value))
     }
 
-    /// Execute a slash command for an agent
-    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws {
+    /// Execute a slash command for an agent.
+    /// Returns the response message from the server, if any.
+    @discardableResult
+    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws -> String? {
         guard let agent = agents[agentId] else {
             throw AgentManagerError.agentNotFound(agentId)
         }
@@ -678,7 +680,9 @@ public final class AgentManager {
         agent.messages.append(ChatMessage(role: .user, content: "/\(command)\(argsDisplay)"))
         agent.status = .active
         
-        try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+        let message = try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+        agent.status = .idle
+        return message
     }
 
     /// Request available options for a selection-type slash command
@@ -1157,7 +1161,7 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
-    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws {
+    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws -> String? {
         throw AgentManagerError.platformNotSupported
     }
     
@@ -1276,7 +1280,7 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
-    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws {
+    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws -> String? {
         throw AgentManagerError.platformNotSupported
     }
     
