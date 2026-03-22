@@ -42,16 +42,16 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
     
     /// Register a handler for a pending response to a request
     public func registerPendingResponse(requestId: RequestId, handler: @escaping @Sendable (JsonValue?) -> Void) {
-        pendingLock.lock()
-        pendingResponses[requestId] = handler
-        pendingLock.unlock()
+        pendingLock.withLock {
+            pendingResponses[requestId] = handler
+        }
     }
     
     /// Remove a pending response handler
     public func removePendingResponse(requestId: RequestId) {
-        pendingLock.lock()
-        pendingResponses.removeValue(forKey: requestId)
-        pendingLock.unlock()
+        pendingLock.withLock {
+            pendingResponses.removeValue(forKey: requestId)
+        }
     }
     
     /// Initialize with process pipes
@@ -128,9 +128,9 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
                     if let message = try? decoder.decode(JsonRpcMessage.self, from: Data(messageData)) {
                         // Check for pending response handlers (for vendor extension requests)
                         if case .response(let response) = message {
-                            self.pendingLock.lock()
-                            let handler = self.pendingResponses.removeValue(forKey: response.id)
-                            self.pendingLock.unlock()
+                            let handler = self.pendingLock.withLock {
+                                self.pendingResponses.removeValue(forKey: response.id)
+                            }
                             if let handler = handler {
                                 handler(response.result)
                                 continue
