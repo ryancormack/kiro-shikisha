@@ -55,6 +55,12 @@ public final class Agent: Identifiable {
     public var availableCommands: [AvailableCommand] = []
     /// Current session mode ID
     public var currentModeId: SessionModeId? = nil
+    /// Available session modes from the server
+    public var availableModes: [SessionMode] = []
+    /// Current model ID
+    public var currentModelId: ModelId? = nil
+    /// Available models from the server
+    public var availableModels: [ModelInfo] = []
     /// Server-generated session title
     public var sessionTitle: String? = nil
     /// Available configuration options from the server
@@ -120,6 +126,12 @@ public final class Agent: Identifiable {
     public var availableCommands: [AvailableCommand] = []
     /// Current session mode ID
     public var currentModeId: SessionModeId? = nil
+    /// Available session modes from the server
+    public var availableModes: [SessionMode] = []
+    /// Current model ID
+    public var currentModelId: ModelId? = nil
+    /// Available models from the server
+    public var availableModels: [ModelInfo] = []
     /// Server-generated session title
     public var sessionTitle: String? = nil
     /// Available configuration options from the server

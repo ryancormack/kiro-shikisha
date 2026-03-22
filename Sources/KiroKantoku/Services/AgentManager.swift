@@ -138,6 +138,17 @@ public final class AgentManager {
             print("[ACP] Session created: \(sessionResult.sessionId.value)")
             
             agent.sessionId = sessionResult.sessionId
+            if let configOptions = sessionResult.configOptions {
+                agent.configOptions = configOptions
+            }
+            if let modes = sessionResult.modes {
+                agent.availableModes = modes.availableModes
+                agent.currentModeId = modes.currentModeId
+            }
+            if let models = sessionResult.models {
+                agent.availableModels = models.availableModels
+                agent.currentModelId = models.currentModelId
+            }
             agent.messages.append(ChatMessage(role: .system, content: "Agent connected and ready."))
             agent.status = .active
             
@@ -197,12 +208,23 @@ public final class AgentManager {
             print("[ACP] Proactively cleaned up lock file for session \(sessionId)")
             
             agent.isReplayingSession = true
-            _ = try await connection.loadSession(
+            let loadResult = try await connection.loadSession(
                 sessionId: sessionIdValue,
                 cwd: workspace.path.path
             )
             agent.isReplayingSession = false
             
+            if let configOptions = loadResult.configOptions {
+                agent.configOptions = configOptions
+            }
+            if let modes = loadResult.modes {
+                agent.availableModes = modes.availableModes
+                agent.currentModeId = modes.currentModeId
+            }
+            if let models = loadResult.models {
+                agent.availableModels = models.availableModels
+                agent.currentModelId = models.currentModelId
+            }
             agent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
             agent.status = .idle
             
