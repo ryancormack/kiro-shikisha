@@ -36,6 +36,24 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
     /// Handler for Kiro vendor extension notifications (_kiro.dev/*)
     public var kiroNotificationHandler: (@Sendable (String, JsonValue?) async -> Void)?
     
+    /// Pending response handlers indexed by request ID
+    private var pendingResponses: [RequestId: @Sendable (JsonValue?) -> Void] = [:]
+    private let pendingLock = NSLock()
+    
+    /// Register a handler for a pending response to a request
+    public func registerPendingResponse(requestId: RequestId, handler: @escaping @Sendable (JsonValue?) -> Void) {
+        pendingLock.lock()
+        pendingResponses[requestId] = handler
+        pendingLock.unlock()
+    }
+    
+    /// Remove a pending response handler
+    public func removePendingResponse(requestId: RequestId) {
+        pendingLock.lock()
+        pendingResponses.removeValue(forKey: requestId)
+        pendingLock.unlock()
+    }
+    
     /// Initialize with process pipes
     /// - Parameters:
     ///   - stdinPipe: Pipe connected to the subprocess's stdin
@@ -108,6 +126,16 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
                     // Decode JSON-RPC message
                     let decoder = JSONDecoder()
                     if let message = try? decoder.decode(JsonRpcMessage.self, from: Data(messageData)) {
+                        // Check for pending response handlers (for vendor extension requests)
+                        if case .response(let response) = message {
+                            self.pendingLock.lock()
+                            let handler = self.pendingResponses.removeValue(forKey: response.id)
+                            self.pendingLock.unlock()
+                            if let handler = handler {
+                                handler(response.result)
+                                continue
+                            }
+                        }
                         // Check for Kiro vendor extension notifications
                         if case .notification(let notif) = message, notif.method.hasPrefix("_kiro.dev/") {
                             if let handler = self.kiroNotificationHandler {
@@ -479,20 +507,48 @@ public actor ACPConnection {
         try await transport.send(.request(request))
     }
     
-    /// Request available options for a selection-type slash command
-    public func requestCommandOptions(sessionId: SessionId, command: String, partial: String = "") async throws {
+    /// Request available options for a selection-type slash command.
+    /// The response is delivered via the kiroResponseHandler on the transport.
+    public func requestCommandOptions(sessionId: SessionId, command: String, partial: String = "") async throws -> [CommandOption] {
         guard let transport = transport else {
             throw ACPConnectionError.notConnected
         }
         
+        let requestId = Int.random(in: 10000...99999)
         let paramsValue: JsonValue = .object([
             "command": .string(command),
             "sessionId": .string(sessionId.value),
             "partial": .string(partial)
         ])
         
-        let request = JsonRpcRequest(id: .int(Int.random(in: 10000...99999)), method: "_kiro.dev/commands/options", params: paramsValue)
-        try await transport.send(.request(request))
+        let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/options", params: paramsValue)
+        
+        // Register a pending response handler before sending
+        let options: [CommandOption] = try await withCheckedThrowingContinuation { continuation in
+            transport.registerPendingResponse(requestId: .int(requestId)) { result in
+                if let result = result {
+                    do {
+                        let data = try JSONEncoder().encode(result)
+                        let decoded = try JSONDecoder().decode(CommandOptionsResponse.self, from: data)
+                        continuation.resume(returning: decoded.options)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                } else {
+                    continuation.resume(returning: [])
+                }
+            }
+            Task {
+                do {
+                    try await transport.send(.request(request))
+                } catch {
+                    transport.removePendingResponse(requestId: .int(requestId))
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+        
+        return options
     }
     
     /// Get the agent capabilities from initialization
@@ -561,7 +617,7 @@ public actor ACPConnection {
         throw ACPConnectionError.platformNotSupported
     }
     
-    public func requestCommandOptions(sessionId: SessionId, command: String, partial: String = "") async throws {
+    public func requestCommandOptions(sessionId: SessionId, command: String, partial: String = "") async throws -> [CommandOption] {
         throw ACPConnectionError.platformNotSupported
     }
     

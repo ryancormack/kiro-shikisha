@@ -620,7 +620,22 @@ public final class AgentManager {
         
         try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
     }
-    
+
+    /// Request available options for a selection-type slash command
+    public func requestCommandOptions(agentId: UUID, command: String, partial: String = "") async throws -> [CommandOption] {
+        guard let agent = agents[agentId] else {
+            throw AgentManagerError.agentNotFound(agentId)
+        }
+        guard let sessionId = agent.sessionId else {
+            throw AgentManagerError.noSessionId
+        }
+        guard let connection = connections[agentId] else {
+            throw AgentManagerError.notConnected
+        }
+
+        return try await connection.requestCommandOptions(sessionId: sessionId, command: command, partial: partial)
+    }
+
     /// Handle a Kiro vendor extension notification
     private func handleKiroNotification(method: String, params: JsonValue?, for agent: Agent) {
         switch method {
@@ -911,6 +926,10 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
+    public func requestCommandOptions(agentId: UUID, command: String, partial: String = "") async throws -> [CommandOption] {
+        throw AgentManagerError.platformNotSupported
+    }
+    
     public func startAgentInWorktree(
         sourceWorkspace: Workspace,
         branchName: String,
@@ -1015,6 +1034,10 @@ public final class AgentManager {
     }
     
     public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func requestCommandOptions(agentId: UUID, command: String, partial: String = "") async throws -> [CommandOption] {
         throw AgentManagerError.platformNotSupported
     }
     

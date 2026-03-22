@@ -85,9 +85,11 @@ public struct ChatPanel: View {
                         sendMessage("Please use the \(skillName) skill for the following request.")
                     }
 
-                    ChatInputView { message, images in
+                    ChatInputView(agent: agent, onSend: { message, images in
                         sendMessage(message, images: images)
-                    }
+                    }, onSlashCommand: { command, optionValue in
+                        handleSlashCommand(command, optionValue: optionValue)
+                    })
                     .padding()
                 }
                 
@@ -119,7 +121,7 @@ public struct ChatPanel: View {
     private func sendMessage(_ content: String, images: [Data] = []) {
         errorMessage = nil
         
-        // Detect slash commands
+        // Detect slash commands (fallback for text typed directly without picker)
         if content.hasPrefix("/") {
             let parts = content.dropFirst().split(separator: " ", maxSplits: 1)
             let command = String(parts.first ?? "")
@@ -146,6 +148,60 @@ public struct ChatPanel: View {
                 try await agentManager.sendPrompt(agentId: agent.id, prompt: content, imageAttachments: images)
             } catch {
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+    
+    private func handleSlashCommand(_ command: SlashCommand, optionValue: String?) {
+        errorMessage = nil
+        
+        switch command.inputType {
+        case .local:
+            // Handle local commands client-side
+            if command.name == "quit" || command.name == "exit" {
+                Task {
+                    await agentManager.stopAgent(id: agent.id)
+                }
+            } else if command.name == "clear" {
+                agent.messages.removeAll()
+            }
+            
+        case .selection:
+            // Execute with the selected option value
+            Task {
+                do {
+                    var args: [String: String] = [:]
+                    if let value = optionValue {
+                        args["value"] = value
+                    }
+                    try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            
+        case .panel:
+            // Execute and the response will appear via session updates
+            Task {
+                do {
+                    try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            
+        case .simple:
+            // Execute directly
+            Task {
+                do {
+                    var args: [String: String] = [:]
+                    if let value = optionValue {
+                        args["value"] = value
+                    }
+                    try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }
