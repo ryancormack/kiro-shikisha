@@ -174,6 +174,52 @@ final class AgentManagerTests: XCTestCase {
         XCTAssertNil(agent.pendingOAuthURL, "pendingOAuthURL should default to nil")
     }
     
+    @MainActor
+    func testAgentPendingPermissionRequestDefaultsToNil() async throws {
+        let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+        let agent = Agent(name: "Test Agent", workspace: workspace)
+        
+        XCTAssertNil(agent.pendingPermissionRequest, "pendingPermissionRequest should default to nil")
+    }
+    
+    @MainActor
+    func testPendingPermissionRequestProperties() async throws {
+        let options = [
+            PermissionOptionDisplay(optionId: "opt_allow", label: "Allow", kind: "allow_once"),
+            PermissionOptionDisplay(optionId: "opt_reject", label: "Reject", kind: "reject_once")
+        ]
+        let request = PendingPermissionRequest(
+            toolCallTitle: "shell",
+            toolCallKind: "execute",
+            rawInput: "ls -la",
+            options: options
+        )
+        
+        XCTAssertEqual(request.toolCallTitle, "shell")
+        XCTAssertEqual(request.toolCallKind, "execute")
+        XCTAssertEqual(request.rawInput, "ls -la")
+        XCTAssertEqual(request.options.count, 2)
+        XCTAssertEqual(request.options[0].optionId, "opt_allow")
+        XCTAssertEqual(request.options[0].label, "Allow")
+        XCTAssertEqual(request.options[0].kind, "allow_once")
+        XCTAssertEqual(request.options[0].id, "opt_allow") // id derived from optionId
+        XCTAssertEqual(request.options[1].optionId, "opt_reject")
+        XCTAssertEqual(request.options[1].kind, "reject_once")
+    }
+    
+    @MainActor
+    func testPendingPermissionRequestDefaults() async throws {
+        let request = PendingPermissionRequest(
+            toolCallTitle: "tool",
+            options: []
+        )
+        
+        XCTAssertNil(request.toolCallKind)
+        XCTAssertNil(request.rawInput)
+        XCTAssertTrue(request.options.isEmpty)
+        XCTAssertNotEqual(request.id, UUID()) // Has a valid UUID
+    }
+    
     // MARK: - Kiro Available Commands Tests
     
     @MainActor

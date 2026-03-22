@@ -52,6 +52,9 @@ public final class AgentManager {
     /// Background tasks for prompt responses
     private var promptTasks: [UUID: Task<Void, Never>] = [:]
     
+    /// Pending permission completion handlers indexed by agent ID
+    private var permissionHandlers: [UUID: @Sendable (RequestPermissionOutcome) -> Void] = [:]
+    
     public init(kirocliPath: String = "/usr/local/bin/kiro-cli") {
         self.kirocliPath = kirocliPath
     }
@@ -73,6 +76,54 @@ public final class AgentManager {
     }
     
     // MARK: - Public Methods
+    
+    /// Build a permission request handler for a given agent ID
+    private func makePermissionRequestHandler(agentId: UUID) -> @Sendable (ToolCallUpdateData, [PermissionOption], @escaping @Sendable (RequestPermissionOutcome) -> Void) -> Void {
+        return { [weak self] toolCall, options, completion in
+            Task { @MainActor in
+                guard let self = self, let agent = self.agents[agentId] else {
+                    completion(.cancelled)
+                    return
+                }
+                
+                // Extract display information from the tool call
+                let title = toolCall.title ?? "Tool Call"
+                let kind = toolCall.kind?.rawValue
+                var rawInputStr: String? = nil
+                if let rawInput = toolCall.rawInput {
+                    // Try to extract just the command if it is a shell/execute call
+                    if let obj = rawInput.objectValue, let cmd = obj["command"]?.stringValue {
+                        rawInputStr = cmd
+                    } else if let data = try? JSONEncoder().encode(rawInput),
+                              let jsonStr = String(data: data, encoding: .utf8) {
+                        rawInputStr = jsonStr
+                    }
+                }
+                
+                let displayOptions = options.map { opt in
+                    PermissionOptionDisplay(
+                        optionId: opt.optionId.value,
+                        label: opt.name,
+                        kind: opt.kind.rawValue
+                    )
+                }
+                
+                agent.pendingPermissionRequest = PendingPermissionRequest(
+                    toolCallTitle: title,
+                    toolCallKind: kind,
+                    rawInput: rawInputStr,
+                    options: displayOptions
+                )
+                
+                self.permissionHandlers[agentId] = completion
+                
+                agent.debugLog.append(DebugLogEntry(
+                    type: "permission_request",
+                    summary: "Permission requested for: \(title)"
+                ))
+            }
+        }
+    }
     
     /// Convert a branch name to a human-readable display name
     /// - Parameter branch: The branch name (e.g., "feature/my-feature")
@@ -132,11 +183,14 @@ public final class AgentManager {
                 }
             }
             
+            let permissionRequestHandler = makePermissionRequestHandler(agentId: agentId)
+            
             try await connection.connect(
                 kirocliPath: kirocliPath,
                 agentConfig: agentConfig,
                 onSessionUpdate: sessionUpdateHandler,
-                onKiroNotification: kiroNotificationHandler
+                onKiroNotification: kiroNotificationHandler,
+                onPermissionRequest: permissionRequestHandler
             )
             connections[agent.id] = connection
             print("[ACP] Process spawned and initialized successfully")
@@ -210,11 +264,14 @@ public final class AgentManager {
                 }
             }
             
+            let permissionRequestHandler = makePermissionRequestHandler(agentId: agentId)
+            
             try await connection.connect(
                 kirocliPath: kirocliPath,
                 agentConfig: agentConfig,
                 onSessionUpdate: sessionUpdateHandler,
-                onKiroNotification: kiroNotificationHandler
+                onKiroNotification: kiroNotificationHandler,
+                onPermissionRequest: permissionRequestHandler
             )
             connections[agent.id] = connection
             
@@ -304,11 +361,14 @@ public final class AgentManager {
                         }
                     }
                     
+                    let retryPermissionRequestHandler = makePermissionRequestHandler(agentId: retryAgentId)
+                    
                     try await retryConnection.connect(
                         kirocliPath: kirocliPath,
                         agentConfig: agentConfig,
                         onSessionUpdate: retrySessionUpdateHandler,
-                        onKiroNotification: retryKiroNotificationHandler
+                        onKiroNotification: retryKiroNotificationHandler,
+                        onPermissionRequest: retryPermissionRequestHandler
                     )
                     connections[retryAgent.id] = retryConnection
                     
@@ -634,6 +694,40 @@ public final class AgentManager {
         }
 
         return try await connection.requestCommandOptions(sessionId: sessionId, command: command, partial: partial)
+    }
+
+    /// Resolve a pending permission request with the user's selection
+    /// - Parameters:
+    ///   - agentId: The agent ID
+    ///   - optionId: The selected option ID
+    public func resolvePermission(agentId: UUID, optionId: String) {
+        guard let agent = agents[agentId] else { return }
+        agent.pendingPermissionRequest = nil
+        
+        if let handler = permissionHandlers.removeValue(forKey: agentId) {
+            handler(.selected(PermissionOptionId(value: optionId)))
+        }
+        
+        agent.debugLog.append(DebugLogEntry(
+            type: "permission_response",
+            summary: "User selected: \(optionId)"
+        ))
+    }
+    
+    /// Cancel a pending permission request
+    /// - Parameter agentId: The agent ID
+    public func cancelPermission(agentId: UUID) {
+        guard let agent = agents[agentId] else { return }
+        agent.pendingPermissionRequest = nil
+        
+        if let handler = permissionHandlers.removeValue(forKey: agentId) {
+            handler(.cancelled)
+        }
+        
+        agent.debugLog.append(DebugLogEntry(
+            type: "permission_response",
+            summary: "Permission cancelled"
+        ))
     }
 
     /// Handle a Kiro vendor extension notification
@@ -1041,6 +1135,14 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
+    public func resolvePermission(agentId: UUID, optionId: String) {
+        // No-op on non-macOS
+    }
+    
+    public func cancelPermission(agentId: UUID) {
+        // No-op on non-macOS
+    }
+    
     public func startAgentInWorktree(
         sourceWorkspace: Workspace,
         branchName: String,
@@ -1150,6 +1252,14 @@ public final class AgentManager {
     
     public func requestCommandOptions(agentId: UUID, command: String, partial: String = "") async throws -> [CommandOption] {
         throw AgentManagerError.platformNotSupported
+    }
+    
+    public func resolvePermission(agentId: UUID, optionId: String) {
+        // No-op on non-macOS
+    }
+    
+    public func cancelPermission(agentId: UUID) {
+        // No-op on non-macOS
     }
     
     public func startAgentInWorktree(

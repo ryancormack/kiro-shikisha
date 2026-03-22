@@ -272,11 +272,13 @@ public actor ACPConnection {
     ///   - agentConfig: Optional agent configuration path (passed via --agent flag)
     ///   - onSessionUpdate: Callback for session updates
     ///   - onKiroNotification: Optional callback for Kiro vendor extension notifications (_kiro.dev/*)
+    ///   - onPermissionRequest: Optional callback for permission requests from the agent
     public func connect(
         kirocliPath: String,
         agentConfig: String? = nil,
         onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void,
-        onKiroNotification: (@Sendable (String, JsonValue?) async -> Void)? = nil
+        onKiroNotification: (@Sendable (String, JsonValue?) async -> Void)? = nil,
+        onPermissionRequest: ((@Sendable (ToolCallUpdateData, [PermissionOption], @escaping @Sendable (RequestPermissionOutcome) -> Void) -> Void))? = nil
     ) async throws {
         guard process == nil else {
             // Already connected
@@ -340,6 +342,7 @@ public actor ACPConnection {
         // Create client with session update callback
         let client = KiroClient()
         client.onSessionUpdateCallback = onSessionUpdate
+        client.onPermissionRequest = onPermissionRequest
         kiroClient = client
         
         // Create and connect ClientConnection
@@ -576,7 +579,8 @@ public actor ACPConnection {
         kirocliPath: String,
         agentConfig: String? = nil,
         onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void,
-        onKiroNotification: (@Sendable (String, JsonValue?) async -> Void)? = nil
+        onKiroNotification: (@Sendable (String, JsonValue?) async -> Void)? = nil,
+        onPermissionRequest: ((@Sendable (ToolCallUpdateData, [PermissionOption], @escaping @Sendable (RequestPermissionOutcome) -> Void) -> Void))? = nil
     ) async throws {
         throw ACPConnectionError.platformNotSupported
     }

@@ -81,6 +81,8 @@ public final class Agent: Identifiable {
     public var clearStatusMessage: String? = nil
     /// Pending OAuth URL that the user needs to open
     public var pendingOAuthURL: String? = nil
+    /// Pending permission request awaiting user response
+    public var pendingPermissionRequest: PendingPermissionRequest? = nil
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
@@ -166,6 +168,8 @@ public final class Agent: Identifiable {
     public var clearStatusMessage: String? = nil
     /// Pending OAuth URL that the user needs to open
     public var pendingOAuthURL: String? = nil
+    /// Pending permission request awaiting user response
+    public var pendingPermissionRequest: PendingPermissionRequest? = nil
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {

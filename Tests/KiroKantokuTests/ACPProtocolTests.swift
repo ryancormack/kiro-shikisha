@@ -630,4 +630,27 @@ final class ACPProtocolTests: XCTestCase {
         
         XCTAssertEqual(decoded.url, "https://example.com/oauth/authorize?state=abc123")
     }
+    
+    // MARK: - Permission Display Model Tests
+    
+    func testPermissionOptionDisplayProperties() {
+        let option = PermissionOptionDisplay(
+            optionId: "opt_allow_once",
+            label: "Allow Once",
+            kind: "allow_once"
+        )
+        
+        XCTAssertEqual(option.optionId, "opt_allow_once")
+        XCTAssertEqual(option.label, "Allow Once")
+        XCTAssertEqual(option.kind, "allow_once")
+        XCTAssertEqual(option.id, "opt_allow_once") // id derived from optionId
+    }
+    
+    func testPermissionOptionDisplayAllKinds() {
+        let kinds = ["allow_once", "allow_always", "reject_once", "reject_always"]
+        for kind in kinds {
+            let option = PermissionOptionDisplay(optionId: "id_\(kind)", label: kind, kind: kind)
+            XCTAssertEqual(option.kind, kind)
+        }
+    }
 }

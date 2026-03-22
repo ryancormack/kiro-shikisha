@@ -33,6 +33,10 @@ public final class KiroClient: Client, ClientSessionOperations, @unchecked Senda
     public var onConnectedCallback: (@Sendable () async -> Void)?
     public var onDisconnectedCallback: (@Sendable (Error?) async -> Void)?
 
+    /// Callback invoked when permission is requested. The closure receives:
+    /// - tool call data, permission options, and a completion handler to call with the outcome
+    public var onPermissionRequest: ((@Sendable (ToolCallUpdateData, [PermissionOption], @escaping @Sendable (RequestPermissionOutcome) -> Void) -> Void))?
+
     private let terminalStore = TerminalStore()
 
     public init() {}
@@ -69,13 +73,24 @@ public final class KiroClient: Client, ClientSessionOperations, @unchecked Senda
         permissions: [PermissionOption],
         meta: MetaField?
     ) async throws -> RequestPermissionResponse {
-        let option = permissions.first { $0.kind == .allowOnce }
-            ?? permissions.first { $0.kind == .allowAlways }
-            ?? permissions.first
-        guard let selected = option else {
-            throw ClientError.requestFailed("No permission options provided")
+        guard let handler = onPermissionRequest else {
+            // Fallback: auto-approve if no handler is set
+            let option = permissions.first { $0.kind == .allowOnce }
+                ?? permissions.first { $0.kind == .allowAlways }
+                ?? permissions.first
+            guard let selected = option else {
+                throw ClientError.requestFailed("No permission options provided")
+            }
+            return RequestPermissionResponse(outcome: .selected(selected.optionId))
         }
-        return RequestPermissionResponse(outcome: .selected(selected.optionId))
+        
+        let outcome: RequestPermissionOutcome = await withCheckedContinuation { continuation in
+            handler(toolCall, permissions) { outcome in
+                continuation.resume(returning: outcome)
+            }
+        }
+        
+        return RequestPermissionResponse(outcome: outcome)
     }
 
     public func notify(notification: SessionUpdate, meta: MetaField?) async {

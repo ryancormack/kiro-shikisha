@@ -85,6 +85,18 @@ public struct ChatPanel: View {
                         sendMessage("Please use the \(skillName) skill for the following request.")
                     }
 
+                    if let permissionRequest = agent.pendingPermissionRequest {
+                        PermissionRequestView(
+                            request: permissionRequest,
+                            onSelect: { optionId in
+                                agentManager.resolvePermission(agentId: agent.id, optionId: optionId)
+                            },
+                            onCancel: {
+                                agentManager.cancelPermission(agentId: agent.id)
+                            }
+                        )
+                    }
+
                     ChatInputView(agent: agent, onSend: { message, images in
                         sendMessage(message, images: images)
                     }, onSlashCommand: { command, optionValue in
