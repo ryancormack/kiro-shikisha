@@ -25,7 +25,7 @@ struct DebugLogView: View {
                                 Text(entry.type)
                                     .font(.system(.caption, design: .monospaced))
                                     .foregroundColor(colorFor(entry.type))
-                                    .frame(width: 110, alignment: .leading)
+                                    .frame(width: 160, alignment: .leading)
                                 Text(entry.summary)
                                     .font(.system(.caption, design: .monospaced))
                                     .foregroundColor(.primary)
@@ -56,6 +56,16 @@ struct DebugLogView: View {
         case "tool_call_update": return .yellow
         case "thought": return .purple
         case "commands": return .cyan
+        case "kiro_metadata": return .blue
+        case "kiro_agent_switched": return .mint
+        case "kiro_compaction": return .indigo
+        case "kiro_clear": return .pink
+        case "kiro_oauth": return .teal
+        case "kiro_tool_chunk": return .brown
+        case "kiro_commands_available": return .cyan
+        case "kiro_session_update": return .blue
+        case "permission_request": return .orange
+        case "permission_response": return .green
         default: return .secondary
         }
     }

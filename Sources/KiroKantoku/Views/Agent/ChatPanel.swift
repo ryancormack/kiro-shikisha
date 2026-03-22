@@ -77,12 +77,41 @@ public struct ChatPanel: View {
                     }
                     .padding()
                 } else {
+                    if let usage = agent.contextUsagePercentage {
+                        ContextUsageBar(percentage: usage)
+                    }
+
                     ConfigSelectorBar(agent: agent, onError: { error in
                         errorMessage = error
                     })
 
                     SkillsPanel(skills: agent.availableSkills) { skillName in
                         sendMessage("Please use the \(skillName) skill for the following request.")
+                    }
+
+                    if agent.isCompacting, let message = agent.compactionMessage {
+                        StatusBannerView(
+                            icon: "arrow.triangle.2.circlepath",
+                            message: message,
+                            color: .blue
+                        )
+                    }
+
+                    if agent.isClearingHistory, let message = agent.clearStatusMessage {
+                        StatusBannerView(
+                            icon: "trash",
+                            message: message,
+                            color: .orange
+                        )
+                    }
+
+                    if let oauthURL = agent.pendingOAuthURL {
+                        OAuthRequestView(url: oauthURL) {
+                            if let url = URL(string: oauthURL) {
+                                NSWorkspace.shared.open(url)
+                            }
+                            agent.pendingOAuthURL = nil
+                        }
                     }
 
                     if let permissionRequest = agent.pendingPermissionRequest {
@@ -257,6 +286,101 @@ struct TypingIndicator: View {
         .onAppear {
             isAnimating = true
         }
+    }
+}
+
+/// Small horizontal bar showing context usage percentage
+private struct ContextUsageBar: View {
+    let percentage: Double
+
+    private var color: Color {
+        if percentage < 50 { return .green }
+        if percentage < 80 { return .yellow }
+        return .red
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("Context")
+                .font(.system(.caption2))
+                .foregroundColor(.secondary)
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.secondary.opacity(0.2))
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(color)
+                        .frame(width: geometry.size.width * min(percentage / 100.0, 1.0))
+                }
+            }
+            .frame(height: 4)
+
+            Text(String(format: "%.0f%%", percentage))
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(color)
+                .frame(width: 32, alignment: .trailing)
+        }
+        .padding(.horizontal, DesignConstants.spacingMD)
+        .padding(.vertical, 2)
+    }
+}
+
+/// Reusable status banner with spinner, icon, and message text
+private struct StatusBannerView: View {
+    let icon: String
+    let message: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .font(.caption)
+            Text(message)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, DesignConstants.spacingMD)
+        .padding(.vertical, DesignConstants.spacingSM)
+        .background(color.opacity(0.05))
+    }
+}
+
+/// Inline view prompting the user to open an MCP OAuth URL
+private struct OAuthRequestView: View {
+    let url: String
+    let onOpen: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "key.fill")
+                .foregroundColor(.blue)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("MCP Server Authentication Required")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                Text(url)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            Button("Open in Browser") {
+                onOpen()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, DesignConstants.spacingMD)
+        .padding(.vertical, DesignConstants.spacingSM)
+        .background(Color.blue.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal)
     }
 }
 
