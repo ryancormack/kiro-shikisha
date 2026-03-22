@@ -33,6 +33,9 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
     
     private let stateActor: ProcessTransportStateActor
     
+    /// Handler for Kiro vendor extension notifications (_kiro.dev/*)
+    public var kiroNotificationHandler: (@Sendable (String, JsonValue?) async -> Void)?
+    
     /// Initialize with process pipes
     /// - Parameters:
     ///   - stdinPipe: Pipe connected to the subprocess's stdin
@@ -105,6 +108,14 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
                     // Decode JSON-RPC message
                     let decoder = JSONDecoder()
                     if let message = try? decoder.decode(JsonRpcMessage.self, from: Data(messageData)) {
+                        // Check for Kiro vendor extension notifications
+                        if case .notification(let notif) = message, notif.method.hasPrefix("_kiro.dev/") {
+                            if let handler = self.kiroNotificationHandler {
+                                let method = notif.method
+                                let params = notif.params
+                                Task { await handler(method, params) }
+                            }
+                        }
                         await stateActor.deliver(message)
                     } else {
                         let raw = String(data: Data(messageData), encoding: .utf8) ?? "undecodable"
@@ -232,10 +243,12 @@ public actor ACPConnection {
     ///   - kirocliPath: Path to the kiro-cli executable
     ///   - agentConfig: Optional agent configuration path (passed via --agent flag)
     ///   - onSessionUpdate: Callback for session updates
+    ///   - onKiroNotification: Optional callback for Kiro vendor extension notifications (_kiro.dev/*)
     public func connect(
         kirocliPath: String,
         agentConfig: String? = nil,
-        onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void
+        onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void,
+        onKiroNotification: (@Sendable (String, JsonValue?) async -> Void)? = nil
     ) async throws {
         guard process == nil else {
             // Already connected
@@ -293,6 +306,7 @@ public actor ACPConnection {
         
         // Create transport with process pipes
         let processTransport = ProcessTransport(stdinPipe: stdin, stdoutPipe: stdout)
+        processTransport.kiroNotificationHandler = onKiroNotification
         transport = processTransport
         
         // Create client with session update callback
@@ -436,23 +450,48 @@ public actor ACPConnection {
     }
     
     /// Execute a slash command via the Kiro extension protocol
-    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: String?) async throws {
+    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws {
         guard let transport = transport else {
             throw ACPConnectionError.notConnected
         }
         
-        struct ExecuteCommandParams: Codable {
-            let sessionId: String
-            let commandName: String
-            let args: String?
+        // Build args as JsonValue object
+        var argsObject: [String: JsonValue] = [:]
+        for (key, value) in args {
+            argsObject[key] = .string(value)
         }
         
-        let params = ExecuteCommandParams(sessionId: sessionId.value, commandName: commandName, args: args)
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(params)
-        let paramsValue = try JSONDecoder().decode(JsonValue.self, from: data)
+        // Strip leading "/" if present
+        let name = commandName.hasPrefix("/") ? String(commandName.dropFirst()) : commandName
+        
+        // Build the TuiCommand format: {"command": "<name>", "args": {<args>}}
+        let commandObject: JsonValue = .object([
+            "command": .string(name),
+            "args": .object(argsObject)
+        ])
+        
+        let paramsValue: JsonValue = .object([
+            "sessionId": .string(sessionId.value),
+            "command": commandObject
+        ])
         
         let request = JsonRpcRequest(id: .int(Int.random(in: 10000...99999)), method: "_kiro.dev/commands/execute", params: paramsValue)
+        try await transport.send(.request(request))
+    }
+    
+    /// Request available options for a selection-type slash command
+    public func requestCommandOptions(sessionId: SessionId, command: String, partial: String = "") async throws {
+        guard let transport = transport else {
+            throw ACPConnectionError.notConnected
+        }
+        
+        let paramsValue: JsonValue = .object([
+            "command": .string(command),
+            "sessionId": .string(sessionId.value),
+            "partial": .string(partial)
+        ])
+        
+        let request = JsonRpcRequest(id: .int(Int.random(in: 10000...99999)), method: "_kiro.dev/commands/options", params: paramsValue)
         try await transport.send(.request(request))
     }
     
@@ -480,7 +519,8 @@ public actor ACPConnection {
     public func connect(
         kirocliPath: String,
         agentConfig: String? = nil,
-        onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void
+        onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void,
+        onKiroNotification: (@Sendable (String, JsonValue?) async -> Void)? = nil
     ) async throws {
         throw ACPConnectionError.platformNotSupported
     }
@@ -517,7 +557,11 @@ public actor ACPConnection {
         throw ACPConnectionError.platformNotSupported
     }
     
-    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: String?) async throws {
+    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws {
+        throw ACPConnectionError.platformNotSupported
+    }
+    
+    public func requestCommandOptions(sessionId: SessionId, command: String, partial: String = "") async throws {
         throw ACPConnectionError.platformNotSupported
     }
     

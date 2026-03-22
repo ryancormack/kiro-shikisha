@@ -50,3 +50,32 @@ public struct KiroMcpServerInitFailureParams: Codable, Sendable {
         self.error = error
     }
 }
+
+// MARK: - Command Options
+
+/// A single option returned from _kiro.dev/commands/options
+public struct CommandOption: Codable, Sendable, Identifiable {
+    public var id: String { value }
+    public let value: String
+    public let label: String
+    public let description: String?
+    public let group: String?
+    
+    public init(value: String, label: String, description: String? = nil, group: String? = nil) {
+        self.value = value
+        self.label = label
+        self.description = description
+        self.group = group
+    }
+}
+
+/// Response from _kiro.dev/commands/options
+public struct CommandOptionsResponse: Codable, Sendable {
+    public let options: [CommandOption]
+    public let hasMore: Bool
+    
+    public init(options: [CommandOption], hasMore: Bool = false) {
+        self.options = options
+        self.hasMore = hasMore
+    }
+}

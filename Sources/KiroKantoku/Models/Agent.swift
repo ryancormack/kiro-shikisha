@@ -53,6 +53,8 @@ public final class Agent: Identifiable {
     public var agentConfigurationId: UUID?
     /// Available slash commands from the server
     public var availableCommands: [AvailableCommand] = []
+    /// Available Kiro extension commands (richer than standard ACP commands, includes meta with inputType, optionsMethod, etc.)
+    public var kiroAvailableCommands: [KiroAvailableCommand] = []
     /// Current session mode ID
     public var currentModeId: SessionModeId? = nil
     /// Available session modes from the server
@@ -124,6 +126,8 @@ public final class Agent: Identifiable {
     public var agentConfigurationId: UUID?
     /// Available slash commands from the server
     public var availableCommands: [AvailableCommand] = []
+    /// Available Kiro extension commands (richer than standard ACP commands, includes meta with inputType, optionsMethod, etc.)
+    public var kiroAvailableCommands: [KiroAvailableCommand] = []
     /// Current session mode ID
     public var currentModeId: SessionModeId? = nil
     /// Available session modes from the server

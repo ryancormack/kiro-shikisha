@@ -123,11 +123,15 @@ public struct ChatPanel: View {
         if content.hasPrefix("/") {
             let parts = content.dropFirst().split(separator: " ", maxSplits: 1)
             let command = String(parts.first ?? "")
-            let args = parts.count > 1 ? String(parts[1]) : nil
+            let argsString = parts.count > 1 ? String(parts[1]) : nil
             
             if !command.isEmpty {
                 Task {
                     do {
+                        var args: [String: String] = [:]
+                        if let argsString = argsString {
+                            args["value"] = argsString
+                        }
                         try await agentManager.executeSlashCommand(agentId: agent.id, command: command, args: args)
                     } catch {
                         errorMessage = error.localizedDescription

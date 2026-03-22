@@ -125,10 +125,18 @@ public final class AgentManager {
                 }
             }
             
+            let kiroNotificationHandler: @Sendable (String, JsonValue?) async -> Void = { [weak self] method, params in
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    self.handleKiroNotification(method: method, params: params, for: agent)
+                }
+            }
+            
             try await connection.connect(
                 kirocliPath: kirocliPath,
                 agentConfig: agentConfig,
-                onSessionUpdate: sessionUpdateHandler
+                onSessionUpdate: sessionUpdateHandler,
+                onKiroNotification: kiroNotificationHandler
             )
             connections[agent.id] = connection
             print("[ACP] Process spawned and initialized successfully")
@@ -195,10 +203,18 @@ public final class AgentManager {
                 }
             }
             
+            let kiroNotificationHandler: @Sendable (String, JsonValue?) async -> Void = { [weak self] method, params in
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    self.handleKiroNotification(method: method, params: params, for: agent)
+                }
+            }
+            
             try await connection.connect(
                 kirocliPath: kirocliPath,
                 agentConfig: agentConfig,
-                onSessionUpdate: sessionUpdateHandler
+                onSessionUpdate: sessionUpdateHandler,
+                onKiroNotification: kiroNotificationHandler
             )
             connections[agent.id] = connection
             
@@ -281,10 +297,18 @@ public final class AgentManager {
                         }
                     }
                     
+                    let retryKiroNotificationHandler: @Sendable (String, JsonValue?) async -> Void = { [weak self] method, params in
+                        await MainActor.run {
+                            guard let self = self, let agent = self.agents[retryAgentId] else { return }
+                            self.handleKiroNotification(method: method, params: params, for: agent)
+                        }
+                    }
+                    
                     try await retryConnection.connect(
                         kirocliPath: kirocliPath,
                         agentConfig: agentConfig,
-                        onSessionUpdate: retrySessionUpdateHandler
+                        onSessionUpdate: retrySessionUpdateHandler,
+                        onKiroNotification: retryKiroNotificationHandler
                     )
                     connections[retryAgent.id] = retryConnection
                     
@@ -578,7 +602,7 @@ public final class AgentManager {
     }
 
     /// Execute a slash command for an agent
-    public func executeSlashCommand(agentId: UUID, command: String, args: String?) async throws {
+    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws {
         guard let agent = agents[agentId] else {
             throw AgentManagerError.agentNotFound(agentId)
         }
@@ -590,10 +614,27 @@ public final class AgentManager {
         }
         
         // Show the command as a user message
-        agent.messages.append(ChatMessage(role: .user, content: "/\(command)\(args.map { " \($0)" } ?? "")"))
+        let argsDisplay = args.isEmpty ? "" : " " + args.values.joined(separator: " ")
+        agent.messages.append(ChatMessage(role: .user, content: "/\(command)\(argsDisplay)"))
         agent.status = .active
         
         try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+    }
+    
+    /// Handle a Kiro vendor extension notification
+    private func handleKiroNotification(method: String, params: JsonValue?, for agent: Agent) {
+        switch method {
+        case "_kiro.dev/commands/available":
+            if let params = params {
+                let encoder = JSONEncoder()
+                if let data = try? encoder.encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroCommandsAvailableParams.self, from: data) {
+                    agent.kiroAvailableCommands = parsed.commands
+                }
+            }
+        default:
+            break
+        }
     }
 
     /// Handle a session update for an agent
@@ -866,7 +907,7 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
-    public func executeSlashCommand(agentId: UUID, command: String, args: String?) async throws {
+    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws {
         throw AgentManagerError.platformNotSupported
     }
     
@@ -973,7 +1014,7 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
-    public func executeSlashCommand(agentId: UUID, command: String, args: String?) async throws {
+    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws {
         throw AgentManagerError.platformNotSupported
     }
     
