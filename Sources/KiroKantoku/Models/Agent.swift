@@ -55,8 +55,18 @@ public final class Agent: Identifiable {
     public var availableCommands: [AvailableCommand] = []
     /// Current session mode ID
     public var currentModeId: SessionModeId? = nil
+    /// Available session modes from the server
+    public var availableModes: [SessionMode] = []
+    /// Current model ID
+    public var currentModelId: ModelId? = nil
+    /// Available models from the server
+    public var availableModels: [ModelInfo] = []
     /// Server-generated session title
     public var sessionTitle: String? = nil
+    /// Available configuration options from the server
+    public var configOptions: [SessionConfigOption] = []
+    /// Available skills discovered from workspace and global directories
+    public var availableSkills: [Skill] = []
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
@@ -116,8 +126,18 @@ public final class Agent: Identifiable {
     public var availableCommands: [AvailableCommand] = []
     /// Current session mode ID
     public var currentModeId: SessionModeId? = nil
+    /// Available session modes from the server
+    public var availableModes: [SessionMode] = []
+    /// Current model ID
+    public var currentModelId: ModelId? = nil
+    /// Available models from the server
+    public var availableModels: [ModelInfo] = []
     /// Server-generated session title
     public var sessionTitle: String? = nil
+    /// Available configuration options from the server
+    public var configOptions: [SessionConfigOption] = []
+    /// Available skills discovered from workspace and global directories
+    public var availableSkills: [Skill] = []
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {

@@ -77,6 +77,14 @@ public struct ChatPanel: View {
                     }
                     .padding()
                 } else {
+                    ConfigSelectorBar(agent: agent, onError: { error in
+                        errorMessage = error
+                    })
+
+                    SkillsPanel(skills: agent.availableSkills) { skillName in
+                        sendMessage("Please use the \(skillName) skill for the following request.")
+                    }
+
                     ChatInputView { message, images in
                         sendMessage(message, images: images)
                     }

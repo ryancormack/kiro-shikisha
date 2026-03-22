@@ -138,8 +138,22 @@ public final class AgentManager {
             print("[ACP] Session created: \(sessionResult.sessionId.value)")
             
             agent.sessionId = sessionResult.sessionId
+            if let configOptions = sessionResult.configOptions {
+                agent.configOptions = configOptions
+            }
+            if let modes = sessionResult.modes {
+                agent.availableModes = modes.availableModes
+                agent.currentModeId = modes.currentModeId
+            }
+            if let models = sessionResult.models {
+                agent.availableModels = models.availableModels
+                agent.currentModelId = models.currentModelId
+            }
             agent.messages.append(ChatMessage(role: .system, content: "Agent connected and ready."))
             agent.status = .active
+            
+            let skillDiscovery = SkillDiscoveryService()
+            agent.availableSkills = skillDiscovery.discoverSkills(workspacePath: workspace.path)
             
             return agent
         } catch {
@@ -194,14 +208,28 @@ public final class AgentManager {
             print("[ACP] Proactively cleaned up lock file for session \(sessionId)")
             
             agent.isReplayingSession = true
-            _ = try await connection.loadSession(
+            let loadResult = try await connection.loadSession(
                 sessionId: sessionIdValue,
                 cwd: workspace.path.path
             )
             agent.isReplayingSession = false
             
+            if let configOptions = loadResult.configOptions {
+                agent.configOptions = configOptions
+            }
+            if let modes = loadResult.modes {
+                agent.availableModes = modes.availableModes
+                agent.currentModeId = modes.currentModeId
+            }
+            if let models = loadResult.models {
+                agent.availableModels = models.availableModels
+                agent.currentModelId = models.currentModelId
+            }
             agent.messages.append(ChatMessage(role: .system, content: "Session resumed."))
             agent.status = .idle
+            
+            let skillDiscovery = SkillDiscoveryService()
+            agent.availableSkills = skillDiscovery.discoverSkills(workspacePath: workspace.path)
             
             return agent
         } catch {
@@ -527,6 +555,20 @@ public final class AgentManager {
         try await connection.setSessionModel(sessionId: sessionId, modelId: ModelId(value: modelId))
     }
 
+    /// Set a configuration option for an agent's session
+    public func setConfigOption(agentId: UUID, configId: String, value: String) async throws {
+        guard let agent = agents[agentId] else {
+            throw AgentManagerError.agentNotFound(agentId)
+        }
+        guard let sessionId = agent.sessionId else {
+            throw AgentManagerError.noSessionId
+        }
+        guard let connection = connections[agentId] else {
+            throw AgentManagerError.notConnected
+        }
+        try await connection.setSessionConfigOption(sessionId: sessionId, configId: SessionConfigId(value: configId), value: SessionConfigValueId(value: value))
+    }
+
     /// Execute a slash command for an agent
     public func executeSlashCommand(agentId: UUID, command: String, args: String?) async throws {
         guard let agent = agents[agentId] else {
@@ -583,8 +625,12 @@ public final class AgentManager {
         case .currentModeUpdate(let m):
             entry = DebugLogEntry(type: "mode_update", summary: m.currentModeId.value)
             agent.currentModeId = m.currentModeId
-        case .configOptionUpdate:
-            entry = DebugLogEntry(type: "config_update", summary: "")
+        case .configOptionUpdate(let update):
+            entry = DebugLogEntry(type: "config_update", summary: update.configOptions.map { 
+                if case .select(let s) = $0 { return s.name }
+                return "?"
+            }.joined(separator: ", "))
+            agent.configOptions = update.configOptions
         case .sessionInfoUpdate(let info):
             entry = DebugLogEntry(type: "session_info", summary: info.title ?? "")
             if let title = info.title {
@@ -609,6 +655,24 @@ public final class AgentManager {
             agent.messages[lastIndex].content += text
         } else {
             agent.messages.append(ChatMessage(role: .assistant, content: text))
+        }
+        
+        // Detect skill activation patterns like [skill: <name> activated]
+        detectSkillActivation(in: text, for: agent)
+    }
+    
+    private func detectSkillActivation(in text: String, for agent: Agent) {
+        var searchRange = text.startIndex..<text.endIndex
+        while let startRange = text.range(of: "[skill: ", range: searchRange) {
+            let nameStart = startRange.upperBound
+            guard let endRange = text.range(of: " activated]", range: nameStart..<text.endIndex) else {
+                break
+            }
+            let skillName = String(text[nameStart..<endRange.lowerBound])
+            if let idx = agent.availableSkills.firstIndex(where: { $0.name == skillName }) {
+                agent.availableSkills[idx].isActive = true
+            }
+            searchRange = endRange.upperBound..<text.endIndex
         }
     }
     
@@ -819,6 +883,10 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
+    public func setConfigOption(agentId: UUID, configId: String, value: String) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
     public func handleSessionUpdate(_ update: SessionUpdate, for agent: Agent) {
         // No-op on non-macOS
     }
@@ -919,6 +987,10 @@ public final class AgentManager {
     }
     
     public func setModel(agentId: UUID, modelId: String) async throws {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func setConfigOption(agentId: UUID, configId: String, value: String) async throws {
         throw AgentManagerError.platformNotSupported
     }
     
