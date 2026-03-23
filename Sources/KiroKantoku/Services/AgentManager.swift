@@ -685,19 +685,17 @@ public final class AgentManager {
         // executeSlashCommand awaits the JSON-RPC acknowledgment response.
         let task = Task { [weak self] in
             do {
-                let message = try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+                _ = try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
                 await MainActor.run {
                     guard let self = self, let agent = self.agents[agentId] else { return }
                     agent.status = .idle
                 }
-                return message
             } catch {
                 await MainActor.run {
                     guard let self = self, let agent = self.agents[agentId] else { return }
                     agent.status = .error
                     agent.errorMessage = error.localizedDescription
                 }
-                return nil as String?
             }
         }
         promptTasks[agentId] = task
