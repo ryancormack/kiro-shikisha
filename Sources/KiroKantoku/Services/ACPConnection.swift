@@ -9,6 +9,8 @@ public enum ACPConnectionError: Error, Sendable, LocalizedError {
     case processTerminated(Int32)
     case platformNotSupported
     case notLoggedIn
+    case timeout(String)
+    case serverError(Int, String)
     
     public var errorDescription: String? {
         switch self {
@@ -17,6 +19,8 @@ public enum ACPConnectionError: Error, Sendable, LocalizedError {
         case .processTerminated(let code): return "kiro-cli exited with code \(code)"
         case .platformNotSupported: return "Platform not supported"
         case .notLoggedIn: return "Not logged in. Please run `kiro-cli login` in your terminal to authenticate."
+        case .timeout(let method): return "Request timed out: \(method)"
+        case .serverError(let code, let message): return "Server error (\(code)): \(message)"
         }
     }
 }
@@ -37,11 +41,11 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
     public var kiroNotificationHandler: (@Sendable (String, JsonValue?) async -> Void)?
     
     /// Pending response handlers indexed by request ID
-    private var pendingResponses: [RequestId: @Sendable (JsonValue?) -> Void] = [:]
+    private var pendingResponses: [RequestId: @Sendable (Result<JsonValue?, Error>) -> Void] = [:]
     private let pendingLock = NSLock()
     
     /// Register a handler for a pending response to a request
-    public func registerPendingResponse(requestId: RequestId, handler: @escaping @Sendable (JsonValue?) -> Void) {
+    public func registerPendingResponse(requestId: RequestId, handler: @escaping @Sendable (Result<JsonValue?, Error>) -> Void) {
         pendingLock.withLock {
             pendingResponses[requestId] = handler
         }
@@ -87,6 +91,16 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
     }
     
     public func close() async {
+        // Clean up all pending response handlers so continuations don't leak
+        let handlers: [RequestId: @Sendable (Result<JsonValue?, Error>) -> Void] = pendingLock.withLock {
+            let current = pendingResponses
+            pendingResponses.removeAll()
+            return current
+        }
+        for (id, handler) in handlers {
+            print("[ACP] Cleaning up pending response for id=\(id) on transport close")
+            handler(.failure(ACPConnectionError.notConnected))
+        }
         await stateActor.close()
     }
     
@@ -132,7 +146,19 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
                                 self.pendingResponses.removeValue(forKey: response.id)
                             }
                             if let handler = handler {
-                                handler(response.result)
+                                print("[ACP] Pending response matched for id=\(response.id)")
+                                handler(.success(response.result))
+                                continue
+                            }
+                        }
+                        // Check for error responses to pending vendor extension requests
+                        if case .error(let error) = message, let id = error.id {
+                            let handler = self.pendingLock.withLock {
+                                self.pendingResponses.removeValue(forKey: id)
+                            }
+                            if let handler = handler {
+                                print("[ACP] Pending error response matched for id=\(id): code=\(error.error.code) message=\(error.error.message)")
+                                handler(.failure(ACPConnectionError.serverError(error.error.code, error.error.message)))
                                 continue
                             }
                         }
@@ -513,16 +539,60 @@ public actor ACPConnection {
         
         let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/execute", params: paramsValue)
         
+        print("[ACP] executeSlashCommand: command=\(name) requestId=\(requestId)")
+        
         // Register a pending response handler before sending, so the response
         // is consumed here rather than being forwarded to the SDK's ClientConnection.
+        // Includes a 30-second timeout to prevent indefinite hanging.
         let result: JsonValue? = try await withCheckedThrowingContinuation { continuation in
-            transport.registerPendingResponse(requestId: .int(requestId)) { result in
-                continuation.resume(returning: result)
+            // Use nonisolated(unsafe) to track whether the continuation has been resumed
+            nonisolated(unsafe) var resumed = false
+            let resumeLock = NSLock()
+            
+            transport.registerPendingResponse(requestId: .int(requestId)) { callResult in
+                let shouldResume = resumeLock.withLock {
+                    if resumed { return false }
+                    resumed = true
+                    return true
+                }
+                guard shouldResume else { return }
+                
+                switch callResult {
+                case .success(let value):
+                    print("[ACP] executeSlashCommand: response received for requestId=\(requestId)")
+                    continuation.resume(returning: value)
+                case .failure(let error):
+                    print("[ACP] executeSlashCommand: error received for requestId=\(requestId): \(error)")
+                    continuation.resume(throwing: error)
+                }
             }
+            
+            // Timeout task
+            Task {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                let shouldResume = resumeLock.withLock {
+                    if resumed { return false }
+                    resumed = true
+                    return true
+                }
+                guard shouldResume else { return }
+                transport.removePendingResponse(requestId: .int(requestId))
+                print("[ACP] executeSlashCommand: timeout for requestId=\(requestId)")
+                continuation.resume(throwing: ACPConnectionError.timeout("_kiro.dev/commands/execute"))
+            }
+            
+            // Send the request
             Task {
                 do {
                     try await transport.send(.request(request))
+                    print("[ACP] executeSlashCommand: request sent for requestId=\(requestId)")
                 } catch {
+                    let shouldResume = resumeLock.withLock {
+                        if resumed { return false }
+                        resumed = true
+                        return true
+                    }
+                    guard shouldResume else { return }
                     transport.removePendingResponse(requestId: .int(requestId))
                     continuation.resume(throwing: error)
                 }
@@ -557,25 +627,68 @@ public actor ACPConnection {
         
         let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/options", params: paramsValue)
         
-        // Register a pending response handler before sending
+        print("[ACP] requestCommandOptions: command=\(name) requestId=\(requestId)")
+        
+        // Register a pending response handler before sending.
+        // Includes a 30-second timeout to prevent indefinite hanging.
         let options: [CommandOption] = try await withCheckedThrowingContinuation { continuation in
-            transport.registerPendingResponse(requestId: .int(requestId)) { result in
-                if let result = result {
-                    do {
-                        let data = try JSONEncoder().encode(result)
-                        let decoded = try JSONDecoder().decode(CommandOptionsResponse.self, from: data)
-                        continuation.resume(returning: decoded.options)
-                    } catch {
-                        continuation.resume(throwing: error)
+            nonisolated(unsafe) var resumed = false
+            let resumeLock = NSLock()
+            
+            transport.registerPendingResponse(requestId: .int(requestId)) { callResult in
+                let shouldResume = resumeLock.withLock {
+                    if resumed { return false }
+                    resumed = true
+                    return true
+                }
+                guard shouldResume else { return }
+                
+                switch callResult {
+                case .success(let result):
+                    print("[ACP] requestCommandOptions: response received for requestId=\(requestId)")
+                    if let result = result {
+                        do {
+                            let data = try JSONEncoder().encode(result)
+                            let decoded = try JSONDecoder().decode(CommandOptionsResponse.self, from: data)
+                            continuation.resume(returning: decoded.options)
+                        } catch {
+                            continuation.resume(throwing: error)
+                        }
+                    } else {
+                        continuation.resume(returning: [])
                     }
-                } else {
-                    continuation.resume(returning: [])
+                case .failure(let error):
+                    print("[ACP] requestCommandOptions: error received for requestId=\(requestId): \(error)")
+                    continuation.resume(throwing: error)
                 }
             }
+            
+            // Timeout task
+            Task {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                let shouldResume = resumeLock.withLock {
+                    if resumed { return false }
+                    resumed = true
+                    return true
+                }
+                guard shouldResume else { return }
+                transport.removePendingResponse(requestId: .int(requestId))
+                print("[ACP] requestCommandOptions: timeout for requestId=\(requestId)")
+                continuation.resume(throwing: ACPConnectionError.timeout("_kiro.dev/commands/options"))
+            }
+            
+            // Send the request
             Task {
                 do {
                     try await transport.send(.request(request))
+                    print("[ACP] requestCommandOptions: request sent for requestId=\(requestId)")
                 } catch {
+                    let shouldResume = resumeLock.withLock {
+                        if resumed { return false }
+                        resumed = true
+                        return true
+                    }
+                    guard shouldResume else { return }
                     transport.removePendingResponse(requestId: .int(requestId))
                     continuation.resume(throwing: error)
                 }
