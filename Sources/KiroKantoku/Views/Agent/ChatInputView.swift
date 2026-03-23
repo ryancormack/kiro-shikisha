@@ -85,9 +85,9 @@ public struct ChatInputView: View {
                                         .resizable()
                                         .aspectRatio(contentMode: .fill)
                                         .frame(width: 48, height: 48)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
                                 } else {
-                                    RoundedRectangle(cornerRadius: 6)
+                                    RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
                                         .fill(Color.secondary.opacity(0.3))
                                         .frame(width: 48, height: 48)
                                 }
@@ -147,7 +147,7 @@ public struct ChatInputView: View {
                             .background(
                                 RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
                                     .fill(Color(nsColor: .controlBackgroundColor))
-                                    .shadow(color: .black.opacity(0.2), radius: 8, y: -2)
+                                    .shadow(color: .black.opacity(DesignConstants.popoverShadowOpacity), radius: DesignConstants.popoverShadowRadius, y: -2)
                             )
                         } else {
                             CommandOptionsPicker(
@@ -181,9 +181,11 @@ public struct ChatInputView: View {
                         .font(.body)
                         .focused($isFocused)
                         .scrollContentBackground(.hidden)
-                        .padding(8)
+                        .padding(.horizontal, DesignConstants.inputPaddingH)
+                        .padding(.vertical, DesignConstants.inputPaddingV)
                         .background(Color(nsColor: .controlBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge))
+                        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.inputCornerRadius))
+                        .overlay(RoundedRectangle(cornerRadius: DesignConstants.inputCornerRadius).stroke(DesignConstants.separatorColor.opacity(0.3), lineWidth: 0.5))
                         .frame(minHeight: 36, maxHeight: 100)
                         .onKeyPress(.upArrow) {
                             if showSlashPicker {
@@ -241,7 +243,7 @@ public struct ChatInputView: View {
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 28))
-                            .foregroundColor(canSend ? .blue : .secondary)
+                            .foregroundColor(canSend ? .accentColor : .secondary)
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSend)
@@ -252,6 +254,9 @@ public struct ChatInputView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .padding(.horizontal, DesignConstants.spacingSM)
+        .padding(.vertical, DesignConstants.spacingSM)
+        .background(DesignConstants.cardBackground)
         .onChange(of: inputText) { _, newValue in
             updateSlashPickerState(newValue)
         }

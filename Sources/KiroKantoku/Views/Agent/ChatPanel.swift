@@ -289,8 +289,8 @@ struct TypingIndicator: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .background(DesignConstants.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
             
             Spacer()
         }
@@ -319,14 +319,14 @@ private struct ContextUsageBar: View {
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall)
                         .fill(Color.secondary.opacity(0.2))
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall)
                         .fill(color)
                         .frame(width: geometry.size.width * min(percentage / 100.0, 1.0))
                 }
             }
-            .frame(height: 4)
+            .frame(height: 5)
 
             Text(String(format: "%.0f%%", percentage))
                 .font(.system(.caption2, design: .monospaced))
@@ -358,7 +358,7 @@ private struct StatusBannerView: View {
         }
         .padding(.horizontal, DesignConstants.spacingMD)
         .padding(.vertical, DesignConstants.spacingSM)
-        .background(color.opacity(0.05))
+        .background(color.opacity(0.06))
     }
 }
 
@@ -391,7 +391,7 @@ private struct OAuthRequestView: View {
         .padding(.horizontal, DesignConstants.spacingMD)
         .padding(.vertical, DesignConstants.spacingSM)
         .background(Color.blue.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
         .padding(.horizontal)
     }
 }

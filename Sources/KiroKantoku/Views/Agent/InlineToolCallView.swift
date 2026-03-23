@@ -90,7 +90,7 @@ struct InlineToolCallView: View {
                     }
                     .padding(4)
                     .background(Color.red.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text("+ " + diff.newText.prefix(500))
@@ -100,7 +100,7 @@ struct InlineToolCallView: View {
                 }
                 .padding(4)
                 .background(Color.green.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
             }
         case .terminal(let term):
             HStack(spacing: 4) {
@@ -140,7 +140,7 @@ struct InlineToolCallView: View {
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(Color.secondary.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
                         }
                     }
                     Spacer()
@@ -194,7 +194,7 @@ struct InlineToolCallView: View {
                 .padding(.bottom, 6)
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+        .background(DesignConstants.cardBackground.opacity(0.6))
         .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
     }
 }

@@ -39,7 +39,12 @@ struct ThoughtBubbleView: View {
                     .frame(maxHeight: 200)
             }
         }
-        .background(Color.purple.opacity(0.04))
+        .background(Color.purple.opacity(0.05))
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color.purple.opacity(0.3))
+                .frame(width: 2)
+        }
         .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
     }
 }

@@ -50,7 +50,7 @@ struct PlanView: View {
                 .padding(.bottom, 8)
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+        .background(DesignConstants.cardBackground.opacity(0.6))
         .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
     }
 
