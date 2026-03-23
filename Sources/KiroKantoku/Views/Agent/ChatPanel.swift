@@ -227,40 +227,31 @@ public struct ChatPanel: View {
                     if let value = optionValue {
                         args["value"] = value
                     }
-                    let message = try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
-                    if let message, !message.isEmpty {
-                        agent.messages.append(ChatMessage(role: .assistant, content: message))
-                    }
+                    try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
                 } catch {
                     errorMessage = error.localizedDescription
                 }
             }
             
         case .panel:
-            // Execute and show the response message in chat
+            // Execute the command; response arrives through session updates
             Task {
                 do {
-                    let message = try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name)
-                    if let message, !message.isEmpty {
-                        agent.messages.append(ChatMessage(role: .assistant, content: message))
-                    }
+                    try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name)
                 } catch {
                     errorMessage = error.localizedDescription
                 }
             }
             
         case .simple:
-            // Execute directly
+            // Execute directly; response arrives through session updates
             Task {
                 do {
                     var args: [String: String] = [:]
                     if let value = optionValue {
                         args["value"] = value
                     }
-                    let message = try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
-                    if let message, !message.isEmpty {
-                        agent.messages.append(ChatMessage(role: .assistant, content: message))
-                    }
+                    try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
                 } catch {
                     errorMessage = error.localizedDescription
                 }

@@ -481,7 +481,9 @@ public actor ACPConnection {
     }
     
     /// Execute a slash command via the Kiro extension protocol.
-    /// Returns the response message string if the server provides one.
+    /// Fire-and-forget: sends the request without waiting for a response.
+    /// The response arrives through normal session updates (agent message chunks).
+    @discardableResult
     public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws -> String? {
         guard let transport = transport else {
             throw ACPConnectionError.notConnected
@@ -510,28 +512,10 @@ public actor ACPConnection {
         
         let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/execute", params: paramsValue)
         
-        // Register a pending response handler to capture the response message
-        let message: String? = try await withCheckedThrowingContinuation { continuation in
-            transport.registerPendingResponse(requestId: .int(requestId)) { result in
-                if let result = result,
-                   let obj = result.objectValue,
-                   let msg = obj["message"]?.stringValue {
-                    continuation.resume(returning: msg)
-                } else {
-                    continuation.resume(returning: nil)
-                }
-            }
-            Task {
-                do {
-                    try await transport.send(.request(request))
-                } catch {
-                    transport.removePendingResponse(requestId: .int(requestId))
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
-        
-        return message
+        // Fire-and-forget: send the request without waiting for a response.
+        // The response arrives through normal session update flow.
+        try await transport.send(.request(request))
+        return nil
     }
     
     /// Request available options for a selection-type slash command.

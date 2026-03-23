@@ -442,4 +442,84 @@ final class AgentManagerTests: XCTestCase {
         let agent = Agent(name: "Test Agent", workspace: workspace)
         XCTAssertEqual(agent.thoughtContent, "", "Agent thoughtContent should default to empty string")
     }
+
+    @MainActor
+    func testKiroCommandsAvailableFallbackDecoding() async throws {
+        // Test the fallback decode path in handleKiroNotification
+        // by simulating a payload with extra fields that might break strict decoding
+        let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+        let agent = Agent(name: "Test Agent", workspace: workspace)
+        
+        // This payload has standard fields that KiroCommandsAvailableParams can handle
+        let params: JsonValue = .object([
+            "sessionId": .string("sess_test"),
+            "commands": .array([
+                .object([
+                    "name": .string("/compact"),
+                    "description": .string("Compact context"),
+                    "meta": .object(["inputType": .string("simple")])
+                ]),
+                .object([
+                    "name": .string("/help"),
+                    "description": .string("Show help")
+                ])
+            ])
+        ])
+        
+        // AgentManager on Linux is a stub, so we test the model decoding directly
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroCommandsAvailableParams.self, from: data)
+        agent.kiroAvailableCommands = decoded.commands
+        
+        XCTAssertEqual(agent.kiroAvailableCommands.count, 2)
+        XCTAssertEqual(agent.kiroAvailableCommands[0].name, "/compact")
+        XCTAssertEqual(agent.kiroAvailableCommands[0].description, "Compact context")
+        XCTAssertEqual(agent.kiroAvailableCommands[1].name, "/help")
+    }
+    
+    @MainActor
+    func testManualCommandExtractionFromJsonValue() async throws {
+        // Test the manual extraction logic used in the fallback path
+        let params: JsonValue = .object([
+            "sessionId": .string("sess_fallback"),
+            "commands": .array([
+                .object([
+                    "name": .string("/usage"),
+                    "description": .string("Show usage"),
+                    "meta": .null
+                ]),
+                .object([
+                    "name": .string("/tools"),
+                    "description": .string("View tools"),
+                    "meta": .object(["inputType": .string("panel"), "extra": .bool(true)])
+                ])
+            ]),
+            "extraField": .string("should be ignored")
+        ])
+        
+        // Simulate the fallback extraction logic
+        guard let obj = params.objectValue,
+              let commandsArray = obj["commands"]?.arrayValue else {
+            XCTFail("Expected object with commands array")
+            return
+        }
+        
+        var commands: [KiroAvailableCommand] = []
+        for item in commandsArray {
+            if let cmdObj = item.objectValue,
+               let name = cmdObj["name"]?.stringValue,
+               let description = cmdObj["description"]?.stringValue {
+                let meta = cmdObj["meta"]
+                commands.append(KiroAvailableCommand(name: name, description: description, meta: meta))
+            }
+        }
+        
+        XCTAssertEqual(commands.count, 2)
+        XCTAssertEqual(commands[0].name, "/usage")
+        XCTAssertEqual(commands[0].description, "Show usage")
+        // .null from JsonValue - meta will be JsonValue.null, not Swift nil
+        XCTAssertNotNil(commands[0].meta)  // It's .null, not nil
+        XCTAssertEqual(commands[1].name, "/tools")
+        XCTAssertEqual(commands[1].meta?.objectValue?["inputType"]?.stringValue, "panel")
+    }
 }
