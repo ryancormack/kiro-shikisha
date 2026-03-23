@@ -543,61 +543,55 @@ public actor ACPConnection {
         
         // Register a pending response handler before sending, so the response
         // is consumed here rather than being forwarded to the SDK's ClientConnection.
-        // Includes a 30-second timeout to prevent indefinite hanging.
-        let result: JsonValue? = try await withCheckedThrowingContinuation { continuation in
-            // Use nonisolated(unsafe) to track whether the continuation has been resumed
-            nonisolated(unsafe) var resumed = false
-            let resumeLock = NSLock()
-            
-            transport.registerPendingResponse(requestId: .int(requestId)) { callResult in
-                let shouldResume = resumeLock.withLock {
-                    if resumed { return false }
-                    resumed = true
-                    return true
-                }
-                guard shouldResume else { return }
-                
-                switch callResult {
-                case .success(let value):
-                    print("[ACP] executeSlashCommand: response received for requestId=\(requestId)")
-                    continuation.resume(returning: value)
-                case .failure(let error):
-                    print("[ACP] executeSlashCommand: error received for requestId=\(requestId): \(error)")
-                    continuation.resume(throwing: error)
-                }
-            }
-            
-            // Timeout task
-            Task {
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
-                let shouldResume = resumeLock.withLock {
-                    if resumed { return false }
-                    resumed = true
-                    return true
-                }
-                guard shouldResume else { return }
-                transport.removePendingResponse(requestId: .int(requestId))
-                print("[ACP] executeSlashCommand: timeout for requestId=\(requestId)")
-                continuation.resume(throwing: ACPConnectionError.timeout("_kiro.dev/commands/execute"))
-            }
-            
-            // Send the request
-            Task {
-                do {
-                    try await transport.send(.request(request))
-                    print("[ACP] executeSlashCommand: request sent for requestId=\(requestId)")
-                } catch {
-                    let shouldResume = resumeLock.withLock {
-                        if resumed { return false }
-                        resumed = true
-                        return true
-                    }
-                    guard shouldResume else { return }
-                    transport.removePendingResponse(requestId: .int(requestId))
-                    continuation.resume(throwing: error)
-                }
+        // Uses AsyncThrowingStream to bridge the callback-based handler to async/await,
+        // and withThrowingTaskGroup to race the response against a 30-second timeout.
+        let (responseStream, responseContinuation) = AsyncThrowingStream<JsonValue?, Error>.makeStream()
+        
+        transport.registerPendingResponse(requestId: .int(requestId)) { callResult in
+            switch callResult {
+            case .success(let value):
+                print("[ACP] executeSlashCommand: response received for requestId=\(requestId)")
+                responseContinuation.yield(value)
+                responseContinuation.finish()
+            case .failure(let error):
+                print("[ACP] executeSlashCommand: error received for requestId=\(requestId): \(error)")
+                responseContinuation.finish(throwing: error)
             }
         }
+        
+        let result: JsonValue?
+        do {
+            result = try await withThrowingTaskGroup(of: JsonValue?.self) { group in
+                group.addTask {
+                    var iterator = responseStream.makeAsyncIterator()
+                    return try await iterator.next() ?? nil
+                }
+                
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                    print("[ACP] executeSlashCommand: timeout for requestId=\(requestId)")
+                    throw ACPConnectionError.timeout("_kiro.dev/commands/execute")
+                }
+                
+                // Send the request (handler is already registered above)
+                try await transport.send(.request(request))
+                print("[ACP] executeSlashCommand: request sent for requestId=\(requestId)")
+                
+                // Wait for whichever child task finishes first
+                let value = try await group.next()!
+                group.cancelAll()
+                return value
+            }
+        } catch {
+            // Clean up pending response handler on timeout or send failure
+            transport.removePendingResponse(requestId: .int(requestId))
+            responseContinuation.finish()
+            throw error
+        }
+        
+        // Clean up pending response handler (no-op if already removed by readLoop)
+        transport.removePendingResponse(requestId: .int(requestId))
+        responseContinuation.finish()
         
         // Extract a message string from the response if present
         if let result = result,
@@ -630,70 +624,66 @@ public actor ACPConnection {
         print("[ACP] requestCommandOptions: command=\(name) requestId=\(requestId)")
         
         // Register a pending response handler before sending.
-        // Includes a 30-second timeout to prevent indefinite hanging.
-        let options: [CommandOption] = try await withCheckedThrowingContinuation { continuation in
-            nonisolated(unsafe) var resumed = false
-            let resumeLock = NSLock()
-            
-            transport.registerPendingResponse(requestId: .int(requestId)) { callResult in
-                let shouldResume = resumeLock.withLock {
-                    if resumed { return false }
-                    resumed = true
-                    return true
-                }
-                guard shouldResume else { return }
-                
-                switch callResult {
-                case .success(let result):
-                    print("[ACP] requestCommandOptions: response received for requestId=\(requestId)")
-                    if let result = result {
-                        do {
-                            let data = try JSONEncoder().encode(result)
-                            let decoded = try JSONDecoder().decode(CommandOptionsResponse.self, from: data)
-                            continuation.resume(returning: decoded.options)
-                        } catch {
-                            continuation.resume(throwing: error)
-                        }
-                    } else {
-                        continuation.resume(returning: [])
+        // Uses AsyncThrowingStream to bridge the callback-based handler to async/await,
+        // and withThrowingTaskGroup to race the response against a 30-second timeout.
+        let (responseStream, responseContinuation) = AsyncThrowingStream<[CommandOption], Error>.makeStream()
+        
+        transport.registerPendingResponse(requestId: .int(requestId)) { callResult in
+            switch callResult {
+            case .success(let result):
+                print("[ACP] requestCommandOptions: response received for requestId=\(requestId)")
+                if let result = result {
+                    do {
+                        let data = try JSONEncoder().encode(result)
+                        let decoded = try JSONDecoder().decode(CommandOptionsResponse.self, from: data)
+                        responseContinuation.yield(decoded.options)
+                        responseContinuation.finish()
+                    } catch {
+                        responseContinuation.finish(throwing: error)
                     }
-                case .failure(let error):
-                    print("[ACP] requestCommandOptions: error received for requestId=\(requestId): \(error)")
-                    continuation.resume(throwing: error)
+                } else {
+                    responseContinuation.yield([])
+                    responseContinuation.finish()
                 }
-            }
-            
-            // Timeout task
-            Task {
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
-                let shouldResume = resumeLock.withLock {
-                    if resumed { return false }
-                    resumed = true
-                    return true
-                }
-                guard shouldResume else { return }
-                transport.removePendingResponse(requestId: .int(requestId))
-                print("[ACP] requestCommandOptions: timeout for requestId=\(requestId)")
-                continuation.resume(throwing: ACPConnectionError.timeout("_kiro.dev/commands/options"))
-            }
-            
-            // Send the request
-            Task {
-                do {
-                    try await transport.send(.request(request))
-                    print("[ACP] requestCommandOptions: request sent for requestId=\(requestId)")
-                } catch {
-                    let shouldResume = resumeLock.withLock {
-                        if resumed { return false }
-                        resumed = true
-                        return true
-                    }
-                    guard shouldResume else { return }
-                    transport.removePendingResponse(requestId: .int(requestId))
-                    continuation.resume(throwing: error)
-                }
+            case .failure(let error):
+                print("[ACP] requestCommandOptions: error received for requestId=\(requestId): \(error)")
+                responseContinuation.finish(throwing: error)
             }
         }
+        
+        let options: [CommandOption]
+        do {
+            options = try await withThrowingTaskGroup(of: [CommandOption].self) { group in
+                group.addTask {
+                    var iterator = responseStream.makeAsyncIterator()
+                    return try await iterator.next() ?? []
+                }
+                
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                    print("[ACP] requestCommandOptions: timeout for requestId=\(requestId)")
+                    throw ACPConnectionError.timeout("_kiro.dev/commands/options")
+                }
+                
+                // Send the request (handler is already registered above)
+                try await transport.send(.request(request))
+                print("[ACP] requestCommandOptions: request sent for requestId=\(requestId)")
+                
+                // Wait for whichever child task finishes first
+                let value = try await group.next()!
+                group.cancelAll()
+                return value
+            }
+        } catch {
+            // Clean up pending response handler on timeout or send failure
+            transport.removePendingResponse(requestId: .int(requestId))
+            responseContinuation.finish()
+            throw error
+        }
+        
+        // Clean up pending response handler (no-op if already removed by readLoop)
+        transport.removePendingResponse(requestId: .int(requestId))
+        responseContinuation.finish()
         
         return options
     }
