@@ -593,11 +593,26 @@ public actor ACPConnection {
         transport.removePendingResponse(requestId: .int(requestId))
         responseContinuation.finish()
         
-        // Extract a message string from the response if present
-        if let result = result,
-           case .object(let obj) = result,
-           case .string(let message) = obj["message"] {
-            return message
+        // Extract a message string from the response if present.
+        // Try multiple common field names since different servers may use different keys.
+        if let result = result {
+            // If the result is directly a string, use it
+            if case .string(let message) = result {
+                return message
+            }
+            // If the result is an object, try known field names
+            if case .object(let obj) = result {
+                for key in ["message", "text", "content"] {
+                    if case .string(let value) = obj[key] {
+                        return value
+                    }
+                }
+                // Fallback: serialize the entire result object to JSON
+                if let data = try? JSONEncoder().encode(result),
+                   let jsonString = String(data: data, encoding: .utf8) {
+                    return jsonString
+                }
+            }
         }
         return nil
     }

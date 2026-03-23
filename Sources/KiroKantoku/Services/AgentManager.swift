@@ -688,10 +688,13 @@ public final class AgentManager {
         let task = Task { [weak self] in
             do {
                 print("[ACP] AgentManager.executeSlashCommand: background task started for command=\(command)")
-                _ = try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+                let responseMessage = try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
                 print("[ACP] AgentManager.executeSlashCommand: background task completed for command=\(command)")
                 await MainActor.run {
                     guard let self = self, let agent = self.agents[agentId] else { return }
+                    if let message = responseMessage, !message.isEmpty {
+                        agent.messages.append(ChatMessage(role: .assistant, content: message))
+                    }
                     agent.status = .idle
                 }
             } catch {
