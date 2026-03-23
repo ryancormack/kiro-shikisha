@@ -680,11 +680,27 @@ public final class AgentManager {
         agent.messages.append(ChatMessage(role: .user, content: "/\(command)\(argsDisplay)"))
         agent.status = .active
         
-        // Fire-and-forget: send the command without waiting for a response.
-        // The response arrives as session updates (agent message chunks) through
-        // the normal onSessionUpdate flow.
-        try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
-        agent.status = .idle
+        // Send command in a background task so the UI stays responsive.
+        // The actual command output arrives via session updates (agent message chunks).
+        // executeSlashCommand awaits the JSON-RPC acknowledgment response.
+        let task = Task { [weak self] in
+            do {
+                let message = try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    agent.status = .idle
+                }
+                return message
+            } catch {
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    agent.status = .error
+                    agent.errorMessage = error.localizedDescription
+                }
+                return nil as String?
+            }
+        }
+        promptTasks[agentId] = task
         return nil
     }
 

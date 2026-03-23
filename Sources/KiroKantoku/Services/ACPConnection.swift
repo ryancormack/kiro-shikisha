@@ -481,8 +481,9 @@ public actor ACPConnection {
     }
     
     /// Execute a slash command via the Kiro extension protocol.
-    /// Fire-and-forget: sends the request without waiting for a response.
-    /// The response arrives through normal session updates (agent message chunks).
+    /// Registers a pending response handler and awaits the JSON-RPC response,
+    /// preventing it from being forwarded to the SDK's ClientConnection.
+    /// The actual command output arrives through normal session updates (agent message chunks).
     @discardableResult
     public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws -> String? {
         guard let transport = transport else {
@@ -512,9 +513,28 @@ public actor ACPConnection {
         
         let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/execute", params: paramsValue)
         
-        // Fire-and-forget: send the request without waiting for a response.
-        // The response arrives through normal session update flow.
-        try await transport.send(.request(request))
+        // Register a pending response handler before sending, so the response
+        // is consumed here rather than being forwarded to the SDK's ClientConnection.
+        let result: JsonValue? = try await withCheckedThrowingContinuation { continuation in
+            transport.registerPendingResponse(requestId: .int(requestId)) { result in
+                continuation.resume(returning: result)
+            }
+            Task {
+                do {
+                    try await transport.send(.request(request))
+                } catch {
+                    transport.removePendingResponse(requestId: .int(requestId))
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+        
+        // Extract a message string from the response if present
+        if let result = result,
+           case .object(let obj) = result,
+           case .string(let message) = obj["message"] {
+            return message
+        }
         return nil
     }
     

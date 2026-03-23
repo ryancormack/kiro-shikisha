@@ -866,4 +866,67 @@ final class ACPProtocolTests: XCTestCase {
         XCTAssertNotNil(decoded.meta)
         XCTAssertEqual(decoded.meta?.objectValue?["inputType"]?.stringValue, "panel")
     }
+    
+    // MARK: - Execute Slash Command Full Request Structure Tests
+    
+    func testExecuteSlashCommandFullRequestStructure() throws {
+        let sessionId = "sess_test123"
+        let commandName = "context"
+        let args: [String: String] = ["value": "show"]
+        
+        var argsObject: [String: JsonValue] = [:]
+        for (key, value) in args {
+            argsObject[key] = .string(value)
+        }
+        
+        let name = commandName.hasPrefix("/") ? String(commandName.dropFirst()) : commandName
+        let commandObject: JsonValue = .object([
+            "command": .string(name),
+            "args": .object(argsObject)
+        ])
+        
+        let requestId = 42
+        let paramsValue: JsonValue = .object([
+            "sessionId": .string(sessionId),
+            "command": commandObject
+        ])
+        
+        let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/execute", params: paramsValue)
+        
+        // Verify the request method
+        XCTAssertEqual(request.method, "_kiro.dev/commands/execute")
+        
+        // Verify the request has an integer ID
+        if case .int(let id) = request.id {
+            XCTAssertEqual(id, 42)
+        } else {
+            XCTFail("Expected integer request ID")
+        }
+        
+        // Verify encoding round-trip
+        let data = try JSONEncoder().encode(request)
+        let json = String(data: data, encoding: .utf8)!
+        // Note: slashes may be escaped in JSON (e.g., \/) so check for the method name parts
+        XCTAssertTrue(json.contains("commands"), "JSON should contain method name: \(json)")
+        XCTAssertTrue(json.contains("sess_test123"), "JSON should contain sessionId: \(json)")
+        
+        // Verify the params contain sessionId and command object
+        let decoded = try JSONDecoder().decode(JsonRpcRequest.self, from: data)
+        XCTAssertEqual(decoded.method, "_kiro.dev/commands/execute")
+        if case .object(let params) = decoded.params {
+            XCTAssertEqual(params["sessionId"]?.stringValue, "sess_test123")
+            if case .object(let cmd) = params["command"] {
+                XCTAssertEqual(cmd["command"]?.stringValue, "context")
+                if case .object(let decodedArgs) = cmd["args"] {
+                    XCTAssertEqual(decodedArgs["value"]?.stringValue, "show")
+                } else {
+                    XCTFail("Expected args object in command")
+                }
+            } else {
+                XCTFail("Expected command object in params")
+            }
+        } else {
+            XCTFail("Expected params to be an object")
+        }
+    }
 }
