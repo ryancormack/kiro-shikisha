@@ -680,9 +680,12 @@ public final class AgentManager {
         agent.messages.append(ChatMessage(role: .user, content: "/\(command)\(argsDisplay)"))
         agent.status = .active
         
-        let message = try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+        // Fire-and-forget: send the command without waiting for a response.
+        // The response arrives as session updates (agent message chunks) through
+        // the normal onSessionUpdate flow.
+        try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
         agent.status = .idle
-        return message
+        return nil
     }
 
     /// Request available options for a selection-type slash command
@@ -735,7 +738,7 @@ public final class AgentManager {
     }
 
     /// Handle a Kiro vendor extension notification
-    private func handleKiroNotification(method: String, params: JsonValue?, for agent: Agent) {
+    func handleKiroNotification(method: String, params: JsonValue?, for agent: Agent) {
         // Encode raw params to JSON string for debug logging
         let rawJson: String?
         if let params = params,
@@ -748,10 +751,29 @@ public final class AgentManager {
         switch method {
         case "_kiro.dev/commands/available":
             if let params = params {
-                let encoder = JSONEncoder()
-                if let data = try? encoder.encode(params),
-                   let parsed = try? JSONDecoder().decode(KiroCommandsAvailableParams.self, from: data) {
+                do {
+                    let data = try JSONEncoder().encode(params)
+                    let parsed = try JSONDecoder().decode(KiroCommandsAvailableParams.self, from: data)
                     agent.kiroAvailableCommands = parsed.commands
+                } catch {
+                    print("[Kiro] Failed to decode commands/available: \(error). Attempting fallback.")
+                    // Fallback: manually extract commands from the raw JsonValue
+                    if let obj = params.objectValue,
+                       let commandsArray = obj["commands"]?.arrayValue {
+                        var commands: [KiroAvailableCommand] = []
+                        for item in commandsArray {
+                            if let cmdObj = item.objectValue,
+                               let name = cmdObj["name"]?.stringValue,
+                               let description = cmdObj["description"]?.stringValue {
+                                let meta = cmdObj["meta"]
+                                commands.append(KiroAvailableCommand(name: name, description: description, meta: meta))
+                            }
+                        }
+                        if !commands.isEmpty {
+                            agent.kiroAvailableCommands = commands
+                            print("[Kiro] Fallback decoded \(commands.count) commands")
+                        }
+                    }
                 }
             }
             agent.debugLog.append(DebugLogEntry(

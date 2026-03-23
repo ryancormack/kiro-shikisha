@@ -825,4 +825,45 @@ final class ACPProtocolTests: XCTestCase {
         XCTAssertEqual(decoded.locations[1].path, "/src/utils.py")
         XCTAssertNil(decoded.locations[1].line)
     }
+
+    func testKiroCommandsAvailableParamsDecodingWithExtraFields() throws {
+        // Kiro may send extra fields beyond what our struct expects
+        let json = """
+        {"sessionId":"sess_extra","commands":[{"name":"/help","description":"Show help","meta":null,"extraField":"ignored"}],"extraTopLevel":true}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(KiroCommandsAvailableParams.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionId, "sess_extra")
+        XCTAssertEqual(decoded.commands.count, 1)
+        XCTAssertEqual(decoded.commands[0].name, "/help")
+        XCTAssertEqual(decoded.commands[0].description, "Show help")
+        XCTAssertNil(decoded.commands[0].meta)
+    }
+    
+    func testKiroCommandsAvailableParamsDecodingWithNullMeta() throws {
+        let json = """
+        {"sessionId":"sess_null","commands":[{"name":"compact","description":"Compact context","meta":null},{"name":"tools","description":"View tools"}]}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(KiroCommandsAvailableParams.self, from: data)
+        
+        XCTAssertEqual(decoded.commands.count, 2)
+        XCTAssertNil(decoded.commands[0].meta)
+        // Second command has no meta field at all - should also decode as nil
+        XCTAssertNil(decoded.commands[1].meta)
+    }
+    
+    func testKiroAvailableCommandDecodingWithUnknownMetaKeys() throws {
+        let json = """
+        {"name":"/context","description":"Manage context","meta":{"inputType":"panel","unknownKey":"unknownValue","nested":{"deep":true}}}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(KiroAvailableCommand.self, from: data)
+        
+        XCTAssertEqual(decoded.name, "/context")
+        XCTAssertEqual(decoded.description, "Manage context")
+        XCTAssertNotNil(decoded.meta)
+        XCTAssertEqual(decoded.meta?.objectValue?["inputType"]?.stringValue, "panel")
+    }
 }
