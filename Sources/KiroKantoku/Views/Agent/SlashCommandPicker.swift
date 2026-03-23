@@ -8,7 +8,7 @@ struct SlashCommandPicker: View {
     let onSelect: (SlashCommand) -> Void
     let onDismiss: () -> Void
 
-    @State private var selectedIndex: Int = 0
+    @Binding var selectedIndex: Int
 
     private var filteredCommands: [SlashCommand] {
         if filterText.isEmpty {
