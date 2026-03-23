@@ -1,0 +1,7 @@
+{
+  "task_id": "task-ui-polish",
+  "task_description": "Full UI polish across all views of the Kiro Kantoku macOS app to make it a stunning, elegant, and refined desktop experience. Key areas: consistent design tokens, properly sized buttons, intuitive text inputs, approachable colors, well-proportioned popups, visually cohesive elements with no mismatched curved/straight edges.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}
