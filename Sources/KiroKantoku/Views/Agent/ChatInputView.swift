@@ -2,20 +2,50 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Text input area for composing and sending chat messages
+/// Text input area for composing and sending chat messages with slash command autocomplete
 public struct ChatInputView: View {
+    let agent: Agent?
     let onSend: (String, [Data]) -> Void
+    let onSlashCommand: ((SlashCommand, String?) -> Void)?
+    
+    @Environment(AgentManager.self) private var agentManager
     
     @State private var inputText: String = ""
     @State private var imageAttachments: [Data] = []
     @FocusState private var isFocused: Bool
     
-    public init(onSend: @escaping (String, [Data]) -> Void) {
+    // Slash command autocomplete state
+    @State private var showSlashPicker: Bool = false
+    @State private var slashFilterText: String = ""
+    
+    // Command options picker state
+    @State private var showOptionsPicker: Bool = false
+    @State private var currentOptionsCommand: SlashCommand? = nil
+    @State private var commandOptions: [CommandOption] = []
+    @State private var optionsFilterText: String = ""
+    @State private var isLoadingOptions: Bool = false
+    
+    public init(
+        agent: Agent? = nil,
+        onSend: @escaping (String, [Data]) -> Void,
+        onSlashCommand: ((SlashCommand, String?) -> Void)? = nil
+    ) {
+        self.agent = agent
         self.onSend = onSend
+        self.onSlashCommand = onSlashCommand
     }
     
     private var canSend: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
+    /// Merged list of all available slash commands
+    private var allCommands: [SlashCommand] {
+        guard let agent else { return [] }
+        return mergeSlashCommands(
+            acpCommands: agent.availableCommands,
+            kiroCommands: agent.kiroAvailableCommands
+        )
     }
     
     public var body: some View {
@@ -54,37 +84,183 @@ public struct ChatInputView: View {
                 .frame(height: 56)
             }
             
-            HStack(alignment: .bottom, spacing: 8) {
-                Button(action: pickImages) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 18))
-                        .foregroundColor(.secondary)
+            ZStack(alignment: .bottom) {
+                // Slash command picker overlay (positioned above the input)
+                if showSlashPicker {
+                    VStack {
+                        Spacer()
+                        SlashCommandPicker(
+                            commands: allCommands,
+                            filterText: slashFilterText,
+                            onSelect: { command in
+                                handleCommandSelection(command)
+                            },
+                            onDismiss: {
+                                dismissSlashPicker()
+                            }
+                        )
+                        .padding(.horizontal, DesignConstants.spacingSM)
+                    }
+                    .offset(y: -44)
+                    .zIndex(1)
                 }
-                .buttonStyle(.plain)
-                .frame(width: 28, height: 36)
                 
-                TextEditor(text: $inputText)
-                    .font(.body)
-                    .focused($isFocused)
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge))
-                    .frame(minHeight: 36, maxHeight: 100)
-                
-                Button(action: send) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundColor(canSend ? .blue : .secondary)
+                // Options picker overlay
+                if showOptionsPicker {
+                    VStack {
+                        Spacer()
+                        if isLoadingOptions {
+                            HStack {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Loading options...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding()
+                            .background(
+                                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
+                                    .fill(Color(nsColor: .controlBackgroundColor))
+                                    .shadow(color: .black.opacity(0.2), radius: 8, y: -2)
+                            )
+                        } else {
+                            CommandOptionsPicker(
+                                options: commandOptions,
+                                filterText: optionsFilterText,
+                                onSelect: { option in
+                                    handleOptionSelection(option)
+                                },
+                                onDismiss: {
+                                    dismissOptionsPicker()
+                                }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, DesignConstants.spacingSM)
+                    .offset(y: -44)
+                    .zIndex(1)
                 }
-                .buttonStyle(.plain)
-                .disabled(!canSend)
-                .keyboardShortcut(.return, modifiers: .command)
-                .frame(width: 36, height: 36)
+                
+                HStack(alignment: .bottom, spacing: 8) {
+                    Button(action: pickImages) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 18))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 28, height: 36)
+                    
+                    TextEditor(text: $inputText)
+                        .font(.body)
+                        .focused($isFocused)
+                        .scrollContentBackground(.hidden)
+                        .padding(8)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge))
+                        .frame(minHeight: 36, maxHeight: 100)
+                    
+                    Button(action: send) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(canSend ? .blue : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canSend)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .frame(width: 36, height: 36)
+                }
+                .frame(maxWidth: .infinity)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity)
-            .fixedSize(horizontal: false, vertical: true)
         }
+        .onChange(of: inputText) { _, newValue in
+            updateSlashPickerState(newValue)
+        }
+    }
+    
+    // MARK: - Slash Command Logic
+    
+    private func updateSlashPickerState(_ text: String) {
+        guard agent != nil else {
+            showSlashPicker = false
+            slashFilterText = ""
+            return
+        }
+        if text.hasPrefix("/") && !showOptionsPicker {
+            let afterSlash = String(text.dropFirst())
+            // Only show picker if no space (user is still typing the command name)
+            if !afterSlash.contains(" ") {
+                slashFilterText = afterSlash
+                showSlashPicker = true
+            } else {
+                showSlashPicker = false
+            }
+        } else {
+            showSlashPicker = false
+            slashFilterText = ""
+        }
+    }
+    
+    private func handleCommandSelection(_ command: SlashCommand) {
+        showSlashPicker = false
+        
+        switch command.inputType {
+        case .local:
+            // Handle local commands client-side
+            inputText = ""
+            onSlashCommand?(command, nil)
+            
+        case .selection:
+            // Show options picker
+            inputText = ""
+            currentOptionsCommand = command
+            showOptionsPicker = true
+            isLoadingOptions = true
+            Task {
+                guard let agent else { return }
+                do {
+                    let options = try await agentManager.requestCommandOptions(
+                        agentId: agent.id,
+                        command: command.name
+                    )
+                    await MainActor.run {
+                        commandOptions = options
+                        isLoadingOptions = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        commandOptions = []
+                        isLoadingOptions = false
+                        showOptionsPicker = false
+                    }
+                }
+            }
+            
+        case .panel, .simple:
+            // Execute directly
+            inputText = ""
+            onSlashCommand?(command, nil)
+        }
+    }
+    
+    private func handleOptionSelection(_ option: CommandOption) {
+        guard let command = currentOptionsCommand else { return }
+        dismissOptionsPicker()
+        inputText = ""
+        onSlashCommand?(command, option.value)
+    }
+    
+    private func dismissSlashPicker() {
+        showSlashPicker = false
+        slashFilterText = ""
+    }
+    
+    private func dismissOptionsPicker() {
+        showOptionsPicker = false
+        currentOptionsCommand = nil
+        commandOptions = []
+        optionsFilterText = ""
+        isLoadingOptions = false
     }
     
     private func send() {
@@ -120,11 +296,21 @@ public struct ChatInputView: View {
 }
 
 #Preview {
+    let workspace = Workspace(
+        name: "Test Project",
+        path: URL(fileURLWithPath: "/tmp/test")
+    )
+    let agent = Agent(
+        name: "Test Agent",
+        workspace: workspace
+    )
     VStack {
         Spacer()
-        ChatInputView { message, images in
+        ChatInputView(agent: agent, onSend: { message, images in
             print("Sent: \(message), images: \(images.count)")
-        }
+        }, onSlashCommand: { command, value in
+            print("Command: /\(command.name), value: \(value ?? "nil")")
+        })
         .padding()
     }
     .frame(width: 400, height: 200)

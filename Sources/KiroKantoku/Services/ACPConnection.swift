@@ -33,6 +33,27 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
     
     private let stateActor: ProcessTransportStateActor
     
+    /// Handler for Kiro vendor extension notifications (_kiro.dev/*)
+    public var kiroNotificationHandler: (@Sendable (String, JsonValue?) async -> Void)?
+    
+    /// Pending response handlers indexed by request ID
+    private var pendingResponses: [RequestId: @Sendable (JsonValue?) -> Void] = [:]
+    private let pendingLock = NSLock()
+    
+    /// Register a handler for a pending response to a request
+    public func registerPendingResponse(requestId: RequestId, handler: @escaping @Sendable (JsonValue?) -> Void) {
+        pendingLock.withLock {
+            pendingResponses[requestId] = handler
+        }
+    }
+    
+    /// Remove a pending response handler
+    public func removePendingResponse(requestId: RequestId) {
+        pendingLock.withLock {
+            pendingResponses.removeValue(forKey: requestId)
+        }
+    }
+    
     /// Initialize with process pipes
     /// - Parameters:
     ///   - stdinPipe: Pipe connected to the subprocess's stdin
@@ -105,6 +126,24 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
                     // Decode JSON-RPC message
                     let decoder = JSONDecoder()
                     if let message = try? decoder.decode(JsonRpcMessage.self, from: Data(messageData)) {
+                        // Check for pending response handlers (for vendor extension requests)
+                        if case .response(let response) = message {
+                            let handler = self.pendingLock.withLock {
+                                self.pendingResponses.removeValue(forKey: response.id)
+                            }
+                            if let handler = handler {
+                                handler(response.result)
+                                continue
+                            }
+                        }
+                        // Check for Kiro vendor extension notifications
+                        if case .notification(let notif) = message, notif.method.hasPrefix("_kiro.dev/") {
+                            if let handler = self.kiroNotificationHandler {
+                                let method = notif.method
+                                let params = notif.params
+                                Task { await handler(method, params) }
+                            }
+                        }
                         await stateActor.deliver(message)
                     } else {
                         let raw = String(data: Data(messageData), encoding: .utf8) ?? "undecodable"
@@ -232,10 +271,14 @@ public actor ACPConnection {
     ///   - kirocliPath: Path to the kiro-cli executable
     ///   - agentConfig: Optional agent configuration path (passed via --agent flag)
     ///   - onSessionUpdate: Callback for session updates
+    ///   - onKiroNotification: Optional callback for Kiro vendor extension notifications (_kiro.dev/*)
+    ///   - onPermissionRequest: Optional callback for permission requests from the agent
     public func connect(
         kirocliPath: String,
         agentConfig: String? = nil,
-        onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void
+        onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void,
+        onKiroNotification: (@Sendable (String, JsonValue?) async -> Void)? = nil,
+        onPermissionRequest: ((@Sendable (ToolCallUpdateData, [PermissionOption], @escaping @Sendable (RequestPermissionOutcome) -> Void) -> Void))? = nil
     ) async throws {
         guard process == nil else {
             // Already connected
@@ -293,11 +336,13 @@ public actor ACPConnection {
         
         // Create transport with process pipes
         let processTransport = ProcessTransport(stdinPipe: stdin, stdoutPipe: stdout)
+        processTransport.kiroNotificationHandler = onKiroNotification
         transport = processTransport
         
         // Create client with session update callback
         let client = KiroClient()
         client.onSessionUpdateCallback = onSessionUpdate
+        client.onPermissionRequest = onPermissionRequest
         kiroClient = client
         
         // Create and connect ClientConnection
@@ -435,25 +480,105 @@ public actor ACPConnection {
         try await transport.send(.notification(rpcNotification))
     }
     
-    /// Execute a slash command via the Kiro extension protocol
-    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: String?) async throws {
+    /// Execute a slash command via the Kiro extension protocol.
+    /// Returns the response message string if the server provides one.
+    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws -> String? {
         guard let transport = transport else {
             throw ACPConnectionError.notConnected
         }
         
-        struct ExecuteCommandParams: Codable {
-            let sessionId: String
-            let commandName: String
-            let args: String?
+        // Build args as JsonValue object
+        var argsObject: [String: JsonValue] = [:]
+        for (key, value) in args {
+            argsObject[key] = .string(value)
         }
         
-        let params = ExecuteCommandParams(sessionId: sessionId.value, commandName: commandName, args: args)
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(params)
-        let paramsValue = try JSONDecoder().decode(JsonValue.self, from: data)
+        // Strip leading "/" if present
+        let name = commandName.hasPrefix("/") ? String(commandName.dropFirst()) : commandName
         
-        let request = JsonRpcRequest(id: .int(Int.random(in: 10000...99999)), method: "_kiro.dev/commands/execute", params: paramsValue)
-        try await transport.send(.request(request))
+        // Build the TuiCommand format: {"command": "<name>", "args": {<args>}}
+        let commandObject: JsonValue = .object([
+            "command": .string(name),
+            "args": .object(argsObject)
+        ])
+        
+        let requestId = Int.random(in: 10000...99999)
+        let paramsValue: JsonValue = .object([
+            "sessionId": .string(sessionId.value),
+            "command": commandObject
+        ])
+        
+        let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/execute", params: paramsValue)
+        
+        // Register a pending response handler to capture the response message
+        let message: String? = try await withCheckedThrowingContinuation { continuation in
+            transport.registerPendingResponse(requestId: .int(requestId)) { result in
+                if let result = result,
+                   let obj = result.objectValue,
+                   let msg = obj["message"]?.stringValue {
+                    continuation.resume(returning: msg)
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
+            Task {
+                do {
+                    try await transport.send(.request(request))
+                } catch {
+                    transport.removePendingResponse(requestId: .int(requestId))
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+        
+        return message
+    }
+    
+    /// Request available options for a selection-type slash command.
+    /// The response is delivered via the kiroResponseHandler on the transport.
+    public func requestCommandOptions(sessionId: SessionId, command: String, partial: String = "") async throws -> [CommandOption] {
+        guard let transport = transport else {
+            throw ACPConnectionError.notConnected
+        }
+        
+        // Strip leading "/" if present
+        let name = command.hasPrefix("/") ? String(command.dropFirst()) : command
+        
+        let requestId = Int.random(in: 10000...99999)
+        let paramsValue: JsonValue = .object([
+            "command": .string(name),
+            "sessionId": .string(sessionId.value),
+            "partial": .string(partial)
+        ])
+        
+        let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/options", params: paramsValue)
+        
+        // Register a pending response handler before sending
+        let options: [CommandOption] = try await withCheckedThrowingContinuation { continuation in
+            transport.registerPendingResponse(requestId: .int(requestId)) { result in
+                if let result = result {
+                    do {
+                        let data = try JSONEncoder().encode(result)
+                        let decoded = try JSONDecoder().decode(CommandOptionsResponse.self, from: data)
+                        continuation.resume(returning: decoded.options)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                } else {
+                    continuation.resume(returning: [])
+                }
+            }
+            Task {
+                do {
+                    try await transport.send(.request(request))
+                } catch {
+                    transport.removePendingResponse(requestId: .int(requestId))
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+        
+        return options
     }
     
     /// Get the agent capabilities from initialization
@@ -480,7 +605,9 @@ public actor ACPConnection {
     public func connect(
         kirocliPath: String,
         agentConfig: String? = nil,
-        onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void
+        onSessionUpdate: @escaping @Sendable (SessionUpdate) async -> Void,
+        onKiroNotification: (@Sendable (String, JsonValue?) async -> Void)? = nil,
+        onPermissionRequest: ((@Sendable (ToolCallUpdateData, [PermissionOption], @escaping @Sendable (RequestPermissionOutcome) -> Void) -> Void))? = nil
     ) async throws {
         throw ACPConnectionError.platformNotSupported
     }
@@ -517,7 +644,11 @@ public actor ACPConnection {
         throw ACPConnectionError.platformNotSupported
     }
     
-    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: String?) async throws {
+    public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws -> String? {
+        throw ACPConnectionError.platformNotSupported
+    }
+    
+    public func requestCommandOptions(sessionId: SessionId, command: String, partial: String = "") async throws -> [CommandOption] {
         throw ACPConnectionError.platformNotSupported
     }
     

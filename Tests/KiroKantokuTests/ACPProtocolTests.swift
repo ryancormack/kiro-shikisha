@@ -288,4 +288,541 @@ final class ACPProtocolTests: XCTestCase {
         XCTAssertEqual(cmd.description, "Shows help")
         XCTAssertNil(cmd.input)
     }
+    
+    // MARK: - Execute Slash Command JSON Format Tests
+    
+    func testExecuteSlashCommandJsonFormat() throws {
+        // Reproduce the exact structure that ACPConnection.executeSlashCommand builds:
+        // { "sessionId": "<id>", "command": { "command": "<name>", "args": {<args>} } }
+        let sessionId = "sess_test123"
+        let commandName = "model"
+        let args: [String: String] = ["value": "gpt-4"]
+        
+        var argsObject: [String: JsonValue] = [:]
+        for (key, value) in args {
+            argsObject[key] = .string(value)
+        }
+        
+        let commandObject: JsonValue = .object([
+            "command": .string(commandName),
+            "args": .object(argsObject)
+        ])
+        
+        let paramsValue: JsonValue = .object([
+            "sessionId": .string(sessionId),
+            "command": commandObject
+        ])
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(paramsValue)
+        let json = String(data: data, encoding: .utf8)!
+        
+        // Verify the nested TuiCommand structure
+        XCTAssertTrue(json.contains("\"sessionId\":\"sess_test123\""), "Should contain sessionId: \(json)")
+        XCTAssertTrue(json.contains("\"command\":{"), "Should contain command object: \(json)")
+        
+        // Decode back to verify structure
+        let decoded = try JSONDecoder().decode(JsonValue.self, from: data)
+        guard case .object(let root) = decoded else {
+            XCTFail("Expected root object"); return
+        }
+        XCTAssertEqual(root["sessionId"]?.stringValue, "sess_test123")
+        
+        guard case .object(let cmd) = root["command"] else {
+            XCTFail("Expected command object"); return
+        }
+        XCTAssertEqual(cmd["command"]?.stringValue, "model")
+        
+        guard case .object(let decodedArgs) = cmd["args"] else {
+            XCTFail("Expected args object"); return
+        }
+        XCTAssertEqual(decodedArgs["value"]?.stringValue, "gpt-4")
+    }
+    
+    func testExecuteSlashCommandJsonFormatEmptyArgs() throws {
+        // Test with no args - should produce {"command": "<name>", "args": {}}
+        let commandObject: JsonValue = .object([
+            "command": .string("clear"),
+            "args": .object([:])
+        ])
+        
+        let paramsValue: JsonValue = .object([
+            "sessionId": .string("sess_abc"),
+            "command": commandObject
+        ])
+        
+        let data = try JSONEncoder().encode(paramsValue)
+        let decoded = try JSONDecoder().decode(JsonValue.self, from: data)
+        
+        guard case .object(let root) = decoded,
+              case .object(let cmd) = root["command"],
+              case .object(let args) = cmd["args"] else {
+            XCTFail("Expected nested command/args structure"); return
+        }
+        
+        XCTAssertEqual(cmd["command"]?.stringValue, "clear")
+        XCTAssertTrue(args.isEmpty, "Args should be empty")
+    }
+    
+    func testExecuteSlashCommandStripsLeadingSlash() throws {
+        // Reproduce the slash-stripping logic from executeSlashCommand
+        let commandName = "/model"
+        let name = commandName.hasPrefix("/") ? String(commandName.dropFirst()) : commandName
+        XCTAssertEqual(name, "model")
+        
+        let commandNameNoSlash = "model"
+        let name2 = commandNameNoSlash.hasPrefix("/") ? String(commandNameNoSlash.dropFirst()) : commandNameNoSlash
+        XCTAssertEqual(name2, "model")
+    }
+    
+    // MARK: - CommandOption Encoding/Decoding Tests
+    
+    func testCommandOptionEncodingDecodingRoundTrip() throws {
+        let option = CommandOption(value: "gpt-4", label: "GPT-4", description: "OpenAI GPT-4", group: "OpenAI")
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let data = try encoder.encode(option)
+        let decoded = try JSONDecoder().decode(CommandOption.self, from: data)
+        
+        XCTAssertEqual(decoded.value, "gpt-4")
+        XCTAssertEqual(decoded.label, "GPT-4")
+        XCTAssertEqual(decoded.description, "OpenAI GPT-4")
+        XCTAssertEqual(decoded.group, "OpenAI")
+        XCTAssertEqual(decoded.id, "gpt-4") // id is derived from value
+    }
+    
+    func testCommandOptionWithNilOptionals() throws {
+        let option = CommandOption(value: "claude-3", label: "Claude 3")
+        
+        let data = try JSONEncoder().encode(option)
+        let decoded = try JSONDecoder().decode(CommandOption.self, from: data)
+        
+        XCTAssertEqual(decoded.value, "claude-3")
+        XCTAssertEqual(decoded.label, "Claude 3")
+        XCTAssertNil(decoded.description)
+        XCTAssertNil(decoded.group)
+    }
+    
+    func testCommandOptionDecodingFromJson() throws {
+        let json = """
+        {"value":"test-val","label":"Test Label","description":"A description","group":"TestGroup"}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(CommandOption.self, from: data)
+        
+        XCTAssertEqual(decoded.value, "test-val")
+        XCTAssertEqual(decoded.label, "Test Label")
+        XCTAssertEqual(decoded.description, "A description")
+        XCTAssertEqual(decoded.group, "TestGroup")
+    }
+    
+    // MARK: - CommandOptionsResponse Encoding/Decoding Tests
+    
+    func testCommandOptionsResponseEncodingDecodingRoundTrip() throws {
+        let options = [
+            CommandOption(value: "opt1", label: "Option 1", description: "First", group: "A"),
+            CommandOption(value: "opt2", label: "Option 2", description: nil, group: nil)
+        ]
+        let response = CommandOptionsResponse(options: options, hasMore: true)
+        
+        let data = try JSONEncoder().encode(response)
+        let decoded = try JSONDecoder().decode(CommandOptionsResponse.self, from: data)
+        
+        XCTAssertEqual(decoded.options.count, 2)
+        XCTAssertEqual(decoded.options[0].value, "opt1")
+        XCTAssertEqual(decoded.options[0].label, "Option 1")
+        XCTAssertEqual(decoded.options[1].value, "opt2")
+        XCTAssertTrue(decoded.hasMore)
+    }
+    
+    func testCommandOptionsResponseDefaultHasMore() throws {
+        let response = CommandOptionsResponse(options: [])
+        
+        let data = try JSONEncoder().encode(response)
+        let decoded = try JSONDecoder().decode(CommandOptionsResponse.self, from: data)
+        
+        XCTAssertTrue(decoded.options.isEmpty)
+        XCTAssertFalse(decoded.hasMore)
+    }
+    
+    func testCommandOptionsResponseDecodingFromJson() throws {
+        let json = """
+        {"options":[{"value":"v1","label":"L1"},{"value":"v2","label":"L2","description":"D2","group":"G2"}],"hasMore":false}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(CommandOptionsResponse.self, from: data)
+        
+        XCTAssertEqual(decoded.options.count, 2)
+        XCTAssertEqual(decoded.options[0].value, "v1")
+        XCTAssertNil(decoded.options[0].description)
+        XCTAssertEqual(decoded.options[1].group, "G2")
+        XCTAssertFalse(decoded.hasMore)
+    }
+    
+    // MARK: - KiroAvailableCommand Meta Tests
+    
+    func testKiroAvailableCommandWithMetaInputType() throws {
+        let meta: JsonValue = .object([
+            "inputType": .string("selection"),
+            "optionsMethod": .string("_kiro.dev/commands/options"),
+            "local": .bool(false),
+            "hint": .string("Select a model")
+        ])
+        let cmd = KiroAvailableCommand(name: "model", description: "Switch model", meta: meta)
+        
+        let data = try JSONEncoder().encode(cmd)
+        let decoded = try JSONDecoder().decode(KiroAvailableCommand.self, from: data)
+        
+        XCTAssertEqual(decoded.name, "model")
+        XCTAssertEqual(decoded.description, "Switch model")
+        XCTAssertNotNil(decoded.meta)
+        
+        guard let metaObj = decoded.meta?.objectValue else {
+            XCTFail("Expected meta to be an object"); return
+        }
+        XCTAssertEqual(metaObj["inputType"]?.stringValue, "selection")
+        XCTAssertEqual(metaObj["optionsMethod"]?.stringValue, "_kiro.dev/commands/options")
+        XCTAssertEqual(metaObj["local"]?.boolValue, false)
+        XCTAssertEqual(metaObj["hint"]?.stringValue, "Select a model")
+    }
+    
+    func testKiroAvailableCommandWithLocalMeta() throws {
+        let meta: JsonValue = .object([
+            "local": .bool(true)
+        ])
+        let cmd = KiroAvailableCommand(name: "quit", description: "Quit the app", meta: meta)
+        
+        let data = try JSONEncoder().encode(cmd)
+        let decoded = try JSONDecoder().decode(KiroAvailableCommand.self, from: data)
+        
+        XCTAssertEqual(decoded.name, "quit")
+        XCTAssertEqual(decoded.meta?.objectValue?["local"]?.boolValue, true)
+    }
+    
+    func testKiroAvailableCommandWithPanelMeta() throws {
+        let meta: JsonValue = .object([
+            "inputType": .string("panel")
+        ])
+        let cmd = KiroAvailableCommand(name: "context", description: "Show context", meta: meta)
+        
+        let data = try JSONEncoder().encode(cmd)
+        let decoded = try JSONDecoder().decode(KiroAvailableCommand.self, from: data)
+        
+        XCTAssertEqual(decoded.meta?.objectValue?["inputType"]?.stringValue, "panel")
+    }
+    
+    func testKiroAvailableCommandWithNilMeta() throws {
+        let cmd = KiroAvailableCommand(name: "help", description: "Show help")
+        
+        let data = try JSONEncoder().encode(cmd)
+        let decoded = try JSONDecoder().decode(KiroAvailableCommand.self, from: data)
+        
+        XCTAssertEqual(decoded.name, "help")
+        XCTAssertNil(decoded.meta)
+    }
+    
+    func testKiroCommandsAvailableParamsRoundTrip() throws {
+        let commands = [
+            KiroAvailableCommand(name: "model", description: "Switch model", meta: .object([
+                "inputType": .string("selection"),
+                "optionsMethod": .string("_kiro.dev/commands/options")
+            ])),
+            KiroAvailableCommand(name: "clear", description: "Clear chat", meta: nil)
+        ]
+        let params = KiroCommandsAvailableParams(sessionId: "sess_xyz", commands: commands)
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroCommandsAvailableParams.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionId, "sess_xyz")
+        XCTAssertEqual(decoded.commands.count, 2)
+        XCTAssertEqual(decoded.commands[0].name, "model")
+        XCTAssertNotNil(decoded.commands[0].meta)
+        XCTAssertEqual(decoded.commands[1].name, "clear")
+        XCTAssertNil(decoded.commands[1].meta)
+    }
+    
+    // MARK: - Kiro Extension Notification Model Tests
+    
+    func testKiroMetadataParamsRoundTrip() throws {
+        let params = KiroMetadataParams(sessionId: "sess_meta", contextUsagePercentage: 42.5)
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroMetadataParams.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionId, "sess_meta")
+        XCTAssertEqual(decoded.contextUsagePercentage, 42.5, accuracy: 0.001)
+    }
+    
+    func testKiroAgentSwitchedParamsRoundTrip() throws {
+        let params = KiroAgentSwitchedParams(
+            sessionId: "sess_switch",
+            agentName: "CodeAgent",
+            previousAgentName: "ChatAgent",
+            welcomeMessage: "Hello from CodeAgent!"
+        )
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroAgentSwitchedParams.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionId, "sess_switch")
+        XCTAssertEqual(decoded.agentName, "CodeAgent")
+        XCTAssertEqual(decoded.previousAgentName, "ChatAgent")
+        XCTAssertEqual(decoded.welcomeMessage, "Hello from CodeAgent!")
+    }
+    
+    func testKiroAgentSwitchedParamsNilWelcomeMessage() throws {
+        let params = KiroAgentSwitchedParams(
+            sessionId: "sess_switch2",
+            agentName: "Agent2",
+            previousAgentName: "Agent1"
+        )
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroAgentSwitchedParams.self, from: data)
+        
+        XCTAssertEqual(decoded.agentName, "Agent2")
+        XCTAssertNil(decoded.welcomeMessage)
+    }
+    
+    func testKiroToolCallChunkUpdateRoundTrip() throws {
+        let update = KiroToolCallChunkUpdate(
+            sessionUpdate: "tool_call_chunk",
+            toolCallId: "tc_abc",
+            title: "Reading file",
+            kind: "read"
+        )
+        
+        let data = try JSONEncoder().encode(update)
+        let decoded = try JSONDecoder().decode(KiroToolCallChunkUpdate.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionUpdate, "tool_call_chunk")
+        XCTAssertEqual(decoded.toolCallId, "tc_abc")
+        XCTAssertEqual(decoded.title, "Reading file")
+        XCTAssertEqual(decoded.kind, "read")
+    }
+    
+    func testKiroCompactionStatusParamsRoundTrip() throws {
+        let params = KiroCompactionStatusParams(message: "Compacting context...")
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroCompactionStatusParams.self, from: data)
+        
+        XCTAssertEqual(decoded.message, "Compacting context...")
+    }
+    
+    func testKiroClearStatusParamsRoundTrip() throws {
+        let params = KiroClearStatusParams(message: "Clearing history...")
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroClearStatusParams.self, from: data)
+        
+        XCTAssertEqual(decoded.message, "Clearing history...")
+    }
+    
+    func testKiroMcpOAuthRequestParamsRoundTrip() throws {
+        let params = KiroMcpOAuthRequestParams(url: "https://example.com/oauth/authorize?state=abc123")
+        
+        let data = try JSONEncoder().encode(params)
+        let decoded = try JSONDecoder().decode(KiroMcpOAuthRequestParams.self, from: data)
+        
+        XCTAssertEqual(decoded.url, "https://example.com/oauth/authorize?state=abc123")
+    }
+    
+    // MARK: - Permission Display Model Tests
+    
+    func testPermissionOptionDisplayProperties() {
+        let option = PermissionOptionDisplay(
+            optionId: "opt_allow_once",
+            label: "Allow Once",
+            kind: "allow_once"
+        )
+        
+        XCTAssertEqual(option.optionId, "opt_allow_once")
+        XCTAssertEqual(option.label, "Allow Once")
+        XCTAssertEqual(option.kind, "allow_once")
+        XCTAssertEqual(option.id, "opt_allow_once") // id derived from optionId
+    }
+    
+    func testPermissionOptionDisplayAllKinds() {
+        let kinds = ["allow_once", "allow_always", "reject_once", "reject_always"]
+        for kind in kinds {
+            let option = PermissionOptionDisplay(optionId: "id_\(kind)", label: kind, kind: kind)
+            XCTAssertEqual(option.kind, kind)
+        }
+    }
+    
+    // MARK: - Kiro Plan and Thought Tests
+    
+    func testKiroPlanStepRoundTrip() throws {
+        let step = KiroPlanStep(description: "Read the config file", status: "completed")
+        
+        let data = try JSONEncoder().encode(step)
+        let decoded = try JSONDecoder().decode(KiroPlanStep.self, from: data)
+        
+        XCTAssertEqual(decoded.description, "Read the config file")
+        XCTAssertEqual(decoded.status, "completed")
+    }
+    
+    func testKiroPlanUpdateRoundTrip() throws {
+        let steps = [
+            KiroPlanStep(description: "Read the config file", status: "completed"),
+            KiroPlanStep(description: "Add the new field", status: "in_progress"),
+            KiroPlanStep(description: "Update tests", status: "pending")
+        ]
+        let planUpdate = KiroPlanUpdate(sessionUpdate: "plan", title: "Implementation Plan", steps: steps)
+        
+        let data = try JSONEncoder().encode(planUpdate)
+        let decoded = try JSONDecoder().decode(KiroPlanUpdate.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionUpdate, "plan")
+        XCTAssertEqual(decoded.title, "Implementation Plan")
+        XCTAssertEqual(decoded.steps.count, 3)
+        XCTAssertEqual(decoded.steps[0].description, "Read the config file")
+        XCTAssertEqual(decoded.steps[0].status, "completed")
+        XCTAssertEqual(decoded.steps[1].status, "in_progress")
+        XCTAssertEqual(decoded.steps[2].status, "pending")
+    }
+    
+    func testKiroPlanUpdateNilTitle() throws {
+        let planUpdate = KiroPlanUpdate(sessionUpdate: "plan", title: nil, steps: [])
+        
+        let data = try JSONEncoder().encode(planUpdate)
+        let decoded = try JSONDecoder().decode(KiroPlanUpdate.self, from: data)
+        
+        XCTAssertNil(decoded.title)
+        XCTAssertTrue(decoded.steps.isEmpty)
+    }
+    
+    func testKiroAgentThoughtChunkUpdateRoundTrip() throws {
+        let content = KiroThoughtContent(type: "text", text: "Let me analyze the code structure.")
+        let update = KiroAgentThoughtChunkUpdate(sessionUpdate: "agent_thought_chunk", content: content)
+        
+        let data = try JSONEncoder().encode(update)
+        let decoded = try JSONDecoder().decode(KiroAgentThoughtChunkUpdate.self, from: data)
+        
+        XCTAssertEqual(decoded.sessionUpdate, "agent_thought_chunk")
+        XCTAssertEqual(decoded.content.type, "text")
+        XCTAssertEqual(decoded.content.text, "Let me analyze the code structure.")
+    }
+    
+    func testPlanEntryStatusValues() throws {
+        // Verify PlanEntryStatus can be decoded from expected string values
+        let testCases: [(String, PlanEntryStatus)] = [
+            ("\"pending\"", .pending),
+            ("\"in_progress\"", .inProgress),
+            ("\"completed\"", .completed)
+        ]
+        
+        for (json, expected) in testCases {
+            let data = json.data(using: .utf8)!
+            let decoded = try JSONDecoder().decode(PlanEntryStatus.self, from: data)
+            XCTAssertEqual(decoded, expected, "Failed to decode \(json)")
+        }
+    }
+    
+    func testPlanEntryRoundTrip() throws {
+        let entry = PlanEntry(content: "Read config", priority: .medium, status: .inProgress)
+        
+        let data = try JSONEncoder().encode(entry)
+        let decoded = try JSONDecoder().decode(PlanEntry.self, from: data)
+        
+        XCTAssertEqual(decoded.content, "Read config")
+        XCTAssertEqual(decoded.priority, .medium)
+        XCTAssertEqual(decoded.status, .inProgress)
+    }
+
+    // MARK: - Tool Call Content Type Tests
+
+    func testTerminalContentRoundTrip() throws {
+        let terminal = TerminalContent(terminalId: "term_xyz789")
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(terminal)
+        let decoded = try JSONDecoder().decode(TerminalContent.self, from: data)
+
+        XCTAssertEqual(decoded.terminalId, "term_xyz789")
+    }
+
+    func testToolCallLocationWithLine() throws {
+        let location = ToolCallLocation(path: "/path/to/main.py", line: 42)
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(location)
+        let decoded = try JSONDecoder().decode(ToolCallLocation.self, from: data)
+
+        XCTAssertEqual(decoded.path, "/path/to/main.py")
+        XCTAssertEqual(decoded.line, 42)
+    }
+
+    func testToolCallLocationWithoutLine() throws {
+        let location = ToolCallLocation(path: "/path/to/file.swift")
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(location)
+        let decoded = try JSONDecoder().decode(ToolCallLocation.self, from: data)
+
+        XCTAssertEqual(decoded.path, "/path/to/file.swift")
+        XCTAssertNil(decoded.line)
+    }
+
+    func testToolCallContentDiffDecoding() throws {
+        let json = """
+        {"type":"diff","path":"/path/to/file.json","newText":"new content","oldText":"old content"}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ToolCallContent.self, from: data)
+
+        if case .diff(let diff) = decoded {
+            XCTAssertEqual(diff.path, "/path/to/file.json")
+            XCTAssertEqual(diff.newText, "new content")
+            XCTAssertEqual(diff.oldText, "old content")
+        } else {
+            XCTFail("Expected diff content")
+        }
+    }
+
+    func testToolCallContentTerminalDecoding() throws {
+        let json = """
+        {"type":"terminal","terminalId":"term_abc123"}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ToolCallContent.self, from: data)
+
+        if case .terminal(let terminal) = decoded {
+            XCTAssertEqual(terminal.terminalId, "term_abc123")
+        } else {
+            XCTFail("Expected terminal content")
+        }
+    }
+
+    func testToolCallContentContentDecoding() throws {
+        let json = """
+        {"type":"content","content":{"type":"text","text":"hello world"}}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ToolCallContent.self, from: data)
+
+        if case .content(let c) = decoded, case .text(let t) = c.content {
+            XCTAssertEqual(t.text, "hello world")
+        } else {
+            XCTFail("Expected text content")
+        }
+    }
+
+    func testToolCallUpdateWithLocations() throws {
+        let json = """
+        {"sessionUpdate":"tool_call","toolCallId":"tc_1","title":"Read file","locations":[{"path":"/src/main.py","line":42},{"path":"/src/utils.py"}]}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(ToolCallUpdate.self, from: data)
+
+        XCTAssertEqual(decoded.locations.count, 2)
+        XCTAssertEqual(decoded.locations[0].path, "/src/main.py")
+        XCTAssertEqual(decoded.locations[0].line, 42)
+        XCTAssertEqual(decoded.locations[1].path, "/src/utils.py")
+        XCTAssertNil(decoded.locations[1].line)
+    }
 }

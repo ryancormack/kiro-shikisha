@@ -44,8 +44,20 @@ public struct ChatPanel: View {
                             .frame(maxWidth: .infinity)
                         }
 
+                        // Show agent plan if available
+                        if let plan = agent.currentPlan, !plan.entries.isEmpty {
+                            PlanView(plan: plan)
+                                .id("plan-view")
+                        }
+
+                        // Show agent thinking if active
+                        if !agent.thoughtContent.isEmpty, agent.status == .active {
+                            ThoughtBubbleView(content: agent.thoughtContent)
+                                .id("thought-view")
+                        }
+
                         if agent.status == .active {
-                            TypingIndicator(label: agent.messages.isEmpty ? "Agent is starting up…" : nil)
+                            TypingIndicator(label: agent.messages.isEmpty ? "Agent is starting up\u{2026}" : nil)
                                 .id("typing-indicator")
                         }
                     }
@@ -77,6 +89,10 @@ public struct ChatPanel: View {
                     }
                     .padding()
                 } else {
+                    if let usage = agent.contextUsagePercentage {
+                        ContextUsageBar(percentage: usage)
+                    }
+
                     ConfigSelectorBar(agent: agent, onError: { error in
                         errorMessage = error
                     })
@@ -85,9 +101,48 @@ public struct ChatPanel: View {
                         sendMessage("Please use the \(skillName) skill for the following request.")
                     }
 
-                    ChatInputView { message, images in
-                        sendMessage(message, images: images)
+                    if agent.isCompacting, let message = agent.compactionMessage {
+                        StatusBannerView(
+                            icon: "arrow.triangle.2.circlepath",
+                            message: message,
+                            color: .blue
+                        )
                     }
+
+                    if agent.isClearingHistory, let message = agent.clearStatusMessage {
+                        StatusBannerView(
+                            icon: "trash",
+                            message: message,
+                            color: .orange
+                        )
+                    }
+
+                    if let oauthURL = agent.pendingOAuthURL {
+                        OAuthRequestView(url: oauthURL) {
+                            if let url = URL(string: oauthURL) {
+                                NSWorkspace.shared.open(url)
+                            }
+                            agent.pendingOAuthURL = nil
+                        }
+                    }
+
+                    if let permissionRequest = agent.pendingPermissionRequest {
+                        PermissionRequestView(
+                            request: permissionRequest,
+                            onSelect: { optionId in
+                                agentManager.resolvePermission(agentId: agent.id, optionId: optionId)
+                            },
+                            onCancel: {
+                                agentManager.cancelPermission(agentId: agent.id)
+                            }
+                        )
+                    }
+
+                    ChatInputView(agent: agent, onSend: { message, images in
+                        sendMessage(message, images: images)
+                    }, onSlashCommand: { command, optionValue in
+                        handleSlashCommand(command, optionValue: optionValue)
+                    })
                     .padding()
                 }
                 
@@ -119,15 +174,19 @@ public struct ChatPanel: View {
     private func sendMessage(_ content: String, images: [Data] = []) {
         errorMessage = nil
         
-        // Detect slash commands
+        // Detect slash commands (fallback for text typed directly without picker)
         if content.hasPrefix("/") {
             let parts = content.dropFirst().split(separator: " ", maxSplits: 1)
             let command = String(parts.first ?? "")
-            let args = parts.count > 1 ? String(parts[1]) : nil
+            let argsString = parts.count > 1 ? String(parts[1]) : nil
             
             if !command.isEmpty {
                 Task {
                     do {
+                        var args: [String: String] = [:]
+                        if let argsString = argsString {
+                            args["value"] = argsString
+                        }
                         try await agentManager.executeSlashCommand(agentId: agent.id, command: command, args: args)
                     } catch {
                         errorMessage = error.localizedDescription
@@ -142,6 +201,69 @@ public struct ChatPanel: View {
                 try await agentManager.sendPrompt(agentId: agent.id, prompt: content, imageAttachments: images)
             } catch {
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+    
+    private func handleSlashCommand(_ command: SlashCommand, optionValue: String?) {
+        errorMessage = nil
+        
+        switch command.inputType {
+        case .local:
+            // Handle local commands client-side
+            if command.name == "quit" || command.name == "exit" {
+                Task {
+                    await agentManager.stopAgent(id: agent.id)
+                }
+            } else if command.name == "clear" {
+                agent.messages.removeAll()
+            }
+            
+        case .selection:
+            // Execute with the selected option value
+            Task {
+                do {
+                    var args: [String: String] = [:]
+                    if let value = optionValue {
+                        args["value"] = value
+                    }
+                    let message = try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
+                    if let message, !message.isEmpty {
+                        agent.messages.append(ChatMessage(role: .assistant, content: message))
+                    }
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            
+        case .panel:
+            // Execute and show the response message in chat
+            Task {
+                do {
+                    let message = try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name)
+                    if let message, !message.isEmpty {
+                        agent.messages.append(ChatMessage(role: .assistant, content: message))
+                    }
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+            }
+            
+        case .simple:
+            // Execute directly
+            Task {
+                do {
+                    var args: [String: String] = [:]
+                    if let value = optionValue {
+                        args["value"] = value
+                    }
+                    let message = try await agentManager.executeSlashCommand(agentId: agent.id, command: command.name, args: args)
+                    if let message, !message.isEmpty {
+                        agent.messages.append(ChatMessage(role: .assistant, content: message))
+                    }
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }
@@ -185,6 +307,101 @@ struct TypingIndicator: View {
         .onAppear {
             isAnimating = true
         }
+    }
+}
+
+/// Small horizontal bar showing context usage percentage
+private struct ContextUsageBar: View {
+    let percentage: Double
+
+    private var color: Color {
+        if percentage < 50 { return .green }
+        if percentage < 80 { return .yellow }
+        return .red
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("Context")
+                .font(.system(.caption2))
+                .foregroundColor(.secondary)
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.secondary.opacity(0.2))
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(color)
+                        .frame(width: geometry.size.width * min(percentage / 100.0, 1.0))
+                }
+            }
+            .frame(height: 4)
+
+            Text(String(format: "%.0f%%", percentage))
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(color)
+                .frame(width: 32, alignment: .trailing)
+        }
+        .padding(.horizontal, DesignConstants.spacingMD)
+        .padding(.vertical, 2)
+    }
+}
+
+/// Reusable status banner with spinner, icon, and message text
+private struct StatusBannerView: View {
+    let icon: String
+    let message: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .font(.caption)
+            Text(message)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, DesignConstants.spacingMD)
+        .padding(.vertical, DesignConstants.spacingSM)
+        .background(color.opacity(0.05))
+    }
+}
+
+/// Inline view prompting the user to open an MCP OAuth URL
+private struct OAuthRequestView: View {
+    let url: String
+    let onOpen: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "key.fill")
+                .foregroundColor(.blue)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("MCP Server Authentication Required")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                Text(url)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            Button("Open in Browser") {
+                onOpen()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, DesignConstants.spacingMD)
+        .padding(.vertical, DesignConstants.spacingSM)
+        .background(Color.blue.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal)
     }
 }
 

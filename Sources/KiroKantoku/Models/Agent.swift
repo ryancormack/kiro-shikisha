@@ -53,6 +53,8 @@ public final class Agent: Identifiable {
     public var agentConfigurationId: UUID?
     /// Available slash commands from the server
     public var availableCommands: [AvailableCommand] = []
+    /// Available Kiro extension commands (richer than standard ACP commands, includes meta with inputType, optionsMethod, etc.)
+    public var kiroAvailableCommands: [KiroAvailableCommand] = []
     /// Current session mode ID
     public var currentModeId: SessionModeId? = nil
     /// Available session modes from the server
@@ -67,6 +69,24 @@ public final class Agent: Identifiable {
     public var configOptions: [SessionConfigOption] = []
     /// Available skills discovered from workspace and global directories
     public var availableSkills: [Skill] = []
+    /// Context usage percentage from Kiro metadata (0.0 to 100.0)
+    public var contextUsagePercentage: Double? = nil
+    /// Whether the agent is currently compacting context
+    public var isCompacting: Bool = false
+    /// Status message from the compaction operation
+    public var compactionMessage: String? = nil
+    /// Whether the agent is currently clearing history
+    public var isClearingHistory: Bool = false
+    /// Status message from the clear operation
+    public var clearStatusMessage: String? = nil
+    /// Pending OAuth URL that the user needs to open
+    public var pendingOAuthURL: String? = nil
+    /// Pending permission request awaiting user response
+    public var pendingPermissionRequest: PendingPermissionRequest? = nil
+    /// Current execution plan from the agent
+    public var currentPlan: PlanUpdate? = nil
+    /// Accumulated agent thought/reasoning text for current turn
+    public var thoughtContent: String = ""
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {
@@ -124,6 +144,8 @@ public final class Agent: Identifiable {
     public var agentConfigurationId: UUID?
     /// Available slash commands from the server
     public var availableCommands: [AvailableCommand] = []
+    /// Available Kiro extension commands (richer than standard ACP commands, includes meta with inputType, optionsMethod, etc.)
+    public var kiroAvailableCommands: [KiroAvailableCommand] = []
     /// Current session mode ID
     public var currentModeId: SessionModeId? = nil
     /// Available session modes from the server
@@ -138,6 +160,24 @@ public final class Agent: Identifiable {
     public var configOptions: [SessionConfigOption] = []
     /// Available skills discovered from workspace and global directories
     public var availableSkills: [Skill] = []
+    /// Context usage percentage from Kiro metadata (0.0 to 100.0)
+    public var contextUsagePercentage: Double? = nil
+    /// Whether the agent is currently compacting context
+    public var isCompacting: Bool = false
+    /// Status message from the compaction operation
+    public var compactionMessage: String? = nil
+    /// Whether the agent is currently clearing history
+    public var isClearingHistory: Bool = false
+    /// Status message from the clear operation
+    public var clearStatusMessage: String? = nil
+    /// Pending OAuth URL that the user needs to open
+    public var pendingOAuthURL: String? = nil
+    /// Pending permission request awaiting user response
+    public var pendingPermissionRequest: PendingPermissionRequest? = nil
+    /// Current execution plan from the agent
+    public var currentPlan: PlanUpdate? = nil
+    /// Accumulated agent thought/reasoning text for current turn
+    public var thoughtContent: String = ""
     
     /// Display name for the agent - returns sessionName if set, otherwise workspace name
     public var displayName: String {

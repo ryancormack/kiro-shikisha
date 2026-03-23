@@ -52,6 +52,9 @@ public final class AgentManager {
     /// Background tasks for prompt responses
     private var promptTasks: [UUID: Task<Void, Never>] = [:]
     
+    /// Pending permission completion handlers indexed by agent ID
+    private var permissionHandlers: [UUID: @Sendable (RequestPermissionOutcome) -> Void] = [:]
+    
     public init(kirocliPath: String = "/usr/local/bin/kiro-cli") {
         self.kirocliPath = kirocliPath
     }
@@ -73,6 +76,54 @@ public final class AgentManager {
     }
     
     // MARK: - Public Methods
+    
+    /// Build a permission request handler for a given agent ID
+    private func makePermissionRequestHandler(agentId: UUID) -> @Sendable (ToolCallUpdateData, [PermissionOption], @escaping @Sendable (RequestPermissionOutcome) -> Void) -> Void {
+        return { [weak self] toolCall, options, completion in
+            Task { @MainActor in
+                guard let self = self, let agent = self.agents[agentId] else {
+                    completion(.cancelled)
+                    return
+                }
+                
+                // Extract display information from the tool call
+                let title = toolCall.title ?? "Tool Call"
+                let kind = toolCall.kind?.rawValue
+                var rawInputStr: String? = nil
+                if let rawInput = toolCall.rawInput {
+                    // Try to extract just the command if it is a shell/execute call
+                    if let obj = rawInput.objectValue, let cmd = obj["command"]?.stringValue {
+                        rawInputStr = cmd
+                    } else if let data = try? JSONEncoder().encode(rawInput),
+                              let jsonStr = String(data: data, encoding: .utf8) {
+                        rawInputStr = jsonStr
+                    }
+                }
+                
+                let displayOptions = options.map { opt in
+                    PermissionOptionDisplay(
+                        optionId: opt.optionId.value,
+                        label: opt.name,
+                        kind: opt.kind.rawValue
+                    )
+                }
+                
+                agent.pendingPermissionRequest = PendingPermissionRequest(
+                    toolCallTitle: title,
+                    toolCallKind: kind,
+                    rawInput: rawInputStr,
+                    options: displayOptions
+                )
+                
+                self.permissionHandlers[agentId] = completion
+                
+                agent.debugLog.append(DebugLogEntry(
+                    type: "permission_request",
+                    summary: "Permission requested for: \(title)"
+                ))
+            }
+        }
+    }
     
     /// Convert a branch name to a human-readable display name
     /// - Parameter branch: The branch name (e.g., "feature/my-feature")
@@ -125,10 +176,21 @@ public final class AgentManager {
                 }
             }
             
+            let kiroNotificationHandler: @Sendable (String, JsonValue?) async -> Void = { [weak self] method, params in
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    self.handleKiroNotification(method: method, params: params, for: agent)
+                }
+            }
+            
+            let permissionRequestHandler = makePermissionRequestHandler(agentId: agentId)
+            
             try await connection.connect(
                 kirocliPath: kirocliPath,
                 agentConfig: agentConfig,
-                onSessionUpdate: sessionUpdateHandler
+                onSessionUpdate: sessionUpdateHandler,
+                onKiroNotification: kiroNotificationHandler,
+                onPermissionRequest: permissionRequestHandler
             )
             connections[agent.id] = connection
             print("[ACP] Process spawned and initialized successfully")
@@ -195,10 +257,21 @@ public final class AgentManager {
                 }
             }
             
+            let kiroNotificationHandler: @Sendable (String, JsonValue?) async -> Void = { [weak self] method, params in
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    self.handleKiroNotification(method: method, params: params, for: agent)
+                }
+            }
+            
+            let permissionRequestHandler = makePermissionRequestHandler(agentId: agentId)
+            
             try await connection.connect(
                 kirocliPath: kirocliPath,
                 agentConfig: agentConfig,
-                onSessionUpdate: sessionUpdateHandler
+                onSessionUpdate: sessionUpdateHandler,
+                onKiroNotification: kiroNotificationHandler,
+                onPermissionRequest: permissionRequestHandler
             )
             connections[agent.id] = connection
             
@@ -281,10 +354,21 @@ public final class AgentManager {
                         }
                     }
                     
+                    let retryKiroNotificationHandler: @Sendable (String, JsonValue?) async -> Void = { [weak self] method, params in
+                        await MainActor.run {
+                            guard let self = self, let agent = self.agents[retryAgentId] else { return }
+                            self.handleKiroNotification(method: method, params: params, for: agent)
+                        }
+                    }
+                    
+                    let retryPermissionRequestHandler = makePermissionRequestHandler(agentId: retryAgentId)
+                    
                     try await retryConnection.connect(
                         kirocliPath: kirocliPath,
                         agentConfig: agentConfig,
-                        onSessionUpdate: retrySessionUpdateHandler
+                        onSessionUpdate: retrySessionUpdateHandler,
+                        onKiroNotification: retryKiroNotificationHandler,
+                        onPermissionRequest: retryPermissionRequestHandler
                     )
                     connections[retryAgent.id] = retryConnection
                     
@@ -577,8 +661,10 @@ public final class AgentManager {
         try await connection.setSessionConfigOption(sessionId: sessionId, configId: SessionConfigId(value: configId), value: SessionConfigValueId(value: value))
     }
 
-    /// Execute a slash command for an agent
-    public func executeSlashCommand(agentId: UUID, command: String, args: String?) async throws {
+    /// Execute a slash command for an agent.
+    /// Returns the response message from the server, if any.
+    @discardableResult
+    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws -> String? {
         guard let agent = agents[agentId] else {
             throw AgentManagerError.agentNotFound(agentId)
         }
@@ -590,10 +676,213 @@ public final class AgentManager {
         }
         
         // Show the command as a user message
-        agent.messages.append(ChatMessage(role: .user, content: "/\(command)\(args.map { " \($0)" } ?? "")"))
+        let argsDisplay = args.isEmpty ? "" : " " + args.values.joined(separator: " ")
+        agent.messages.append(ChatMessage(role: .user, content: "/\(command)\(argsDisplay)"))
         agent.status = .active
         
-        try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+        let message = try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+        agent.status = .idle
+        return message
+    }
+
+    /// Request available options for a selection-type slash command
+    public func requestCommandOptions(agentId: UUID, command: String, partial: String = "") async throws -> [CommandOption] {
+        guard let agent = agents[agentId] else {
+            throw AgentManagerError.agentNotFound(agentId)
+        }
+        guard let sessionId = agent.sessionId else {
+            throw AgentManagerError.noSessionId
+        }
+        guard let connection = connections[agentId] else {
+            throw AgentManagerError.notConnected
+        }
+
+        return try await connection.requestCommandOptions(sessionId: sessionId, command: command, partial: partial)
+    }
+
+    /// Resolve a pending permission request with the user's selection
+    /// - Parameters:
+    ///   - agentId: The agent ID
+    ///   - optionId: The selected option ID
+    public func resolvePermission(agentId: UUID, optionId: String) {
+        guard let agent = agents[agentId] else { return }
+        agent.pendingPermissionRequest = nil
+        
+        if let handler = permissionHandlers.removeValue(forKey: agentId) {
+            handler(.selected(PermissionOptionId(value: optionId)))
+        }
+        
+        agent.debugLog.append(DebugLogEntry(
+            type: "permission_response",
+            summary: "User selected: \(optionId)"
+        ))
+    }
+    
+    /// Cancel a pending permission request
+    /// - Parameter agentId: The agent ID
+    public func cancelPermission(agentId: UUID) {
+        guard let agent = agents[agentId] else { return }
+        agent.pendingPermissionRequest = nil
+        
+        if let handler = permissionHandlers.removeValue(forKey: agentId) {
+            handler(.cancelled)
+        }
+        
+        agent.debugLog.append(DebugLogEntry(
+            type: "permission_response",
+            summary: "Permission cancelled"
+        ))
+    }
+
+    /// Handle a Kiro vendor extension notification
+    private func handleKiroNotification(method: String, params: JsonValue?, for agent: Agent) {
+        // Encode raw params to JSON string for debug logging
+        let rawJson: String?
+        if let params = params,
+           let jsonData = try? JSONEncoder().encode(params) {
+            rawJson = String(data: jsonData, encoding: .utf8)
+        } else {
+            rawJson = nil
+        }
+        
+        switch method {
+        case "_kiro.dev/commands/available":
+            if let params = params {
+                let encoder = JSONEncoder()
+                if let data = try? encoder.encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroCommandsAvailableParams.self, from: data) {
+                    agent.kiroAvailableCommands = parsed.commands
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_commands_available",
+                summary: "Commands available: \(agent.kiroAvailableCommands.map(\.name).joined(separator: ", "))",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/metadata":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroMetadataParams.self, from: data) {
+                    agent.contextUsagePercentage = parsed.contextUsagePercentage
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_metadata",
+                summary: "Context usage: \(agent.contextUsagePercentage.map { String(format: "%.1f%%", $0) } ?? "unknown")",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/agent/switched":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroAgentSwitchedParams.self, from: data) {
+                    agent.name = parsed.agentName
+                    agent.messages.append(ChatMessage(
+                        role: .system,
+                        content: "Agent switched from \(parsed.previousAgentName) to \(parsed.agentName)"
+                    ))
+                    if let welcomeMessage = parsed.welcomeMessage {
+                        agent.messages.append(ChatMessage(
+                            role: .system,
+                            content: welcomeMessage
+                        ))
+                    }
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_agent_switched",
+                summary: "Agent switched to \(agent.name)",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/session/update":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params) {
+                    // Try tool_call_chunk
+                    if let parsed = try? JSONDecoder().decode(KiroToolCallChunkUpdate.self, from: data),
+                       parsed.sessionUpdate == "tool_call_chunk" {
+                        print("[Kiro] Tool call chunk: \(parsed.toolCallId) - \(parsed.title)")
+                    }
+                    // Try plan update
+                    else if let parsed = try? JSONDecoder().decode(KiroPlanUpdate.self, from: data),
+                            parsed.sessionUpdate == "plan" {
+                        let entries = parsed.steps.map { step in
+                            let status: PlanEntryStatus
+                            switch step.status {
+                            case "completed": status = .completed
+                            case "in_progress": status = .inProgress
+                            default: status = .pending
+                            }
+                            return PlanEntry(content: step.description, priority: .medium, status: status)
+                        }
+                        agent.currentPlan = PlanUpdate(entries: entries)
+                        print("[Kiro] Plan update: \(entries.count) steps")
+                    }
+                    // Try agent_thought_chunk
+                    else if let parsed = try? JSONDecoder().decode(KiroAgentThoughtChunkUpdate.self, from: data),
+                            parsed.sessionUpdate == "agent_thought_chunk" {
+                        if !agent.isReplayingSession {
+                            agent.thoughtContent += parsed.content.text
+                        }
+                        print("[Kiro] Thought chunk: \(parsed.content.text.prefix(100))")
+                    }
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_session_update",
+                summary: "Kiro session update received",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/compaction/status":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroCompactionStatusParams.self, from: data) {
+                    agent.isCompacting = true
+                    agent.compactionMessage = parsed.message
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_compaction_status",
+                summary: "Compaction: \(agent.compactionMessage ?? "unknown")",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/clear/status":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroClearStatusParams.self, from: data) {
+                    agent.isClearingHistory = true
+                    agent.clearStatusMessage = parsed.message
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_clear_status",
+                summary: "Clear: \(agent.clearStatusMessage ?? "unknown")",
+                rawJson: rawJson
+            ))
+            
+        case "_kiro.dev/mcp/oauth_request":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroMcpOAuthRequestParams.self, from: data) {
+                    agent.pendingOAuthURL = parsed.url
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_mcp_oauth_request",
+                summary: "OAuth request: \(agent.pendingOAuthURL ?? "unknown")",
+                rawJson: rawJson
+            ))
+            
+        default:
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_unknown",
+                summary: "Unknown Kiro notification: \(method)",
+                rawJson: rawJson
+            ))
+        }
     }
 
     /// Handle a session update for an agent
@@ -620,13 +909,18 @@ public final class AgentManager {
         case .agentThoughtChunk(let chunk):
             if case .text(let t) = chunk.content {
                 entry = DebugLogEntry(type: "thought", summary: t.text.prefix(200).description)
+                // Accumulate thought text (skip during session replay)
+                if !agent.isReplayingSession {
+                    agent.thoughtContent += t.text
+                }
             } else {
                 entry = DebugLogEntry(type: "thought", summary: "(non-text)")
             }
         case .userMessageChunk:
             entry = DebugLogEntry(type: "user_echo", summary: "")
-        case .planUpdate:
-            entry = DebugLogEntry(type: "plan", summary: "")
+        case .planUpdate(let planUpdate):
+            agent.currentPlan = planUpdate
+            entry = DebugLogEntry(type: "plan", summary: "Plan: \(planUpdate.entries.count) steps")
         case .availableCommandsUpdate(let c):
             entry = DebugLogEntry(type: "commands", summary: c.availableCommands.map(\.name).joined(separator: ", "))
             agent.availableCommands = c.availableCommands
@@ -776,6 +1070,7 @@ public final class AgentManager {
     private func handlePromptCompletion(stopReason: StopReason, for agent: Agent) {
         // Clear active tool calls
         agent.activeToolCalls.removeAll()
+        agent.thoughtContent = ""
         
         // Update agent status and add activity event
         switch stopReason {
@@ -866,8 +1161,20 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
-    public func executeSlashCommand(agentId: UUID, command: String, args: String?) async throws {
+    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws -> String? {
         throw AgentManagerError.platformNotSupported
+    }
+    
+    public func requestCommandOptions(agentId: UUID, command: String, partial: String = "") async throws -> [CommandOption] {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func resolvePermission(agentId: UUID, optionId: String) {
+        // No-op on non-macOS
+    }
+    
+    public func cancelPermission(agentId: UUID) {
+        // No-op on non-macOS
     }
     
     public func startAgentInWorktree(
@@ -973,8 +1280,20 @@ public final class AgentManager {
         throw AgentManagerError.platformNotSupported
     }
     
-    public func executeSlashCommand(agentId: UUID, command: String, args: String?) async throws {
+    public func executeSlashCommand(agentId: UUID, command: String, args: [String: String] = [:]) async throws -> String? {
         throw AgentManagerError.platformNotSupported
+    }
+    
+    public func requestCommandOptions(agentId: UUID, command: String, partial: String = "") async throws -> [CommandOption] {
+        throw AgentManagerError.platformNotSupported
+    }
+    
+    public func resolvePermission(agentId: UUID, optionId: String) {
+        // No-op on non-macOS
+    }
+    
+    public func cancelPermission(agentId: UUID) {
+        // No-op on non-macOS
     }
     
     public func startAgentInWorktree(
