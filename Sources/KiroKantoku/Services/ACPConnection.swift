@@ -9,6 +9,8 @@ public enum ACPConnectionError: Error, Sendable, LocalizedError {
     case processTerminated(Int32)
     case platformNotSupported
     case notLoggedIn
+    case timeout(String)
+    case serverError(Int, String)
     
     public var errorDescription: String? {
         switch self {
@@ -17,6 +19,8 @@ public enum ACPConnectionError: Error, Sendable, LocalizedError {
         case .processTerminated(let code): return "kiro-cli exited with code \(code)"
         case .platformNotSupported: return "Platform not supported"
         case .notLoggedIn: return "Not logged in. Please run `kiro-cli login` in your terminal to authenticate."
+        case .timeout(let method): return "Request timed out: \(method)"
+        case .serverError(let code, let message): return "Server error (\(code)): \(message)"
         }
     }
 }
@@ -37,11 +41,11 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
     public var kiroNotificationHandler: (@Sendable (String, JsonValue?) async -> Void)?
     
     /// Pending response handlers indexed by request ID
-    private var pendingResponses: [RequestId: @Sendable (JsonValue?) -> Void] = [:]
+    private var pendingResponses: [RequestId: @Sendable (Result<JsonValue?, Error>) -> Void] = [:]
     private let pendingLock = NSLock()
     
     /// Register a handler for a pending response to a request
-    public func registerPendingResponse(requestId: RequestId, handler: @escaping @Sendable (JsonValue?) -> Void) {
+    public func registerPendingResponse(requestId: RequestId, handler: @escaping @Sendable (Result<JsonValue?, Error>) -> Void) {
         pendingLock.withLock {
             pendingResponses[requestId] = handler
         }
@@ -87,6 +91,16 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
     }
     
     public func close() async {
+        // Clean up all pending response handlers so continuations don't leak
+        let handlers: [RequestId: @Sendable (Result<JsonValue?, Error>) -> Void] = pendingLock.withLock {
+            let current = pendingResponses
+            pendingResponses.removeAll()
+            return current
+        }
+        for (id, handler) in handlers {
+            print("[ACP] Cleaning up pending response for id=\(id) on transport close")
+            handler(.failure(ACPConnectionError.notConnected))
+        }
         await stateActor.close()
     }
     
@@ -132,7 +146,19 @@ public final class ProcessTransport: Transport, @unchecked Sendable {
                                 self.pendingResponses.removeValue(forKey: response.id)
                             }
                             if let handler = handler {
-                                handler(response.result)
+                                print("[ACP] Pending response matched for id=\(response.id)")
+                                handler(.success(response.result))
+                                continue
+                            }
+                        }
+                        // Check for error responses to pending vendor extension requests
+                        if case .error(let error) = message, let id = error.id {
+                            let handler = self.pendingLock.withLock {
+                                self.pendingResponses.removeValue(forKey: id)
+                            }
+                            if let handler = handler {
+                                print("[ACP] Pending error response matched for id=\(id): code=\(error.error.code) message=\(error.error.message)")
+                                handler(.failure(ACPConnectionError.serverError(error.error.code, error.error.message)))
                                 continue
                             }
                         }
@@ -481,8 +507,9 @@ public actor ACPConnection {
     }
     
     /// Execute a slash command via the Kiro extension protocol.
-    /// Fire-and-forget: sends the request without waiting for a response.
-    /// The response arrives through normal session updates (agent message chunks).
+    /// Registers a pending response handler and awaits the JSON-RPC response,
+    /// preventing it from being forwarded to the SDK's ClientConnection.
+    /// The actual command output arrives through normal session updates (agent message chunks).
     @discardableResult
     public func executeSlashCommand(sessionId: SessionId, commandName: String, args: [String: String] = [:]) async throws -> String? {
         guard let transport = transport else {
@@ -512,9 +539,81 @@ public actor ACPConnection {
         
         let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/execute", params: paramsValue)
         
-        // Fire-and-forget: send the request without waiting for a response.
-        // The response arrives through normal session update flow.
-        try await transport.send(.request(request))
+        print("[ACP] executeSlashCommand: command=\(name) requestId=\(requestId)")
+        
+        // Register a pending response handler before sending, so the response
+        // is consumed here rather than being forwarded to the SDK's ClientConnection.
+        // Uses AsyncThrowingStream to bridge the callback-based handler to async/await,
+        // and withThrowingTaskGroup to race the response against a 30-second timeout.
+        let (responseStream, responseContinuation) = AsyncThrowingStream<JsonValue?, Error>.makeStream()
+        
+        transport.registerPendingResponse(requestId: .int(requestId)) { callResult in
+            switch callResult {
+            case .success(let value):
+                print("[ACP] executeSlashCommand: response received for requestId=\(requestId)")
+                responseContinuation.yield(value)
+                responseContinuation.finish()
+            case .failure(let error):
+                print("[ACP] executeSlashCommand: error received for requestId=\(requestId): \(error)")
+                responseContinuation.finish(throwing: error)
+            }
+        }
+        
+        let result: JsonValue?
+        do {
+            result = try await withThrowingTaskGroup(of: JsonValue?.self) { group in
+                group.addTask {
+                    var iterator = responseStream.makeAsyncIterator()
+                    return try await iterator.next() ?? nil
+                }
+                
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                    print("[ACP] executeSlashCommand: timeout for requestId=\(requestId)")
+                    throw ACPConnectionError.timeout("_kiro.dev/commands/execute")
+                }
+                
+                // Send the request (handler is already registered above)
+                try await transport.send(.request(request))
+                print("[ACP] executeSlashCommand: request sent for requestId=\(requestId)")
+                
+                // Wait for whichever child task finishes first
+                let value = try await group.next()!
+                group.cancelAll()
+                return value
+            }
+        } catch {
+            // Clean up pending response handler on timeout or send failure
+            transport.removePendingResponse(requestId: .int(requestId))
+            responseContinuation.finish()
+            throw error
+        }
+        
+        // Clean up pending response handler (no-op if already removed by readLoop)
+        transport.removePendingResponse(requestId: .int(requestId))
+        responseContinuation.finish()
+        
+        // Extract a message string from the response if present.
+        // Try multiple common field names since different servers may use different keys.
+        if let result = result {
+            // If the result is directly a string, use it
+            if case .string(let message) = result {
+                return message
+            }
+            // If the result is an object, try known field names
+            if case .object(let obj) = result {
+                for key in ["message", "text", "content"] {
+                    if case .string(let value) = obj[key] {
+                        return value
+                    }
+                }
+                // Fallback: serialize the entire result object to JSON
+                if let data = try? JSONEncoder().encode(result),
+                   let jsonString = String(data: data, encoding: .utf8) {
+                    return jsonString
+                }
+            }
+        }
         return nil
     }
     
@@ -537,30 +636,69 @@ public actor ACPConnection {
         
         let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/options", params: paramsValue)
         
-        // Register a pending response handler before sending
-        let options: [CommandOption] = try await withCheckedThrowingContinuation { continuation in
-            transport.registerPendingResponse(requestId: .int(requestId)) { result in
+        print("[ACP] requestCommandOptions: command=\(name) requestId=\(requestId)")
+        
+        // Register a pending response handler before sending.
+        // Uses AsyncThrowingStream to bridge the callback-based handler to async/await,
+        // and withThrowingTaskGroup to race the response against a 30-second timeout.
+        let (responseStream, responseContinuation) = AsyncThrowingStream<[CommandOption], Error>.makeStream()
+        
+        transport.registerPendingResponse(requestId: .int(requestId)) { callResult in
+            switch callResult {
+            case .success(let result):
+                print("[ACP] requestCommandOptions: response received for requestId=\(requestId)")
                 if let result = result {
                     do {
                         let data = try JSONEncoder().encode(result)
                         let decoded = try JSONDecoder().decode(CommandOptionsResponse.self, from: data)
-                        continuation.resume(returning: decoded.options)
+                        responseContinuation.yield(decoded.options)
+                        responseContinuation.finish()
                     } catch {
-                        continuation.resume(throwing: error)
+                        responseContinuation.finish(throwing: error)
                     }
                 } else {
-                    continuation.resume(returning: [])
+                    responseContinuation.yield([])
+                    responseContinuation.finish()
                 }
-            }
-            Task {
-                do {
-                    try await transport.send(.request(request))
-                } catch {
-                    transport.removePendingResponse(requestId: .int(requestId))
-                    continuation.resume(throwing: error)
-                }
+            case .failure(let error):
+                print("[ACP] requestCommandOptions: error received for requestId=\(requestId): \(error)")
+                responseContinuation.finish(throwing: error)
             }
         }
+        
+        let options: [CommandOption]
+        do {
+            options = try await withThrowingTaskGroup(of: [CommandOption].self) { group in
+                group.addTask {
+                    var iterator = responseStream.makeAsyncIterator()
+                    return try await iterator.next() ?? []
+                }
+                
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                    print("[ACP] requestCommandOptions: timeout for requestId=\(requestId)")
+                    throw ACPConnectionError.timeout("_kiro.dev/commands/options")
+                }
+                
+                // Send the request (handler is already registered above)
+                try await transport.send(.request(request))
+                print("[ACP] requestCommandOptions: request sent for requestId=\(requestId)")
+                
+                // Wait for whichever child task finishes first
+                let value = try await group.next()!
+                group.cancelAll()
+                return value
+            }
+        } catch {
+            // Clean up pending response handler on timeout or send failure
+            transport.removePendingResponse(requestId: .int(requestId))
+            responseContinuation.finish()
+            throw error
+        }
+        
+        // Clean up pending response handler (no-op if already removed by readLoop)
+        transport.removePendingResponse(requestId: .int(requestId))
+        responseContinuation.finish()
         
         return options
     }

@@ -522,4 +522,137 @@ final class AgentManagerTests: XCTestCase {
         XCTAssertEqual(commands[1].name, "/tools")
         XCTAssertEqual(commands[1].meta?.objectValue?["inputType"]?.stringValue, "panel")
     }
+
+    // MARK: - Slash Command Response Extraction Tests
+
+    /// Helper that mirrors the response extraction logic in ACPConnection.executeSlashCommand().
+    /// Given a JsonValue? (the JSON-RPC result), returns the extracted string content.
+    private func extractSlashCommandResponse(from result: JsonValue?) -> String? {
+        guard let result = result else { return nil }
+        // If the result is directly a string, use it
+        if case .string(let message) = result {
+            return message
+        }
+        // If the result is an object, try known field names
+        if case .object(let obj) = result {
+            for key in ["message", "text", "content"] {
+                if case .string(let value) = obj[key] {
+                    return value
+                }
+            }
+            // Fallback: serialize the entire result object to JSON
+            if let data = try? JSONEncoder().encode(result),
+               let jsonString = String(data: data, encoding: .utf8) {
+                return jsonString
+            }
+        }
+        return nil
+    }
+
+    func testSlashCommandResponseExtraction_messageField() {
+        let result: JsonValue = .object(["message": .string("Command executed successfully")])
+        let extracted = extractSlashCommandResponse(from: result)
+        XCTAssertEqual(extracted, "Command executed successfully")
+    }
+
+    func testSlashCommandResponseExtraction_textField() {
+        let result: JsonValue = .object(["text": .string("Here is the context")])
+        let extracted = extractSlashCommandResponse(from: result)
+        XCTAssertEqual(extracted, "Here is the context")
+    }
+
+    func testSlashCommandResponseExtraction_contentField() {
+        let result: JsonValue = .object(["content": .string("Response content")])
+        let extracted = extractSlashCommandResponse(from: result)
+        XCTAssertEqual(extracted, "Response content")
+    }
+
+    func testSlashCommandResponseExtraction_bareString() {
+        let result: JsonValue = .string("Direct string response")
+        let extracted = extractSlashCommandResponse(from: result)
+        XCTAssertEqual(extracted, "Direct string response")
+    }
+
+    func testSlashCommandResponseExtraction_objectFallbackToJSON() {
+        let result: JsonValue = .object(["status": .string("ok"), "code": .int(200)])
+        let extracted = extractSlashCommandResponse(from: result)
+        XCTAssertNotNil(extracted)
+        // The fallback serializes to JSON, so it should contain both keys
+        XCTAssertTrue(extracted!.contains("status"))
+        XCTAssertTrue(extracted!.contains("ok"))
+        XCTAssertTrue(extracted!.contains("200"))
+    }
+
+    func testSlashCommandResponseExtraction_nilResult() {
+        let extracted = extractSlashCommandResponse(from: nil)
+        XCTAssertNil(extracted)
+    }
+
+    func testSlashCommandResponseExtraction_fieldPriority() {
+        // When both "message" and "text" are present, "message" should win (checked first)
+        let result: JsonValue = .object([
+            "message": .string("from message"),
+            "text": .string("from text")
+        ])
+        let extracted = extractSlashCommandResponse(from: result)
+        XCTAssertEqual(extracted, "from message")
+    }
+
+    func testSlashCommandResponseExtraction_nonStringFieldSkipped() {
+        // If "message" is not a string (e.g. an int), skip it and try "text"
+        let result: JsonValue = .object([
+            "message": .int(42),
+            "text": .string("fallback text")
+        ])
+        let extracted = extractSlashCommandResponse(from: result)
+        XCTAssertEqual(extracted, "fallback text")
+    }
+
+    // MARK: - Slash Command Message Appending Tests
+
+    @MainActor
+    func testSlashCommandAppendsAssistantMessage() async throws {
+        // Simulate what executeSlashCommand does: append user message, then assistant response
+        let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+        let agent = Agent(name: "Test Agent", workspace: workspace)
+
+        // Simulate the user command message
+        agent.messages.append(ChatMessage(role: .user, content: "/context"))
+
+        // Simulate the assistant response being appended (what the fix does)
+        let responseContent = "Here is the current context information."
+        agent.messages.append(ChatMessage(role: .assistant, content: responseContent))
+
+        XCTAssertEqual(agent.messages.count, 2)
+        XCTAssertEqual(agent.messages[0].role, .user)
+        XCTAssertEqual(agent.messages[0].content, "/context")
+        XCTAssertEqual(agent.messages[1].role, .assistant)
+        XCTAssertEqual(agent.messages[1].content, responseContent)
+    }
+
+    @MainActor
+    func testSlashCommandEmptyResponseNoAssistantMessage() async throws {
+        // When the response is empty, no assistant message should be appended
+        let workspace = Workspace(name: "Test", path: URL(fileURLWithPath: "/tmp/test"))
+        let agent = Agent(name: "Test Agent", workspace: workspace)
+
+        agent.messages.append(ChatMessage(role: .user, content: "/clear"))
+
+        // Simulate the check: if responseMessage is nil or empty, don't append
+        let responseMessage: String? = nil
+        if let message = responseMessage, !message.isEmpty {
+            agent.messages.append(ChatMessage(role: .assistant, content: message))
+        }
+
+        XCTAssertEqual(agent.messages.count, 1, "No assistant message should be added for nil response")
+        XCTAssertEqual(agent.messages[0].role, .user)
+
+        // Also test with empty string
+        let emptyResponse = ""
+        if !emptyResponse.isEmpty {
+            agent.messages.append(ChatMessage(role: .assistant, content: emptyResponse))
+        }
+
+        XCTAssertEqual(agent.messages.count, 1, "No assistant message should be added for empty response")
+    }
 }

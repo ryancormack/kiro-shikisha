@@ -866,4 +866,193 @@ final class ACPProtocolTests: XCTestCase {
         XCTAssertNotNil(decoded.meta)
         XCTAssertEqual(decoded.meta?.objectValue?["inputType"]?.stringValue, "panel")
     }
+    
+    // MARK: - Execute Slash Command Full Request Structure Tests
+    
+    func testExecuteSlashCommandFullRequestStructure() throws {
+        let sessionId = "sess_test123"
+        let commandName = "context"
+        let args: [String: String] = ["value": "show"]
+        
+        var argsObject: [String: JsonValue] = [:]
+        for (key, value) in args {
+            argsObject[key] = .string(value)
+        }
+        
+        let name = commandName.hasPrefix("/") ? String(commandName.dropFirst()) : commandName
+        let commandObject: JsonValue = .object([
+            "command": .string(name),
+            "args": .object(argsObject)
+        ])
+        
+        let requestId = 42
+        let paramsValue: JsonValue = .object([
+            "sessionId": .string(sessionId),
+            "command": commandObject
+        ])
+        
+        let request = JsonRpcRequest(id: .int(requestId), method: "_kiro.dev/commands/execute", params: paramsValue)
+        
+        // Verify the request method
+        XCTAssertEqual(request.method, "_kiro.dev/commands/execute")
+        
+        // Verify the request has an integer ID
+        if case .int(let id) = request.id {
+            XCTAssertEqual(id, 42)
+        } else {
+            XCTFail("Expected integer request ID")
+        }
+        
+        // Verify encoding round-trip
+        let data = try JSONEncoder().encode(request)
+        let json = String(data: data, encoding: .utf8)!
+        // Note: slashes may be escaped in JSON (e.g., \/) so check for the method name parts
+        XCTAssertTrue(json.contains("commands"), "JSON should contain method name: \(json)")
+        XCTAssertTrue(json.contains("sess_test123"), "JSON should contain sessionId: \(json)")
+        
+        // Verify the params contain sessionId and command object
+        let decoded = try JSONDecoder().decode(JsonRpcRequest.self, from: data)
+        XCTAssertEqual(decoded.method, "_kiro.dev/commands/execute")
+        if case .object(let params) = decoded.params {
+            XCTAssertEqual(params["sessionId"]?.stringValue, "sess_test123")
+            if case .object(let cmd) = params["command"] {
+                XCTAssertEqual(cmd["command"]?.stringValue, "context")
+                if case .object(let decodedArgs) = cmd["args"] {
+                    XCTAssertEqual(decodedArgs["value"]?.stringValue, "show")
+                } else {
+                    XCTFail("Expected args object in command")
+                }
+            } else {
+                XCTFail("Expected command object in params")
+            }
+        } else {
+            XCTFail("Expected params to be an object")
+        }
+    }
+    
+    // MARK: - JSON-RPC Error Response Tests
+    
+    func testJsonRpcErrorDecoding() throws {
+        // Verify that a JSON-RPC error response can be decoded with the expected structure
+        let json = """
+        {"jsonrpc":"2.0","id":42,"error":{"code":-32601,"message":"Method not found"}}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(JsonRpcError.self, from: data)
+        
+        XCTAssertEqual(decoded.id, .int(42))
+        XCTAssertEqual(decoded.error.code, -32601)
+        XCTAssertEqual(decoded.error.message, "Method not found")
+        XCTAssertNil(decoded.error.data)
+    }
+    
+    func testJsonRpcErrorDecodingWithData() throws {
+        let json = """
+        {"jsonrpc":"2.0","id":99,"error":{"code":-32603,"message":"Internal error","data":"additional info"}}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(JsonRpcError.self, from: data)
+        
+        XCTAssertEqual(decoded.id, .int(99))
+        XCTAssertEqual(decoded.error.code, -32603)
+        XCTAssertEqual(decoded.error.message, "Internal error")
+        XCTAssertEqual(decoded.error.data?.stringValue, "additional info")
+    }
+    
+    func testJsonRpcErrorDecodingWithNullId() throws {
+        // Parse errors may have a null id
+        let json = """
+        {"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(JsonRpcError.self, from: data)
+        
+        XCTAssertNil(decoded.id)
+        XCTAssertEqual(decoded.error.code, -32700)
+        XCTAssertEqual(decoded.error.message, "Parse error")
+    }
+    
+    func testJsonRpcErrorDecodingWithStringId() throws {
+        let json = """
+        {"jsonrpc":"2.0","id":"req_abc","error":{"code":-32602,"message":"Invalid params"}}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(JsonRpcError.self, from: data)
+        
+        XCTAssertEqual(decoded.id, .string("req_abc"))
+        XCTAssertEqual(decoded.error.code, -32602)
+    }
+    
+    func testJsonRpcMessageErrorVariantDecoding() throws {
+        // Verify that JsonRpcMessage correctly decodes error responses as .error variant
+        let json = """
+        {"jsonrpc":"2.0","id":12345,"error":{"code":-32601,"message":"Method not found"}}
+        """
+        let data = json.data(using: .utf8)!
+        let message = try JSONDecoder().decode(JsonRpcMessage.self, from: data)
+        
+        if case .error(let error) = message {
+            XCTAssertEqual(error.id, .int(12345))
+            XCTAssertEqual(error.error.code, -32601)
+            XCTAssertEqual(error.error.message, "Method not found")
+        } else {
+            XCTFail("Expected .error variant, got \(message)")
+        }
+    }
+    
+    func testJsonRpcErrorIdMatchesPendingRequest() throws {
+        // Simulate the matching logic: create a pending request ID and verify
+        // that an error response with the same ID can be matched
+        let requestId: RequestId = .int(54321)
+        var pendingResponses: [RequestId: String] = [:]
+        pendingResponses[requestId] = "handler_for_54321"
+        
+        // Simulate receiving an error with the same ID
+        let json = """
+        {"jsonrpc":"2.0","id":54321,"error":{"code":-32603,"message":"Command execution failed"}}
+        """
+        let data = json.data(using: .utf8)!
+        let message = try JSONDecoder().decode(JsonRpcMessage.self, from: data)
+        
+        if case .error(let error) = message, let id = error.id {
+            // Look up the pending handler
+            let handler = pendingResponses.removeValue(forKey: id)
+            XCTAssertEqual(handler, "handler_for_54321")
+            XCTAssertTrue(pendingResponses.isEmpty, "Handler should have been removed")
+        } else {
+            XCTFail("Expected .error variant with non-nil id")
+        }
+    }
+    
+    func testJsonRpcErrorIdDoesNotMatchDifferentPendingRequest() throws {
+        // Verify that a mismatched ID does not remove the wrong pending handler
+        let pendingId: RequestId = .int(11111)
+        var pendingResponses: [RequestId: String] = [:]
+        pendingResponses[pendingId] = "handler_for_11111"
+        
+        // Error response with a different ID
+        let json = """
+        {"jsonrpc":"2.0","id":99999,"error":{"code":-32601,"message":"Method not found"}}
+        """
+        let data = json.data(using: .utf8)!
+        let message = try JSONDecoder().decode(JsonRpcMessage.self, from: data)
+        
+        if case .error(let error) = message, let id = error.id {
+            let handler = pendingResponses.removeValue(forKey: id)
+            XCTAssertNil(handler, "Should not match a different pending request")
+            XCTAssertEqual(pendingResponses.count, 1, "Original handler should remain")
+        } else {
+            XCTFail("Expected .error variant with non-nil id")
+        }
+    }
+    
+    func testACPConnectionErrorTimeoutDescription() throws {
+        let error = ACPConnectionError.timeout("_kiro.dev/commands/execute")
+        XCTAssertEqual(error.errorDescription, "Request timed out: _kiro.dev/commands/execute")
+    }
+    
+    func testACPConnectionErrorServerErrorDescription() throws {
+        let error = ACPConnectionError.serverError(-32601, "Method not found")
+        XCTAssertEqual(error.errorDescription, "Server error (-32601): Method not found")
+    }
 }

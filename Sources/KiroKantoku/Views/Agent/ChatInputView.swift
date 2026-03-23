@@ -25,6 +25,10 @@ public struct ChatInputView: View {
     @State private var optionsFilterText: String = ""
     @State private var isLoadingOptions: Bool = false
     
+    // Keyboard navigation state for pickers
+    @State private var slashSelectedIndex: Int = 0
+    @State private var optionsSelectedIndex: Int = 0
+    
     public init(
         agent: Agent? = nil,
         onSend: @escaping (String, [Data]) -> Void,
@@ -46,6 +50,27 @@ public struct ChatInputView: View {
             acpCommands: agent.availableCommands,
             kiroCommands: agent.kiroAvailableCommands
         )
+    }
+    
+    /// Filtered slash commands for the current filter text
+    private var filteredSlashCommands: [SlashCommand] {
+        if slashFilterText.isEmpty {
+            return allCommands
+        }
+        let query = slashFilterText.lowercased()
+        return allCommands.filter { $0.name.lowercased().contains(query) }
+    }
+    
+    /// Filtered command options for the current filter text
+    private var filteredCommandOptions: [CommandOption] {
+        if optionsFilterText.isEmpty {
+            return commandOptions
+        }
+        let query = optionsFilterText.lowercased()
+        return commandOptions.filter {
+            $0.label.lowercased().contains(query) ||
+            ($0.description?.lowercased().contains(query) ?? false)
+        }
     }
     
     public var body: some View {
@@ -97,7 +122,8 @@ public struct ChatInputView: View {
                             },
                             onDismiss: {
                                 dismissSlashPicker()
-                            }
+                            },
+                            selectedIndex: $slashSelectedIndex
                         )
                         .padding(.horizontal, DesignConstants.spacingSM)
                     }
@@ -132,7 +158,8 @@ public struct ChatInputView: View {
                                 },
                                 onDismiss: {
                                     dismissOptionsPicker()
-                                }
+                                },
+                                selectedIndex: $optionsSelectedIndex
                             )
                         }
                     }
@@ -158,6 +185,58 @@ public struct ChatInputView: View {
                         .background(Color(nsColor: .controlBackgroundColor))
                         .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge))
                         .frame(minHeight: 36, maxHeight: 100)
+                        .onKeyPress(.upArrow) {
+                            if showSlashPicker {
+                                if slashSelectedIndex > 0 { slashSelectedIndex -= 1 }
+                                return .handled
+                            }
+                            if showOptionsPicker {
+                                if optionsSelectedIndex > 0 { optionsSelectedIndex -= 1 }
+                                return .handled
+                            }
+                            return .ignored
+                        }
+                        .onKeyPress(.downArrow) {
+                            if showSlashPicker {
+                                let count = filteredSlashCommands.count
+                                if slashSelectedIndex < count - 1 { slashSelectedIndex += 1 }
+                                return .handled
+                            }
+                            if showOptionsPicker {
+                                let count = filteredCommandOptions.count
+                                if optionsSelectedIndex < count - 1 { optionsSelectedIndex += 1 }
+                                return .handled
+                            }
+                            return .ignored
+                        }
+                        .onKeyPress(.return) {
+                            if showSlashPicker {
+                                let cmds = filteredSlashCommands
+                                if slashSelectedIndex >= 0 && slashSelectedIndex < cmds.count {
+                                    handleCommandSelection(cmds[slashSelectedIndex])
+                                }
+                                return .handled
+                            }
+                            if showOptionsPicker {
+                                let opts = filteredCommandOptions
+                                if optionsSelectedIndex >= 0 && optionsSelectedIndex < opts.count {
+                                    handleOptionSelection(opts[optionsSelectedIndex])
+                                }
+                                return .handled
+                            }
+                            return .ignored
+                        }
+                        .onKeyPress(.escape) {
+                            if showSlashPicker {
+                                dismissSlashPicker()
+                                return .handled
+                            }
+                            if showOptionsPicker {
+                                dismissOptionsPicker()
+                                return .handled
+                            }
+                            return .ignored
+                        }
                     
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill")
@@ -190,7 +269,11 @@ public struct ChatInputView: View {
             let afterSlash = String(text.dropFirst())
             // Only show picker if no space (user is still typing the command name)
             if !afterSlash.contains(" ") {
+                let oldFilter = slashFilterText
                 slashFilterText = afterSlash
+                if oldFilter != afterSlash {
+                    slashSelectedIndex = 0
+                }
                 showSlashPicker = true
             } else {
                 showSlashPicker = false
@@ -253,6 +336,7 @@ public struct ChatInputView: View {
     private func dismissSlashPicker() {
         showSlashPicker = false
         slashFilterText = ""
+        slashSelectedIndex = 0
     }
     
     private func dismissOptionsPicker() {
@@ -261,6 +345,7 @@ public struct ChatInputView: View {
         commandOptions = []
         optionsFilterText = ""
         isLoadingOptions = false
+        optionsSelectedIndex = 0
     }
     
     private func send() {

@@ -675,16 +675,42 @@ public final class AgentManager {
             throw AgentManagerError.notConnected
         }
         
+        print("[ACP] AgentManager.executeSlashCommand: command=\(command) agentId=\(agentId) sessionId=\(sessionId.value)")
+        
         // Show the command as a user message
         let argsDisplay = args.isEmpty ? "" : " " + args.values.joined(separator: " ")
         agent.messages.append(ChatMessage(role: .user, content: "/\(command)\(argsDisplay)"))
         agent.status = .active
         
-        // Fire-and-forget: send the command without waiting for a response.
-        // The response arrives as session updates (agent message chunks) through
-        // the normal onSessionUpdate flow.
-        try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
-        agent.status = .idle
+        // Send command in a background task so the UI stays responsive.
+        // The actual command output arrives via session updates (agent message chunks).
+        // executeSlashCommand awaits the JSON-RPC acknowledgment response.
+        let task = Task { [weak self] in
+            do {
+                print("[ACP] AgentManager.executeSlashCommand: background task started for command=\(command)")
+                let responseMessage = try await connection.executeSlashCommand(sessionId: sessionId, commandName: command, args: args)
+                print("[ACP] AgentManager.executeSlashCommand: background task completed for command=\(command)")
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    if let message = responseMessage, !message.isEmpty {
+                        agent.messages.append(ChatMessage(role: .assistant, content: message))
+                    }
+                    agent.status = .idle
+                }
+            } catch {
+                print("[ACP] AgentManager.executeSlashCommand: background task error for command=\(command): \(error)")
+                await MainActor.run {
+                    guard let self = self, let agent = self.agents[agentId] else { return }
+                    agent.status = .error
+                    agent.errorMessage = error.localizedDescription
+                    agent.debugLog.append(DebugLogEntry(
+                        type: "slash_command_error",
+                        summary: "Slash command /\(command) failed: \(error.localizedDescription)"
+                    ))
+                }
+            }
+        }
+        promptTasks[agentId] = task
         return nil
     }
 
