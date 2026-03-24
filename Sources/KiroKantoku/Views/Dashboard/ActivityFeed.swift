@@ -64,7 +64,7 @@ public struct ActivityFeed: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(DesignConstants.cardBackground)
     }
     
     private var emptyStateView: some View {
@@ -163,7 +163,7 @@ struct ActivityEventRow: View {
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(Color.purple.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
                         }
                     }
                     

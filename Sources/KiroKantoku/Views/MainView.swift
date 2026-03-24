@@ -59,7 +59,7 @@ public struct MainView: View {
                 PlaceholderView()
             }
         }
-        .frame(minWidth: 800, minHeight: 600)
+        .frame(minWidth: 900, minHeight: 650)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 8) {

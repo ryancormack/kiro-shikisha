@@ -127,7 +127,7 @@ struct FilesChangedView: View {
         }
         .padding(.horizontal, DesignConstants.spacingMD)
         .padding(.vertical, DesignConstants.spacingSM)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(DesignConstants.cardBackground)
     }
 
     // MARK: - File Chip Strip
@@ -142,7 +142,7 @@ struct FilesChangedView: View {
             .padding(.horizontal, DesignConstants.spacingMD)
             .padding(.vertical, DesignConstants.spacingSM)
         }
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        .background(DesignConstants.cardBackground.opacity(0.5))
     }
 
     private func fileChip(for fileDiff: GitFileDiff) -> some View {
@@ -187,13 +187,13 @@ struct FilesChangedView: View {
             .padding(.horizontal, DesignConstants.spacingSM)
             .padding(.vertical, DesignConstants.spacingXS)
             .background(
-                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall)
+                RoundedRectangle(cornerRadius: DesignConstants.chipCornerRadius)
                     .fill(isActive
                           ? Color.accentColor.opacity(0.15)
                           : Color(nsColor: .controlBackgroundColor))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall)
+                RoundedRectangle(cornerRadius: DesignConstants.chipCornerRadius)
                     .stroke(isActive
                             ? Color.accentColor.opacity(0.4)
                             : Color(nsColor: .separatorColor).opacity(0.5),

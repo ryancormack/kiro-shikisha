@@ -56,8 +56,8 @@ public struct QuickActionsView: View {
             // Refresh All button
             refreshAllButton
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, DesignConstants.spacingLG)
+        .padding(.vertical, DesignConstants.spacingSM)
         .background(backgroundView)
     }
 
@@ -150,7 +150,7 @@ public struct QuickActionsView: View {
     }
 
     private var backgroundView: some View {
-        RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
+        RoundedRectangle(cornerRadius: DesignConstants.cardCornerRadius)
             .fill(Color(nsColor: .controlBackgroundColor))
             .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
     }

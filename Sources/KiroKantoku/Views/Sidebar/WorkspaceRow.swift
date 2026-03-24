@@ -79,7 +79,7 @@ public struct WorkspaceRow: View {
                             .padding(.vertical, 1)
                             .background(Color.purple.opacity(0.15))
                             .foregroundColor(.purple)
-                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
                     }
                 }
                 
@@ -109,7 +109,7 @@ public struct WorkspaceRow: View {
                     .padding(.vertical, 3)
                     .background(Color.blue.opacity(0.15))
                     .foregroundColor(.blue)
-                    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
                 }
                 .buttonStyle(.plain)
                 .help("View \(count) previous session\(count == 1 ? "" : "s")")

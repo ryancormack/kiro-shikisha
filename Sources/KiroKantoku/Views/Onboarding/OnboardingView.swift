@@ -31,7 +31,7 @@ public struct OnboardingView: View {
                 ForEach(OnboardingStep.allCases, id: \.self) { step in
                     Circle()
                         .fill(step.rawValue <= currentStep.rawValue ? Color.accentColor : Color.secondary.opacity(0.3))
-                        .frame(width: 8, height: 8)
+                        .frame(width: 10, height: 10)
                 }
             }
             .padding(.top, 24)
@@ -80,7 +80,7 @@ public struct OnboardingView: View {
             .padding(24)
         }
         .frame(width: 550, height: 450)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DesignConstants.subtleBackground)
         .onAppear {
             autoDetectKiroCli()
         }
