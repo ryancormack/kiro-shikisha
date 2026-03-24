@@ -70,7 +70,7 @@ public struct WorktreeAgentsList: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(DesignConstants.cardBackground)
     }
 
     private var emptyStateView: some View {
@@ -135,8 +135,8 @@ struct WorkspaceTaskGroup: View {
         }
         .padding()
         .background(
-            RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
-                .fill(Color(nsColor: .windowBackgroundColor))
+            RoundedRectangle(cornerRadius: DesignConstants.cardCornerRadius)
+                .fill(DesignConstants.subtleBackground)
         )
     }
 }

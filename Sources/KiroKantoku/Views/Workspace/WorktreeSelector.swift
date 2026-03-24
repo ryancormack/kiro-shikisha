@@ -257,14 +257,14 @@ struct WorktreeRow: View {
                             .padding(.vertical, 1)
                             .background(Color.blue.opacity(0.15))
                             .foregroundColor(.blue)
-                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
                         Text("running")
                             .font(.caption2)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(Color.green.opacity(0.15))
                             .foregroundColor(.green)
-                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
                     }
                 }
                 

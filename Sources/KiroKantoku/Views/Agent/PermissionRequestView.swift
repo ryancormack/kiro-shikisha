@@ -35,8 +35,8 @@ struct PermissionRequestView: View {
                     Button(action: { onSelect(option.optionId) }) {
                         Text(option.label)
                             .font(.subheadline)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
+                            .padding(.horizontal, DesignConstants.buttonPaddingH)
+                            .padding(.vertical, DesignConstants.buttonPaddingV)
                     }
                     .buttonStyle(.bordered)
                     .tint(colorForKind(option.kind))
@@ -54,10 +54,10 @@ struct PermissionRequestView: View {
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: DesignConstants.cardCornerRadius)
                 .fill(Color.orange.opacity(0.08))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: DesignConstants.cardCornerRadius)
                         .stroke(Color.orange.opacity(0.3), lineWidth: 1)
                 )
         )

@@ -22,7 +22,7 @@ public struct SettingsView: View {
                     Label("Appearance", systemImage: "paintbrush")
                 }
         }
-        .frame(minHeight: 350, maxHeight: 500)
+        .frame(minWidth: 500, minHeight: 400, maxHeight: 550)
         .padding()
     }
 }
@@ -145,7 +145,7 @@ struct AgentConfigRow: View {
                     .foregroundColor(.secondary)
                 TextField("Enter a name for this profile", text: $config.name)
                     .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 250)
+                    .frame(maxWidth: 300)
             }
             
             // Agent Identifier
@@ -155,7 +155,7 @@ struct AgentConfigRow: View {
                     .foregroundColor(.secondary)
                 TextField("e.g. my-agent-profile", text: $config.agentFlag)
                     .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 250)
+                    .frame(maxWidth: 300)
                 Text("The identifier used to select which agent profile to run.")
                     .font(.caption2)
                     .foregroundColor(.secondary)

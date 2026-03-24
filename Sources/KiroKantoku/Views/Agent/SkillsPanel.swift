@@ -26,7 +26,7 @@ struct SkillsPanel: View {
                                             .padding(.horizontal, 4)
                                             .padding(.vertical, 1)
                                             .background(Color.green)
-                                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
+                                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
                                     }
                                 }
                                 Text(skill.description)

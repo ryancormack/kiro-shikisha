@@ -42,7 +42,7 @@ public struct TaskAgentView: View {
                 .foregroundColor(.red)
                 .padding(.horizontal)
                 .padding(.vertical, 6)
-                .background(Color.red.opacity(0.08))
+                .background(DesignConstants.dangerSubtle)
             }
 
             Divider()
@@ -201,7 +201,7 @@ public struct TaskAgentView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(DesignConstants.cardBackground)
     }
 
     @ViewBuilder
@@ -334,7 +334,7 @@ struct TaskPendingView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .controlSize(.regular)
             }
 
             if let error = errorMessage {

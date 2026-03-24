@@ -111,9 +111,9 @@ struct TerminalEntryView: View {
                     
                     StatusIndicator(status: entry.status)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .padding(.horizontal, DesignConstants.spacingSM)
+                .padding(.vertical, DesignConstants.spacingXS)
+                .background(DesignConstants.cardBackground)
             }
             .buttonStyle(.plain)
             
@@ -128,7 +128,7 @@ struct TerminalEntryView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 300)
-                .background(Color(nsColor: .textBackgroundColor))
+                .background(DesignConstants.textBackground)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))

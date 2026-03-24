@@ -108,23 +108,24 @@ public struct TaskCard: View {
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge)
-                    .fill(Color(nsColor: .controlBackgroundColor))
+                RoundedRectangle(cornerRadius: DesignConstants.cardCornerRadius)
+                    .fill(DesignConstants.cardBackground)
                     .shadow(
-                        color: isHovered ? .black.opacity(0.15) : .black.opacity(0.05),
-                        radius: isHovered ? 8 : 4,
-                        y: isHovered ? 4 : 2
+                        color: isHovered ? .black.opacity(0.12) : .black.opacity(0.05),
+                        radius: isHovered ? 6 : DesignConstants.cardShadowRadius,
+                        y: isHovered ? 3 : DesignConstants.cardShadowY
                     )
             )
             .overlay(
-                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge)
+                RoundedRectangle(cornerRadius: DesignConstants.cardCornerRadius)
                     .stroke(
-                        task.status == .needsAttention ? Color.orange.opacity(0.5) :
-                        (isHovered ? Color.accentColor.opacity(0.5) : Color.clear),
-                        lineWidth: 2
+                        task.status == .needsAttention ? Color.orange.opacity(0.4) :
+                        (isHovered ? Color.accentColor.opacity(0.5) :
+                        DesignConstants.separatorColor.opacity(DesignConstants.cardBorderOpacity)),
+                        lineWidth: task.status == .needsAttention || isHovered ? 2 : 1
                     )
             )
-            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .scaleEffect(isHovered ? DesignConstants.hoverScale : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { hovering in

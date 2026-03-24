@@ -100,7 +100,7 @@ public struct DashboardView: View {
         }
         .padding()
         .background(
-            RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusLarge)
+            RoundedRectangle(cornerRadius: DesignConstants.cardCornerRadius)
                 .stroke(Color.orange.opacity(0.3), lineWidth: 1)
         )
     }
@@ -129,7 +129,7 @@ public struct DashboardView: View {
                     Label("Create New Task", systemImage: "plus.circle")
                 }
                 .buttonStyle(.borderedProminent)
-                .padding(.top, 8)
+                .padding(.top, DesignConstants.spacingSM)
             }
 
             Spacer()

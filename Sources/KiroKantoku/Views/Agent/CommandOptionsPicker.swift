@@ -89,7 +89,7 @@ struct CommandOptionsPicker: View {
             .background(
                 RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
                     .fill(Color(nsColor: .controlBackgroundColor))
-                    .shadow(color: .black.opacity(0.2), radius: 8, y: -2)
+                    .shadow(color: .black.opacity(DesignConstants.popoverShadowOpacity), radius: DesignConstants.popoverShadowRadius, y: -2)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)

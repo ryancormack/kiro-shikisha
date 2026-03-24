@@ -47,7 +47,7 @@ public struct CodePanel: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(DesignConstants.cardBackground)
     }
 }
 

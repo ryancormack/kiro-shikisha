@@ -16,7 +16,7 @@ public struct ChatMessageView: View {
     private var backgroundColor: Color {
         switch message.role {
         case .user:
-            return .blue
+            return .accentColor
         case .assistant:
             return Color(nsColor: .controlBackgroundColor)
         case .system:
@@ -67,6 +67,11 @@ public struct ChatMessageView: View {
                     .background(backgroundColor)
                     .foregroundColor(textColor)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(DesignConstants.separatorColor.opacity(isUser ? 0 : 0.15), lineWidth: 0.5)
+                    )
                     
                     Text(timestampFormatter.string(from: message.timestamp))
                         .font(.caption2)

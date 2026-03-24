@@ -14,12 +14,13 @@ public struct TaskRow: View {
             // Status icon with color
             Image(systemName: task.status.iconName)
                 .foregroundColor(task.status.displayColor)
-                .font(.title2)
+                .font(.system(size: 16))
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(task.name)
-                        .font(.headline)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
                         .lineLimit(1)
 
                     // Git branch badge
@@ -30,7 +31,7 @@ public struct TaskRow: View {
                             .padding(.vertical, 1)
                             .background(Color.purple.opacity(0.15))
                             .foregroundColor(.purple)
-                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
+                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
                     }
                 }
 
@@ -59,7 +60,7 @@ public struct TaskRow: View {
                     .padding(.vertical, 2)
                     .background(Color.blue.opacity(0.15))
                     .foregroundColor(.blue)
-                    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
             }
 
             // Last activity time

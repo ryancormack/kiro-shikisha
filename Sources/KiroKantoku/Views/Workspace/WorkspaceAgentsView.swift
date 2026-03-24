@@ -88,7 +88,7 @@ public struct WorkspaceAgentsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(DesignConstants.cardBackground)
     }
     
     @ViewBuilder
@@ -197,7 +197,7 @@ struct WorkspaceAgentRow: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(Color.secondary.opacity(0.2))
-                        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
+                        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
                 }
                 
                 Image(systemName: "chevron.right")

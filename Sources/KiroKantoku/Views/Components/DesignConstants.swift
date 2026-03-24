@@ -40,5 +40,85 @@ enum DesignConstants {
     static var separatorColor: Color {
         Color(nsColor: .separatorColor)
     }
+
+    // MARK: - Button
+
+    static let buttonCornerRadius: CGFloat = 6
+    static let buttonPaddingH: CGFloat = 12
+    static let buttonPaddingV: CGFloat = 6
+    static let buttonMinHeight: CGFloat = 28
+
+    // MARK: - Cards
+
+    static let cardCornerRadius: CGFloat = 10
+    static let cardPadding: CGFloat = 14
+    static let cardShadowRadius: CGFloat = 3
+    static let cardShadowY: CGFloat = 1.5
+    static let cardBorderOpacity: Double = 0.12
+
+    // MARK: - Inputs
+
+    static let inputCornerRadius: CGFloat = 8
+    static let inputMinHeight: CGFloat = 36
+    static let inputPaddingH: CGFloat = 10
+    static let inputPaddingV: CGFloat = 8
+
+    // MARK: - Popups & Sheets
+
+    static let sheetCornerRadius: CGFloat = 12
+    static let popoverShadowRadius: CGFloat = 12
+    static let popoverShadowOpacity: Double = 0.15
+
+    // MARK: - Badges
+
+    static let badgeCornerRadius: CGFloat = 5
+    static let badgePaddingH: CGFloat = 6
+    static let badgePaddingV: CGFloat = 2
+    static let badgeFontSize: CGFloat = 10
+
+    // MARK: - Typography
+
+    static let captionSecondaryOpacity: Double = 0.7
+
+    // MARK: - Animation
+
+    static let standardDuration: Double = 0.2
+    static let hoverScale: CGFloat = 1.015
+
+    // MARK: - Semantic Colors
+
+    static var subtleBackground: Color {
+        Color(nsColor: .windowBackgroundColor)
+    }
+
+    static var cardBackground: Color {
+        Color(nsColor: .controlBackgroundColor)
+    }
+
+    static var accentSubtle: Color {
+        Color.accentColor.opacity(0.08)
+    }
+
+    static var dangerSubtle: Color {
+        Color.red.opacity(0.08)
+    }
+
+    static var warningSubtle: Color {
+        Color.orange.opacity(0.08)
+    }
+
+    static var successSubtle: Color {
+        Color.green.opacity(0.08)
+    }
+
+    // MARK: - Layout
+
+    static let sidebarMinWidth: CGFloat = 220
+    static let detailMinWidth: CGFloat = 400
+    static let chatMinWidth: CGFloat = 320
+
+    // MARK: - Chips
+
+    static let chipCornerRadius: CGFloat = 6
 }
 #endif
