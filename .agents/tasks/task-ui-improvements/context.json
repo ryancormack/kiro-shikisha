@@ -1,0 +1,24 @@
+{
+  "project_type": "macOS SwiftUI desktop app (requires macOS 14+, Swift 6.0+)",
+  "language": "Swift",
+  "build_system": "Swift Package Manager via Package.swift",
+  "test_framework": "XCTest via swift test - 220 tests across 6 test files in Tests/KiroKantokuTests/",
+  "build_command": "cd /projects/sandbox/kiro-kantoku && swift build",
+  "test_command": "cd /projects/sandbox/kiro-kantoku && swift test",
+  "verification_instructions": "Run swift build to verify compilation, then swift test to verify all 220 tests pass",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "swift build from repo root",
+  "environment_constraints": "OPEN_INTERNET network mode. Swift 6.2.1 installed via system dnf. No macOS available for running the app, but builds compile successfully on Linux with #if os(macOS) guards. Tests are model/logic tests that run on Linux.",
+  "contribution_requirements": "No CONTRIBUTING.md found. Follow existing codebase patterns.",
+  "key_patterns": "Existing hover pattern: @State private var isHovered: Bool = false, then .onHover { hovering in withAnimation(.easeInOut(duration: 0.2)) { isHovered = hovering } }. Used in TaskCard, AgentCard, WorkspaceAgentsView AgentRow, WorktreeAgentsList. Design constants centralized in DesignConstants.swift. Buttons use .buttonStyle(.plain) with manual styling. No reusable hover button style exists yet - hover effects are implemented inline per-view.",
+  "relevant_files": [
+    "Sources/KiroKantoku/Views/Agent/ChatInputView.swift",
+    "Sources/KiroKantoku/Views/Dashboard/QuickActionsView.swift",
+    "Sources/KiroKantoku/Views/Components/DesignConstants.swift",
+    "Sources/KiroKantoku/Views/Task/TaskCard.swift",
+    "Sources/KiroKantoku/Views/Dashboard/AgentCard.swift",
+    "Sources/KiroKantoku/Views/Dashboard/WorktreeAgentsList.swift",
+    "Sources/KiroKantoku/Views/Workspace/WorkspaceAgentsView.swift"
+  ],
+  "directory_structure": "Sources/KiroKantoku/Views/Agent/ - Chat panel, message rendering, input views. Sources/KiroKantoku/Views/Dashboard/ - Multi-task overview grid, agent cards. Sources/KiroKantoku/Views/Task/ - Task detail view, task cards. Sources/KiroKantoku/Views/Components/ - Shared UI components including DesignConstants. Tests/KiroKantokuTests/ - Unit tests for models and services."
+}

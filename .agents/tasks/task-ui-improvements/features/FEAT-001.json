@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Improve text entry box contrast, add resizability, add hover effects to all plain-style buttons that lack them, and increase clickable areas for small icon buttons",
+  "status": "completed",
+  "steps": [
+    "Step 1 - Create a reusable HoverButtonStyle in Sources/KiroKantoku/Views/Components/DesignConstants.swift (or a new file next to it). This should be a ButtonStyle that tracks @State isHovered via .onHover, and on hover shows a subtle background highlight (e.g., Color.primary.opacity(0.08) rounded rect), slight scale, and pointer cursor. Use the existing animation pattern: withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }. Also add any needed DesignConstants for hover button styling (e.g., hoverBackgroundOpacity, iconButtonMinSize).",
+    "Step 2 - Fix the text entry box in Sources/KiroKantoku/Views/Agent/ChatInputView.swift: (a) Increase border contrast - change the overlay stroke from `DesignConstants.separatorColor.opacity(0.3), lineWidth: 0.5` to something much more visible like `DesignConstants.separatorColor.opacity(0.7), lineWidth: 1` or similar. Also add a focused state that shows an accent-colored border when the TextEditor is focused. (b) Make the TextEditor resizable by removing the fixed maxHeight: 100 constraint or increasing it significantly (e.g., maxHeight: 300) so the user can type longer messages. The minHeight: 36 is fine to keep.",
+    "Step 3 - Add hover effects to the 'attach image' button (photo icon) and 'send chat' button (arrow.up.circle.fill) in Sources/KiroKantoku/Views/Agent/ChatInputView.swift. Replace .buttonStyle(.plain) with the new HoverButtonStyle, or add inline .onHover with background/opacity changes. Also increase the clickable area of the photo button from the current frame(width: 28, height: 36) to at least frame(width: 36, height: 36) with contentShape(Rectangle()) to make the hit target larger. Add .contentShape(Rectangle()) to the send button as well.",
+    "Step 4 - Add hover effects to the QuickActionsView buttons in Sources/KiroKantoku/Views/Dashboard/QuickActionsView.swift. The three buttons (newTaskButton, cancelAllButton, refreshAllButton) all use .buttonStyle(.plain) with no hover feedback. Either apply the new HoverButtonStyle or add inline hover state with background highlight. Add padding around each button to increase hit area. Each button's HStack label should have padding (e.g., .padding(.horizontal, 8) .padding(.vertical, 4)) and on hover show a rounded background fill."
+  ],
+  "acceptance_criteria": [
+    "swift build compiles without errors",
+    "swift test passes all 220 existing tests",
+    "The TextEditor in ChatInputView has a clearly visible border (opacity >= 0.5, lineWidth >= 1)",
+    "The TextEditor in ChatInputView has a maxHeight >= 200 (increased from 100) for resizability",
+    "The attach image button and send chat button in ChatInputView have hover feedback (background change or opacity change on hover)",
+    "The attach image button has a minimum hit area of 36x36 points",
+    "The New Task, Cancel All Tasks, and Refresh All buttons in QuickActionsView have hover feedback",
+    "All hover animations use withAnimation with a short duration (0.1 to 0.3 seconds)"
+  ],
+  "verification": [
+    "cd /projects/sandbox/kiro-kantoku && swift build",
+    "cd /projects/sandbox/kiro-kantoku && swift test"
+  ],
+  "blocked_reason": null,
+  "findings": "All changes compile cleanly on Linux (Swift 6.2.1) and all 220 tests pass. The #if os(macOS) guards ensure the SwiftUI-specific code only compiles on macOS. No pre-existing test failures."
+}
