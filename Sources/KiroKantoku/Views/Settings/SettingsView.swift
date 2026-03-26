@@ -281,6 +281,15 @@ public struct AppearanceSettingsView: View {
             } header: {
                 Text("Layout")
             }
+            
+            Section {
+                Toggle("Show Pixel Office", isOn: $settings.showPixelOffice)
+                Text("Display an animated pixel art office where your tasks appear as characters. Working tasks sit at desks, paused tasks grab coffee, and tasks needing your input wave for attention.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } header: {
+                Text("Fun Stuff")
+            }
         }
         .formStyle(.grouped)
         .padding()
