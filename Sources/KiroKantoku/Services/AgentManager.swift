@@ -1041,6 +1041,9 @@ public final class AgentManager {
             ))
         }
         agent.toolCallHistory[id] = toolCallUpdate
+        if !agent.toolCallOrder.contains(id) {
+            agent.toolCallOrder.append(id)
+        }
 
         addActivityEvent(ActivityEvent(
             agentId: agent.id,
@@ -1051,11 +1054,11 @@ public final class AgentManager {
     }
     
     private func handleToolCallUpdate(_ updateData: ToolCallUpdateData, for agent: Agent) {
-        if let index = agent.activeToolCalls.firstIndex(where: { $0.toolCallId == updateData.toolCallId }),
-           index < agent.activeToolCalls.count {
-            let existing = agent.activeToolCalls[index]
-            
-            // Create updated tool call with merged data
+        // Resolve the existing state from activeToolCalls or history
+        let existing: ToolCallUpdate? = agent.activeToolCalls.first(where: { $0.toolCallId == updateData.toolCallId })
+            ?? agent.toolCallHistory[updateData.toolCallId.value]
+
+        if let existing {
             let updated = ToolCallUpdate(
                 toolCallId: existing.toolCallId,
                 title: updateData.title ?? existing.title,
@@ -1066,7 +1069,9 @@ public final class AgentManager {
                 rawInput: updateData.rawInput ?? existing.rawInput,
                 rawOutput: updateData.rawOutput ?? existing.rawOutput
             )
-            agent.activeToolCalls[index] = updated
+            if let index = agent.activeToolCalls.firstIndex(where: { $0.toolCallId == updateData.toolCallId }) {
+                agent.activeToolCalls[index] = updated
+            }
             agent.toolCallHistory[updated.toolCallId.value] = updated
         }
         

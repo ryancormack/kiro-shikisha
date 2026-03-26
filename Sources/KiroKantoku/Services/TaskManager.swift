@@ -1,4 +1,5 @@
 import Foundation
+import ACPModel
 #if canImport(Observation)
 import Observation
 #endif
@@ -388,6 +389,9 @@ public final class TaskManager {
                 print("[TaskReconnect] No chat history found for task '\(task.name)'")
             }
 
+            // Restore tool call history from JSONL events for the Terminal tab
+            Self.restoreToolCallHistory(from: sessionStorage, sessionId: effectiveSessionId, into: agent)
+
             // If the session was replaced (fresh session), add a system message
             if agent.sessionId?.value != effectiveSessionId {
                 task.messages.append(ChatMessage(role: .system, content: "Session reconnected with a fresh session."))
@@ -405,6 +409,114 @@ public final class TaskManager {
                 persistCurrentState()
             }
             throw error
+        }
+    }
+
+    // MARK: - Tool Call History Restoration
+
+    /// Known tool names that map to execute kind for the Terminal tab
+    private static let executeToolNames: Set<String> = [
+        "shell", "bash", "execute_command", "run_command", "terminal"
+    ]
+
+    /// Reconstructs tool call history from JSONL session events so the Terminal tab
+    /// is populated after app restart.
+    static func restoreToolCallHistory(from sessionStorage: SessionStorage, sessionId: String, into agent: Agent) {
+        guard let eventsData = sessionStorage.loadSessionEvents(sessionId: sessionId) else { return }
+
+        let decoder = JSONDecoder()
+        // Collect tool uses (id -> name, input) and tool results (id -> output text)
+        struct ToolUseInfo {
+            let name: String
+            let input: [String: AnyCodableValue]
+        }
+        var toolUses: [(id: String, info: ToolUseInfo)] = []
+        var toolResults: [String: String] = [:]
+
+        for eventData in eventsData {
+            guard let event = try? decoder.decode(SessionEvent.self, from: eventData) else { continue }
+            guard let content = event.data.content else { continue }
+
+            for item in content {
+                guard let data = item.data, case .object(let dict) = data else { continue }
+
+                if item.kind == "toolUse",
+                   let toolUseId = dict["toolUseId"]?.stringValue,
+                   let name = dict["name"]?.stringValue {
+                    var input: [String: AnyCodableValue] = [:]
+                    if case .dict(let inputDict) = dict["input"] ?? .null {
+                        input = inputDict
+                    }
+                    toolUses.append((id: toolUseId, info: ToolUseInfo(name: name, input: input)))
+                }
+
+                if item.kind == "toolResult",
+                   let toolUseId = dict["toolUseId"]?.stringValue {
+                    // Extract text from nested content array
+                    if case .array(let resultContent) = dict["content"] ?? .null {
+                        let texts = resultContent.compactMap { item -> String? in
+                            if case .dict(let d) = item, d["kind"]?.stringValue == "text",
+                               let textData = d["data"] {
+                                if case .string(let s) = textData { return s }
+                            }
+                            // Also handle {"type": "text", "text": "..."} format
+                            if case .dict(let d) = item, d["type"]?.stringValue == "text",
+                               case .string(let s) = d["text"] ?? .null { return s }
+                            return nil
+                        }
+                        if !texts.isEmpty {
+                            toolResults[toolUseId] = texts.joined(separator: "\n")
+                        }
+                    }
+                }
+            }
+        }
+
+        guard !toolUses.isEmpty else { return }
+
+        // Build ToolCallUpdate entries in order
+        for (toolUseId, info) in toolUses {
+            let kind: ToolKind = executeToolNames.contains(info.name) ? .execute : .other
+            let command = info.input["command"]?.stringValue
+            let title = command ?? info.name
+
+            // Build rawInput as JsonValue
+            var rawInputDict: [String: JsonValue] = [:]
+            for (key, val) in info.input {
+                rawInputDict[key] = Self.anyCodableToJsonValue(val)
+            }
+            let rawInput: JsonValue? = rawInputDict.isEmpty ? nil : .object(rawInputDict)
+
+            // Build rawOutput as JsonValue from tool result text
+            let rawOutput: JsonValue? = toolResults[toolUseId].map { .string($0) }
+
+            let toolCall = ToolCallUpdate(
+                toolCallId: ToolCallId(value: toolUseId),
+                title: title,
+                kind: kind,
+                status: .completed,
+                rawInput: rawInput,
+                rawOutput: rawOutput
+            )
+            agent.toolCallHistory[toolUseId] = toolCall
+            if !agent.toolCallOrder.contains(toolUseId) {
+                agent.toolCallOrder.append(toolUseId)
+            }
+        }
+
+        let executeCount = toolUses.filter { executeToolNames.contains($0.info.name) }.count
+        print("[TaskReconnect] Restored \(toolUses.count) tool calls (\(executeCount) execute) from JSONL")
+    }
+
+    private static func anyCodableToJsonValue(_ value: AnyCodableValue) -> JsonValue {
+        switch value {
+        case .string(let s): return .string(s)
+        case .int(let i): return .int(i)
+        case .double(let d): return .double(d)
+        case .bool(let b): return .bool(b)
+        case .null: return .null
+        case .array(let arr): return .array(arr.map { anyCodableToJsonValue($0) })
+        case .dict(let d): return .object(d.mapValues { anyCodableToJsonValue($0) })
         }
     }
 }

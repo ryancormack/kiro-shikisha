@@ -43,21 +43,67 @@ struct TerminalOutputView: View {
         }
     }
     
-    /// Extract terminal entries from execute tool calls
+    /// Extract terminal entries from execute tool calls in chronological order
     private var terminalEntries: [TerminalEntry] {
-        agent.toolCallHistory.values
+        agent.toolCallOrder
+            .compactMap { id in agent.toolCallHistory[id] }
             .filter { $0.kind == .execute }
-            .sorted { ($0.toolCallId.value) < ($1.toolCallId.value) }
             .map { toolCall in
-                TerminalEntry(
+                let command = extractCommand(from: toolCall)
+                let output = extractOutput(from: toolCall)
+                return TerminalEntry(
                     toolCallId: toolCall.toolCallId.value,
-                    title: toolCall.title,
+                    title: command ?? toolCall.title,
                     status: toolCall.status ?? .pending,
-                    output: stripAnsiCodes(extractText(from: toolCall.content))
+                    output: stripAnsiCodes(output)
                 )
             }
     }
-    
+
+    /// Extract the command string from rawInput if available
+    private func extractCommand(from toolCall: ToolCallUpdate) -> String? {
+        guard let rawInput = toolCall.rawInput else { return nil }
+        if let obj = rawInput.objectValue, let cmd = obj["command"]?.stringValue {
+            return cmd
+        }
+        return nil
+    }
+
+    /// Extract output text, preferring rawOutput then falling back to content
+    private func extractOutput(from toolCall: ToolCallUpdate) -> String {
+        if let rawOutput = toolCall.rawOutput {
+            if let str = rawOutput.stringValue {
+                return str
+            }
+            if let obj = rawOutput.objectValue {
+                if let text = obj["output"]?.stringValue ?? obj["stdout"]?.stringValue ?? obj["text"]?.stringValue {
+                    return text
+                }
+                // Handle nested content array inside object (e.g. { content: [{ text: "..." }] })
+                if let items = obj["content"]?.arrayValue {
+                    return extractTextFromJsonArray(items)
+                }
+            }
+            if let items = rawOutput.arrayValue {
+                return extractTextFromJsonArray(items)
+            }
+            if let data = try? JSONEncoder().encode(rawOutput),
+               let str = String(data: data, encoding: .utf8) {
+                return str
+            }
+        }
+        return extractText(from: toolCall.content)
+    }
+
+    /// Extract text values from a JSON array of content items
+    private func extractTextFromJsonArray(_ items: [JsonValue]) -> String {
+        items.compactMap { item in
+            if let str = item.stringValue { return str }
+            if let obj = item.objectValue, let text = obj["text"]?.stringValue { return text }
+            return nil
+        }.joined(separator: "\n")
+    }
+
     /// Extract text content from ToolCallContent array
     private func extractText(from content: [ToolCallContent]) -> String {
         content.compactMap { item in
@@ -88,7 +134,7 @@ struct TerminalOutputView: View {
 struct TerminalEntryView: View {
     let entry: TerminalEntry
     
-    @State private var isExpanded = true
+    @State private var isExpanded = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

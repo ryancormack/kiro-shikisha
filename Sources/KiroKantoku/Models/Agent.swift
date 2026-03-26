@@ -46,6 +46,8 @@ public final class Agent: Identifiable {
     public var debugLog: [DebugLogEntry] = []
     /// All tool calls by ID, persisted after completion for chat history
     public var toolCallHistory: [String: ToolCallUpdate] = [:]
+    /// Ordered list of tool call IDs, preserving the order they were first seen
+    public var toolCallOrder: [String] = []
     /// Whether this agent is currently replaying a session (loading session state from ACP).
     /// When true, incoming message chunks from session replay should be discarded.
     public var isReplayingSession: Bool = false
