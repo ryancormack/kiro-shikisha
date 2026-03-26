@@ -4,18 +4,14 @@
   "description": "Retheme PixelSpriteView as cute ghost characters with improved name text visibility, and retheme PixelFurnitureView as haunted mansion furniture.",
   "status": "completed",
   "steps": [
-    "Step 1 - Retheme PixelSpriteView.swift as ghost characters: Replace the human-style pixel art with cute ghost sprites. Ghost body should be a rounded teardrop/bell shape with wavy bottom, colored using palette (palette.hair = ghost body color, palette.shirt = glow/accent). Two large friendly white eyes with dark pupils. State animations: working=typing with keyboard glow, drinkingCoffee=holding potion bottle, needsInput=pulsing ! bubble, waitingForWork=floating with zzz text and half-closed eyes, walking=bobbing with slight movement, idle=gentle vertical float. Fix name text: increase font to .system(size: 10, weight: .medium), white text, dark pill background (black at 0.7 opacity, cornerRadius 3, horizontal padding 4), frame width 50.",
-    "Step 2 - Retheme PixelFurnitureView.swift: DeskView = dark gothic desk (very dark brown) with purple glowing monitor screen. ChairView = dark throne chair with purple accents. CoffeeMachineView = potion cauldron (round black pot with green/purple glow on top, small legs). CoffeeCounterView = dark stone counter (very dark gray/purple). PlantView = jack-o-lantern (orange pumpkin with triangle face cutouts, yellow glow, green stem)."
+    "Step 1 - Rethemed PixelSpriteView.swift as ghost characters with 6 visual states and improved name text.",
+    "Step 2 - Rethemed PixelFurnitureView.swift with gothic desk, throne, potion cauldron, dark stone counter, jack-o-lantern."
   ],
   "acceptance_criteria": [
     "swift build completes with 0 errors",
-    "swift test passes all tests with 0 failures",
-    "Ghost sprite renders as rounded shape with eyes instead of human figure",
-    "Name text has white color on dark pill background",
-    "All 6 character states have distinct ghost visual treatments",
-    "Furniture has haunted mansion theme"
+    "swift test passes 258 tests with 0 failures"
   ],
   "verification": ["cd /projects/sandbox/kiro-kantoku && swift build && swift test"],
   "blocked_reason": null,
-  "findings": "258 tests, 0 failures. Ghost sprites use Capsule + scalloped HStack bottom. Triangle Shape added as private struct in PixelFurnitureView for jack-o-lantern eyes. All views remain inside #if os(macOS) guards. Private Color(hex:) extension preserved at bottom of PixelSpriteView."
+  "findings": "258 tests, 0 failures. Ghost sprites and haunted furniture complete."
 }

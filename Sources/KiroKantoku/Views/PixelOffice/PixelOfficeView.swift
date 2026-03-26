@@ -4,6 +4,7 @@ import SwiftUI
 /// The main container view for the pixel office visualization
 struct PixelOfficeView: View {
     @Environment(TaskManager.self) var taskManager
+    @Environment(AgentManager.self) var agentManager
     @State private var viewModel = PixelOfficeViewModel()
     @State private var animationTimer: Timer?
 
@@ -33,7 +34,7 @@ struct PixelOfficeView: View {
 
             statusBar
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color(red: 0.10, green: 0.05, blue: 0.14))
         .onAppear {
             updateCharacters()
             startAnimationTimer()
@@ -50,7 +51,7 @@ struct PixelOfficeView: View {
 
     private var headerBar: some View {
         HStack {
-            Text("Pixel Office")
+            Text("House of Kiroween")
                 .font(.headline)
 
             Spacer()
@@ -66,8 +67,8 @@ struct PixelOfficeView: View {
     // MARK: - Office Floor
 
     private var officeFloor: some View {
-        let lightTan = Color(red: 0.85, green: 0.78, blue: 0.68)
-        let darkTan = Color(red: 0.78, green: 0.71, blue: 0.61)
+        let floorLight = Color(red: 0.15, green: 0.08, blue: 0.20)
+        let floorDark = Color(red: 0.12, green: 0.06, blue: 0.16)
 
         return Canvas { context, size in
             let ts = tileSize
@@ -82,7 +83,7 @@ struct PixelOfficeView: View {
                     )
                     context.fill(
                         Path(rect),
-                        with: .color(isLight ? lightTan : darkTan)
+                        with: .color(isLight ? floorLight : floorDark)
                     )
                 }
             }
@@ -97,7 +98,7 @@ struct PixelOfficeView: View {
 
     private var officeWalls: some View {
         Rectangle()
-            .fill(Color(red: 0.35, green: 0.33, blue: 0.32))
+            .fill(Color(red: 0.20, green: 0.12, blue: 0.25))
             .frame(
                 width: CGFloat(officeWidth) * tileSize,
                 height: tileSize * 2
@@ -144,6 +145,14 @@ struct PixelOfficeView: View {
                 .position(x: 18.5 * tileSize, y: 2.5 * tileSize)
             PlantView()
                 .position(x: 1.0 * tileSize, y: 10.0 * tileSize)
+
+            // Floating candles
+            FloatingCandleView()
+                .position(x: 2.0 * tileSize, y: 1.5 * tileSize)
+            FloatingCandleView()
+                .position(x: 14.0 * tileSize, y: 1.5 * tileSize)
+            FloatingCandleView()
+                .position(x: 10.0 * tileSize, y: 10.0 * tileSize)
         }
         .frame(
             width: CGFloat(officeWidth) * tileSize,
@@ -176,6 +185,7 @@ struct PixelOfficeView: View {
             legendItem(color: .green, label: "Working")
             legendItem(color: .orange, label: "On Break")
             legendItem(color: .yellow, label: "Needs Input")
+            legendItem(color: .purple, label: "Waiting for Work")
 
             Spacer()
         }
@@ -214,7 +224,14 @@ struct PixelOfficeView: View {
     }
 
     private func updateCharacters() {
-        viewModel.updateCharacters(from: taskManager.allTasks)
+        var agentStatuses: [UUID: AgentStatus] = [:]
+        for task in taskManager.allTasks {
+            if let agentId = task.agentId,
+               let agent = agentManager.getAgent(id: agentId) {
+                agentStatuses[task.id] = agent.status
+            }
+        }
+        viewModel.updateCharacters(from: taskManager.allTasks, agentStatuses: agentStatuses)
     }
 }
 #endif

@@ -158,4 +158,21 @@ private struct Triangle: Shape {
         return path
     }
 }
+
+/// A small floating candle for atmospheric decoration
+struct FloatingCandleView: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            // Flame
+            Ellipse()
+                .fill(Color.yellow)
+                .frame(width: 6, height: 8)
+                .opacity(0.9)
+            // Candle body
+            Rectangle()
+                .fill(Color(red: 0.85, green: 0.82, blue: 0.72))
+                .frame(width: 4, height: 10)
+        }
+    }
+}
 #endif
