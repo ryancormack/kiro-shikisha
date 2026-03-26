@@ -14,6 +14,9 @@ public struct QuickActionsView: View {
 
     @State private var isCancellingAll: Bool = false
     @State private var isRefreshingAll: Bool = false
+    @State private var isNewTaskHovered: Bool = false
+    @State private var isCancelHovered: Bool = false
+    @State private var isRefreshHovered: Bool = false
 
     public init(
         onCancelAll: @escaping () async -> Void,
@@ -92,8 +95,17 @@ public struct QuickActionsView: View {
                     .font(.system(size: 12, weight: .medium))
             }
             .foregroundColor(.accentColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: DesignConstants.buttonCornerRadius).fill(Color.primary.opacity(isNewTaskHovered ? DesignConstants.hoverBackgroundOpacity : 0)))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isNewTaskHovered = hovering
+            }
+        }
         .help("Create a new task")
     }
 
@@ -117,9 +129,18 @@ public struct QuickActionsView: View {
                     .font(.system(size: 12, weight: .medium))
             }
             .foregroundColor(hasActiveTasks ? .red : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: DesignConstants.buttonCornerRadius).fill(Color.primary.opacity(isCancelHovered ? DesignConstants.hoverBackgroundOpacity : 0)))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!hasActiveTasks || isCancellingAll)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isCancelHovered = hovering
+            }
+        }
         .help("Cancel all active tasks")
     }
 
@@ -143,9 +164,18 @@ public struct QuickActionsView: View {
                     .font(.system(size: 12, weight: .medium))
             }
             .foregroundColor(.accentColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: DesignConstants.buttonCornerRadius).fill(Color.primary.opacity(isRefreshHovered ? DesignConstants.hoverBackgroundOpacity : 0)))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isRefreshingAll)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isRefreshHovered = hovering
+            }
+        }
         .help("Reconnect all agents")
     }
 

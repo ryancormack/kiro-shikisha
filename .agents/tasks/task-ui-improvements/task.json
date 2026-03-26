@@ -1,0 +1,14 @@
+{
+  "task_id": "task-ui-improvements",
+  "task_description": "Improve UI interactivity: fix text entry box contrast and resizability, add hover effects to all clickable buttons that lack them (QuickActionsView buttons, chat input attach/send buttons), and increase clickable areas",
+  "status": "completed",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "swift build compiles cleanly. swift test passes all 220 tests with 0 failures. No new tests needed as changes are purely UI/visual (hover states, border styling, frame sizing) in SwiftUI views that cannot be unit tested without a running macOS UI. All changes follow existing codebase patterns (isHovered state + .onHover + withAnimation)."
+  }
+}

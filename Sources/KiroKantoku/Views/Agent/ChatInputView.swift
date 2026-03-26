@@ -13,6 +13,8 @@ public struct ChatInputView: View {
     @State private var inputText: String = ""
     @State private var imageAttachments: [Data] = []
     @FocusState private var isFocused: Bool
+    @State private var isPhotoHovered: Bool = false
+    @State private var isSendHovered: Bool = false
     
     // Slash command autocomplete state
     @State private var showSlashPicker: Bool = false
@@ -168,25 +170,30 @@ public struct ChatInputView: View {
                     .zIndex(1)
                 }
                 
-                HStack(alignment: .bottom, spacing: 8) {
+                HStack(alignment: .bottom, spacing: 0) {
                     Button(action: pickImages) {
                         Image(systemName: "photo")
-                            .font(.system(size: 18))
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 16))
+                            .foregroundColor(isPhotoHovered ? .primary : .secondary)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .frame(width: 28, height: 36)
+                    .onHover { hovering in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isPhotoHovered = hovering
+                        }
+                    }
+                    .padding(.leading, 6)
+                    .padding(.bottom, 4)
                     
                     TextEditor(text: $inputText)
                         .font(.body)
                         .focused($isFocused)
                         .scrollContentBackground(.hidden)
-                        .padding(.horizontal, DesignConstants.inputPaddingH)
-                        .padding(.vertical, DesignConstants.inputPaddingV)
-                        .background(Color(nsColor: .controlBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.inputCornerRadius))
-                        .overlay(RoundedRectangle(cornerRadius: DesignConstants.inputCornerRadius).stroke(DesignConstants.separatorColor.opacity(0.3), lineWidth: 0.5))
-                        .frame(minHeight: 36, maxHeight: 100)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 8)
+                        .frame(minHeight: 56, maxHeight: 300)
                         .onKeyPress(.upArrow) {
                             if showSlashPicker {
                                 if slashSelectedIndex > 0 { slashSelectedIndex -= 1 }
@@ -242,21 +249,38 @@ public struct ChatInputView: View {
                     
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(canSend ? .accentColor : .secondary)
+                            .font(.system(size: 26))
+                            .foregroundColor(canSend ? .accentColor : .secondary.opacity(0.4))
+                            .scaleEffect(isSendHovered && canSend ? 1.08 : 1.0)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSend)
                     .keyboardShortcut(.return, modifiers: .command)
-                    .frame(width: 36, height: 36)
+                    .onHover { hovering in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isSendHovered = hovering
+                        }
+                    }
+                    .padding(.trailing, 6)
+                    .padding(.bottom, 4)
                 }
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(
+                            isFocused ? Color.accentColor.opacity(0.5) : Color(nsColor: .separatorColor).opacity(0.3),
+                            lineWidth: isFocused ? 1.5 : 0.5
+                        )
+                )
+                .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
                 .frame(maxWidth: .infinity)
-                .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, DesignConstants.spacingSM)
-        .padding(.vertical, DesignConstants.spacingSM)
-        .background(DesignConstants.cardBackground)
+        .padding(.horizontal, DesignConstants.spacingLG)
+        .padding(.vertical, DesignConstants.spacingMD)
         .onChange(of: inputText) { _, newValue in
             updateSlashPickerState(newValue)
         }

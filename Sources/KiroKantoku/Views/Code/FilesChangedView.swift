@@ -5,6 +5,7 @@ import SwiftUI
 /// Uses a stacked layout: horizontal file chip strip on top, full-width diff view below.
 struct FilesChangedView: View {
     let workspacePath: URL
+    let fileChangeCount: Int
 
     @State private var fileDiffs: [GitFileDiff] = []
     @State private var selectedFileDiff: GitFileDiff?
@@ -82,6 +83,9 @@ struct FilesChangedView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: workspacePath.path) {
             await loadDiff()
+        }
+        .onChange(of: fileChangeCount) {
+            Task { await loadDiff() }
         }
     }
 
@@ -269,10 +273,5 @@ struct FilesChangedView: View {
 
         isLoading = false
     }
-}
-
-#Preview {
-    FilesChangedView(workspacePath: URL(fileURLWithPath: "/Users/test/Projects/test-project"))
-        .frame(width: 1000, height: 650)
 }
 #endif

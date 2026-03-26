@@ -85,6 +85,11 @@ enum DesignConstants {
     static let standardDuration: Double = 0.2
     static let hoverScale: CGFloat = 1.015
 
+    // MARK: - Hover Button Styling
+
+    static let hoverBackgroundOpacity: Double = 0.08
+    static let iconButtonMinSize: CGFloat = 36
+
     // MARK: - Semantic Colors
 
     static var subtleBackground: Color {

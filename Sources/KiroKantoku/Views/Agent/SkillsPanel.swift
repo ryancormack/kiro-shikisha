@@ -10,47 +10,66 @@ struct SkillsPanel: View {
 
     var body: some View {
         if !skills.isEmpty {
-            DisclosureGroup(isExpanded: $isExpanded) {
-                VStack(alignment: .leading, spacing: DesignConstants.spacingXS) {
-                    ForEach(skills) { skill in
-                        HStack(spacing: DesignConstants.spacingSM) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: DesignConstants.spacingXS) {
-                                    Text(skill.name)
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                    if skill.isActive {
-                                        Text("Active")
-                                            .font(.system(size: 9, weight: .medium))
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 4)
-                                            .padding(.vertical, 1)
-                                            .background(Color.green)
-                                            .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
-                                    }
-                                }
-                                Text(skill.description)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer()
-                            Button("Use") {
-                                onUseSkill(skill.name)
-                            }
-                            .font(.caption)
-                            .controlSize(.small)
-                        }
-                        .padding(.vertical, 2)
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
                     }
+                } label: {
+                    HStack(spacing: DesignConstants.spacingXS) {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        Text("Skills (\(skills.count))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                    .padding(.horizontal, DesignConstants.spacingMD)
+                    .padding(.vertical, DesignConstants.spacingSM)
                 }
-            } label: {
-                Text("Skills (\(skills.count))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                .buttonStyle(.plain)
+
+                if isExpanded {
+                    VStack(alignment: .leading, spacing: DesignConstants.spacingXS) {
+                        ForEach(skills) { skill in
+                            HStack(spacing: DesignConstants.spacingSM) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: DesignConstants.spacingXS) {
+                                        Text(skill.name)
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                        if skill.isActive {
+                                            Text("Active")
+                                                .font(.system(size: 9, weight: .medium))
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 4)
+                                                .padding(.vertical, 1)
+                                                .background(Color.green)
+                                                .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
+                                        }
+                                    }
+                                    Text(skill.description)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Button("Use") {
+                                    onUseSkill(skill.name)
+                                }
+                                .font(.caption)
+                                .controlSize(.small)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                    .padding(.horizontal, DesignConstants.spacingMD)
+                    .padding(.bottom, DesignConstants.spacingSM)
+                }
             }
-            .padding(.horizontal, DesignConstants.spacingMD)
-            .padding(.vertical, DesignConstants.spacingXS)
         }
     }
 }
