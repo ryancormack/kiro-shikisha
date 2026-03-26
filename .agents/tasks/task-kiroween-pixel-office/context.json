@@ -1,0 +1,31 @@
+{
+  "project_type": "Swift 6.0+ / SwiftUI macOS desktop app",
+  "language": "Swift",
+  "build_system": "Swift Package Manager (swift build). Code uses #if os(macOS) and #if canImport(Observation) guards extensively. Each major type has macOS, Linux-with-Observation, and Linux-without-Observation variants. All Pixel Office views are guarded with #if os(macOS).",
+  "test_framework": "XCTest with async/await patterns. Tests use @MainActor via await MainActor.run {}. Tests in Tests/KiroKantokuTests/PixelOfficeTests.swift.",
+  "build_command": "cd /projects/sandbox/kiro-kantoku && swift build",
+  "test_command": "cd /projects/sandbox/kiro-kantoku && swift test",
+  "verification_instructions": "1. Run swift build and confirm no errors. 2. Run swift test and confirm all 250+ tests pass with 0 failures.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "Swift 6.2.1 is pre-installed. Just run swift build from /projects/sandbox/kiro-kantoku.",
+  "environment_constraints": "Linux sandbox - no macOS, no SwiftUI rendering. Views use #if os(macOS) so they compile on Linux as empty. Tests work on Linux since they only test model/viewmodel logic (no SwiftUI views). OPEN_INTERNET network mode.",
+  "contribution_requirements": "Open an issue first to discuss changes. MIT license.",
+  "key_patterns": "1. Every observable class has three variants: macOS with @Observable, Linux with @Observable (#if canImport(Observation)), Linux without Observation. 2. PixelOfficeViewModel has identical code in the macOS and Linux-Observation blocks - both must be updated. 3. Views are #if os(macOS) only. 4. DesignConstants provides shared spacing/color values. 5. Color hex extension is private in PixelSpriteView.swift. 6. characterPalettes in Constants maps characterIndex to hair/shirt colors. 7. PixelCharacter.CharacterState has 5 states: working, drinkingCoffee, needsInput, walking, idle.",
+  "relevant_files": [
+    "Sources/KiroKantoku/Views/PixelOffice/PixelOfficeConstants.swift",
+    "Sources/KiroKantoku/Views/PixelOffice/PixelCharacter.swift",
+    "Sources/KiroKantoku/Views/PixelOffice/PixelOfficeViewModel.swift",
+    "Sources/KiroKantoku/Views/PixelOffice/PixelSpriteView.swift",
+    "Sources/KiroKantoku/Views/PixelOffice/PixelFurnitureView.swift",
+    "Sources/KiroKantoku/Views/PixelOffice/PixelOfficeView.swift",
+    "Sources/KiroKantoku/Views/Components/DesignConstants.swift",
+    "Sources/KiroKantoku/Models/TaskStatus.swift",
+    "Sources/KiroKantoku/Models/AgentTask.swift",
+    "Sources/KiroKantoku/Models/Agent.swift",
+    "Sources/KiroKantoku/Services/AgentManager.swift",
+    "Sources/KiroKantoku/Services/TaskManager.swift",
+    "Tests/KiroKantokuTests/PixelOfficeTests.swift",
+    "docs/acp-methods.md"
+  ],
+  "directory_structure": "Sources/KiroKantoku/Views/PixelOffice/ contains all pixel office files. Sources/KiroKantoku/Models/ has data models. Sources/KiroKantoku/Services/ has AgentManager and TaskManager. Tests/KiroKantokuTests/ has test files."
+}

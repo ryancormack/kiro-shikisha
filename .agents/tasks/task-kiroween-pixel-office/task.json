@@ -1,0 +1,7 @@
+{
+  "task_id": "task-kiroween-pixel-office",
+  "task_description": "Retheme the Pixel Office as the 'House of Kiroween' (purple ghost-themed haunted mansion), improve text visibility, make character sprites more fun as ghosts, and wire ACP agent idle state into a new 'waitingForWork' character state.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

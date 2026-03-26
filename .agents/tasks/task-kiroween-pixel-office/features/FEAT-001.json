@@ -1,0 +1,23 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Retheme PixelOfficeConstants, PixelCharacter (add waitingForWork state), and PixelOfficeViewModel to support the House of Kiroween theme and ACP idle detection.",
+  "status": "in_progress",
+  "steps": [
+    "Step 1 - Update PixelOfficeConstants.swift: Replace characterPalettes with ghost-themed palettes (purples, violets, teals, spectral blues, ghostly greens - 8 palettes using body/glow pattern). Add static color hex strings for haunted mansion: darkPurpleWall, floorDark, floorLight, ghostGlow.",
+    "Step 2 - Update PixelCharacter.swift: Add 'case waitingForWork' to CharacterState enum. Add static method from(taskStatus:agentStatus:) -> CharacterState? where AgentStatus is from Agent.swift. When taskStatus == .working && agentStatus == .idle, return .waitingForWork. Otherwise delegate to existing from(taskStatus:). Keep existing from(taskStatus:) unchanged.",
+    "Step 3 - Update PixelOfficeViewModel.swift: Add method updateCharacters(from tasks: [AgentTask], agentStatuses: [UUID: AgentStatus]) that uses CharacterState.from(taskStatus:agentStatus:) instead of from(taskStatus:). Handle .waitingForWork in targetPosition same as .working/.idle (desk position). CRITICAL: update BOTH the macOS block AND the Linux fallback block identically.",
+    "Step 4 - Update PixelOfficeTests.swift: Add tests for waitingForWork mapping, from(taskStatus:agentStatus:) with various combos, and updateCharacters(from:agentStatuses:) method."
+  ],
+  "acceptance_criteria": [
+    "swift build completes with 0 errors",
+    "swift test passes all tests with 0 failures",
+    "CharacterState has .waitingForWork case",
+    "from(taskStatus: .working, agentStatus: .idle) returns .waitingForWork",
+    "PixelOfficeViewModel has updateCharacters(from:agentStatuses:) method in both platform blocks",
+    "New tests cover waitingForWork state"
+  ],
+  "verification": ["cd /projects/sandbox/kiro-kantoku && swift build && swift test"],
+  "blocked_reason": null,
+  "findings": ""
+}

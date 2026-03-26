@@ -12,6 +12,8 @@ public enum CharacterState: String, Sendable {
     case walking
     /// Character is standing idle
     case idle
+    /// Character is waiting for work (agent idle while task is working)
+    case waitingForWork
 
     /// Maps a TaskStatus to a CharacterState, or nil if the task should not be shown
     public static func from(taskStatus: TaskStatus) -> CharacterState? {
@@ -27,6 +29,17 @@ public enum CharacterState: String, Sendable {
         case .completed, .failed, .cancelled:
             return nil
         }
+    }
+
+    /// Maps a TaskStatus and optional AgentStatus to a CharacterState, or nil if the task should not be shown.
+    /// When a task is .working but the agent is .idle, returns .waitingForWork.
+    public static func from(taskStatus: TaskStatus, agentStatus: AgentStatus?) -> CharacterState? {
+        if taskStatus == .working || taskStatus == .starting {
+            if let agentStatus = agentStatus, agentStatus == .idle {
+                return .waitingForWork
+            }
+        }
+        return from(taskStatus: taskStatus)
     }
 }
 

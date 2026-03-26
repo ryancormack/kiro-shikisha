@@ -299,4 +299,77 @@ final class PixelOfficeTests: XCTestCase {
     func testCharacterPalettesNotEmpty() {
         XCTAssertFalse(PixelOfficeConstants.characterPalettes.isEmpty)
     }
+
+    // MARK: - WaitingForWork State Tests
+
+    func testWaitingForWorkStateMappingWithIdleAgent() {
+        XCTAssertEqual(
+            CharacterState.from(taskStatus: .working, agentStatus: .idle),
+            .waitingForWork
+        )
+    }
+
+    func testStartingTaskWithIdleAgentMapsToWaitingForWork() {
+        XCTAssertEqual(
+            CharacterState.from(taskStatus: .starting, agentStatus: .idle),
+            .waitingForWork
+        )
+    }
+
+    func testWorkingTaskWithActiveAgentMapsToWorking() {
+        XCTAssertEqual(
+            CharacterState.from(taskStatus: .working, agentStatus: .active),
+            .working
+        )
+    }
+
+    func testWorkingTaskWithNilAgentStatusMapsToWorking() {
+        XCTAssertEqual(
+            CharacterState.from(taskStatus: .working, agentStatus: nil),
+            .working
+        )
+    }
+
+    func testPausedTaskWithIdleAgentMapsToDrinkingCoffee() {
+        XCTAssertEqual(
+            CharacterState.from(taskStatus: .paused, agentStatus: .idle),
+            .drinkingCoffee
+        )
+    }
+
+    func testCompletedTaskWithAgentStatusMapsToNil() {
+        XCTAssertNil(
+            CharacterState.from(taskStatus: .completed, agentStatus: .idle)
+        )
+    }
+
+    func testViewModelWaitingForWorkWithAgentStatuses() async throws {
+        await MainActor.run {
+            let viewModel = PixelOfficeViewModel()
+            let task = AgentTask(
+                name: "Waiting task",
+                status: .working,
+                workspacePath: URL(fileURLWithPath: "/tmp/test")
+            )
+            let agentStatuses: [UUID: AgentStatus] = [task.id: .idle]
+            viewModel.updateCharacters(from: [task], agentStatuses: agentStatuses)
+            XCTAssertEqual(viewModel.characters.count, 1)
+            XCTAssertEqual(viewModel.characters[0].state, .waitingForWork)
+        }
+    }
+
+    func testViewModelWorkingWithActiveAgentStatus() async throws {
+        await MainActor.run {
+            let viewModel = PixelOfficeViewModel()
+            let task = AgentTask(
+                name: "Active task",
+                status: .working,
+                workspacePath: URL(fileURLWithPath: "/tmp/test")
+            )
+            let agentStatuses: [UUID: AgentStatus] = [task.id: .active]
+            viewModel.updateCharacters(from: [task], agentStatuses: agentStatuses)
+            XCTAssertEqual(viewModel.characters.count, 1)
+            XCTAssertEqual(viewModel.characters[0].state, .working)
+        }
+    }
 }

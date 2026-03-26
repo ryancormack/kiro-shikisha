@@ -81,6 +81,74 @@ public final class PixelOfficeViewModel {
         }
     }
 
+    /// Updates characters based on current task list with agent status information
+    public func updateCharacters(from tasks: [AgentTask], agentStatuses: [UUID: AgentStatus]) {
+        let relevantTasks = tasks.filter { CharacterState.from(taskStatus: $0.status, agentStatus: agentStatuses[$0.id]) != nil }
+        let relevantIds = Set(relevantTasks.map { $0.id })
+        let existingIds = Set(characters.map { $0.taskId })
+
+        // Remove characters for tasks that are no longer relevant
+        let removedIds = existingIds.subtracting(relevantIds)
+        for id in removedIds {
+            deskAssignments.removeValue(forKey: id)
+            coffeeAssignments.removeValue(forKey: id)
+        }
+        characters.removeAll { removedIds.contains($0.taskId) }
+
+        // Add or update characters
+        for task in relevantTasks {
+            guard let targetState = CharacterState.from(taskStatus: task.status, agentStatus: agentStatuses[task.id]) else { continue }
+
+            if let index = characters.firstIndex(where: { $0.taskId == task.id }) {
+                // Update existing character
+                let (tx, ty) = targetPosition(for: task.id, state: targetState)
+                characters[index].taskName = task.name
+                characters[index].targetX = tx
+                characters[index].targetY = ty
+
+                if characters[index].isAtTarget {
+                    characters[index].state = targetState
+                } else {
+                    characters[index].state = .walking
+                }
+
+                // Update assignments if state changed
+                if targetState == .drinkingCoffee {
+                    deskAssignments.removeValue(forKey: task.id)
+                    if coffeeAssignments[task.id] == nil {
+                        coffeeAssignments[task.id] = nextAvailableCoffeeSpot()
+                    }
+                } else {
+                    coffeeAssignments.removeValue(forKey: task.id)
+                    if deskAssignments[task.id] == nil {
+                        deskAssignments[task.id] = nextAvailableDesk()
+                    }
+                }
+            } else {
+                // Create new character
+                let charIndex = characterIndex(for: task.id)
+
+                // Assign position
+                if targetState == .drinkingCoffee {
+                    coffeeAssignments[task.id] = nextAvailableCoffeeSpot()
+                } else {
+                    deskAssignments[task.id] = nextAvailableDesk()
+                }
+
+                let (px, py) = targetPosition(for: task.id, state: targetState)
+                let character = PixelCharacter(
+                    taskId: task.id,
+                    taskName: task.name,
+                    characterIndex: charIndex,
+                    positionX: px,
+                    positionY: py,
+                    state: targetState
+                )
+                characters.append(character)
+            }
+        }
+    }
+
     /// Advance character positions toward their targets
     public func moveCharactersTowardTargets() {
         let speed = PixelOfficeConstants.moveSpeed
@@ -126,7 +194,7 @@ public final class PixelOfficeViewModel {
             let spot = coffeeAssignments[taskId] ?? nextAvailableCoffeeSpot()
             let pos = PixelOfficeConstants.coffeeBarPositions[spot]
             return (Double(pos.x), Double(pos.y))
-        case .working, .needsInput, .idle:
+        case .working, .needsInput, .idle, .waitingForWork:
             let desk = deskAssignments[taskId] ?? nextAvailableDesk()
             let pos = PixelOfficeConstants.deskPositions[desk]
             return (Double(pos.x), Double(pos.y))
@@ -223,6 +291,74 @@ public final class PixelOfficeViewModel {
         }
     }
 
+    /// Updates characters based on current task list with agent status information
+    public func updateCharacters(from tasks: [AgentTask], agentStatuses: [UUID: AgentStatus]) {
+        let relevantTasks = tasks.filter { CharacterState.from(taskStatus: $0.status, agentStatus: agentStatuses[$0.id]) != nil }
+        let relevantIds = Set(relevantTasks.map { $0.id })
+        let existingIds = Set(characters.map { $0.taskId })
+
+        // Remove characters for tasks that are no longer relevant
+        let removedIds = existingIds.subtracting(relevantIds)
+        for id in removedIds {
+            deskAssignments.removeValue(forKey: id)
+            coffeeAssignments.removeValue(forKey: id)
+        }
+        characters.removeAll { removedIds.contains($0.taskId) }
+
+        // Add or update characters
+        for task in relevantTasks {
+            guard let targetState = CharacterState.from(taskStatus: task.status, agentStatus: agentStatuses[task.id]) else { continue }
+
+            if let index = characters.firstIndex(where: { $0.taskId == task.id }) {
+                // Update existing character
+                let (tx, ty) = targetPosition(for: task.id, state: targetState)
+                characters[index].taskName = task.name
+                characters[index].targetX = tx
+                characters[index].targetY = ty
+
+                if characters[index].isAtTarget {
+                    characters[index].state = targetState
+                } else {
+                    characters[index].state = .walking
+                }
+
+                // Update assignments if state changed
+                if targetState == .drinkingCoffee {
+                    deskAssignments.removeValue(forKey: task.id)
+                    if coffeeAssignments[task.id] == nil {
+                        coffeeAssignments[task.id] = nextAvailableCoffeeSpot()
+                    }
+                } else {
+                    coffeeAssignments.removeValue(forKey: task.id)
+                    if deskAssignments[task.id] == nil {
+                        deskAssignments[task.id] = nextAvailableDesk()
+                    }
+                }
+            } else {
+                // Create new character
+                let charIndex = characterIndex(for: task.id)
+
+                // Assign position
+                if targetState == .drinkingCoffee {
+                    coffeeAssignments[task.id] = nextAvailableCoffeeSpot()
+                } else {
+                    deskAssignments[task.id] = nextAvailableDesk()
+                }
+
+                let (px, py) = targetPosition(for: task.id, state: targetState)
+                let character = PixelCharacter(
+                    taskId: task.id,
+                    taskName: task.name,
+                    characterIndex: charIndex,
+                    positionX: px,
+                    positionY: py,
+                    state: targetState
+                )
+                characters.append(character)
+            }
+        }
+    }
+
     public func moveCharactersTowardTargets() {
         let speed = PixelOfficeConstants.moveSpeed
         for i in characters.indices {
@@ -262,7 +398,7 @@ public final class PixelOfficeViewModel {
             let spot = coffeeAssignments[taskId] ?? nextAvailableCoffeeSpot()
             let pos = PixelOfficeConstants.coffeeBarPositions[spot]
             return (Double(pos.x), Double(pos.y))
-        case .working, .needsInput, .idle:
+        case .working, .needsInput, .idle, .waitingForWork:
             let desk = deskAssignments[taskId] ?? nextAvailableDesk()
             let pos = PixelOfficeConstants.deskPositions[desk]
             return (Double(pos.x), Double(pos.y))
