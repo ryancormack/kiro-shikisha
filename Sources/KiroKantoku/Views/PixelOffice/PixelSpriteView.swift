@@ -1,7 +1,7 @@
 #if os(macOS)
 import SwiftUI
 
-/// Renders a single pixel character using SwiftUI shapes
+/// Renders a single pixel ghost character using SwiftUI shapes
 struct PixelSpriteView: View {
     let character: PixelCharacter
 
@@ -11,183 +11,244 @@ struct PixelSpriteView: View {
         return palettes[index]
     }
 
-    private var hairColor: Color { Color(hex: palette.hair) }
-    private var shirtColor: Color { Color(hex: palette.shirt) }
-    private let skinColor = Color(red: 0.93, green: 0.78, blue: 0.65)
-    private let legColor = Color(red: 0.22, green: 0.22, blue: 0.28)
-    private let shoeColor = Color(red: 0.18, green: 0.18, blue: 0.22)
+    /// Ghost body color (mapped from palette.hair)
+    private var bodyColor: Color { Color(hex: palette.hair) }
+    /// Accent / glow color (mapped from palette.shirt)
+    private var glowColor: Color { Color(hex: palette.shirt) }
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                characterBody
-                    .frame(width: 24, height: 32)
+                ghostBody
+                    .frame(width: 28, height: 36)
 
                 if character.state == .needsInput {
                     speechBubble
+                        .offset(y: -20)
+                }
+
+                if character.state == .waitingForWork {
+                    zzzBubble
                         .offset(y: -18)
                 }
             }
 
             Text(character.taskName)
-                .font(.system(size: 8))
-                .foregroundColor(.secondary)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.white)
                 .lineLimit(1)
-                .frame(width: 40)
+                .padding(.horizontal, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.black.opacity(0.7))
+                )
+                .frame(width: 50)
         }
     }
 
-    // MARK: - Character Body
+    // MARK: - Ghost Body
 
     @ViewBuilder
-    private var characterBody: some View {
+    private var ghostBody: some View {
+        let verticalBob = ghostBob
+
         ZStack {
-            // Legs
-            legsView
+            // Glow effect behind ghost
+            Ellipse()
+                .fill(glowColor.opacity(0.25))
+                .frame(width: 22, height: 24)
+                .blur(radius: 3)
+                .offset(y: verticalBob)
 
-            // Body (torso)
-            Rectangle()
-                .fill(shirtColor)
-                .frame(width: 12, height: 10)
-                .offset(y: 2)
+            VStack(spacing: 0) {
+                // Main ghost body (rounded top)
+                Capsule()
+                    .fill(bodyColor)
+                    .frame(width: 18, height: 20)
 
-            // Arms
-            armsView
+                // Wavy bottom edge (3 scallops)
+                HStack(spacing: 0) {
+                    Circle()
+                        .fill(bodyColor)
+                        .frame(width: 6, height: 6)
+                    Circle()
+                        .fill(bodyColor)
+                        .frame(width: 6, height: 6)
+                    Circle()
+                        .fill(bodyColor)
+                        .frame(width: 6, height: 6)
+                }
+                .offset(y: -3)
+            }
+            .offset(y: verticalBob)
 
-            // Head
-            headView
+            // Eyes
+            ghostEyes
+                .offset(y: verticalBob - 2)
+
+            // State-specific overlays
+            stateOverlay
+                .offset(y: verticalBob)
         }
     }
 
-    // MARK: - Head
-
-    private var headView: some View {
-        ZStack {
-            // Hair (back)
-            Ellipse()
-                .fill(hairColor)
-                .frame(width: 12, height: 12)
-
-            // Face
-            Ellipse()
-                .fill(skinColor)
-                .frame(width: 10, height: 9)
-                .offset(y: 1)
-        }
-        .offset(y: idleBob - 11)
-    }
-
-    // MARK: - Arms
+    // MARK: - Ghost Eyes
 
     @ViewBuilder
-    private var armsView: some View {
+    private var ghostEyes: some View {
+        switch character.state {
+        case .waitingForWork:
+            // Half-closed eyes (thin horizontal ovals)
+            HStack(spacing: 4) {
+                Ellipse()
+                    .fill(Color.white)
+                    .frame(width: 5, height: 2)
+                Ellipse()
+                    .fill(Color.white)
+                    .frame(width: 5, height: 2)
+            }
+        default:
+            // Normal friendly round eyes
+            HStack(spacing: 4) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 5, height: 5)
+                    Circle()
+                        .fill(Color.black)
+                        .frame(width: 2, height: 2)
+                        .offset(x: 0.5, y: 0.5)
+                }
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 5, height: 5)
+                    Circle()
+                        .fill(Color.black)
+                        .frame(width: 2, height: 2)
+                        .offset(x: 0.5, y: 0.5)
+                }
+            }
+        }
+    }
+
+    // MARK: - State Overlay
+
+    @ViewBuilder
+    private var stateOverlay: some View {
         switch character.state {
         case .working:
-            workingArms
+            workingOverlay
         case .drinkingCoffee:
-            coffeeArms
-        default:
-            // Default arms at sides
-            HStack(spacing: 10) {
-                Rectangle()
-                    .fill(skinColor)
-                    .frame(width: 4, height: 8)
-                Rectangle()
-                    .fill(skinColor)
-                    .frame(width: 4, height: 8)
-            }
-            .offset(y: 2)
+            potionOverlay
+        case .walking:
+            EmptyView()
+        case .idle:
+            EmptyView()
+        case .needsInput:
+            EmptyView()
+        case .waitingForWork:
+            EmptyView()
         }
     }
 
-    private var workingArms: some View {
+    // MARK: - Working Overlay (arms + keyboard glow)
+
+    private var workingOverlay: some View {
         let raised = character.animationFrame % 2 == 0
-        return HStack(spacing: 6) {
-            Rectangle()
-                .fill(skinColor)
-                .frame(width: 4, height: 6)
-                .offset(y: raised ? -4 : -2)
-            Rectangle()
-                .fill(skinColor)
-                .frame(width: 4, height: 6)
-                .offset(y: raised ? -2 : -4)
-        }
-        .overlay(
+        return ZStack {
+            // Left arm bump
+            Circle()
+                .fill(bodyColor)
+                .frame(width: 5, height: 5)
+                .offset(x: -12, y: raised ? -2 : 0)
+
+            // Right arm bump
+            Circle()
+                .fill(bodyColor)
+                .frame(width: 5, height: 5)
+                .offset(x: 12, y: raised ? 0 : -2)
+
             // Keyboard glow
-            Rectangle()
-                .fill(Color.cyan.opacity(0.5))
-                .frame(width: 10, height: 2)
-                .offset(y: 2)
-        )
-        .offset(y: 0)
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.cyan.opacity(0.6))
+                .frame(width: 12, height: 3)
+                .offset(y: 10)
+        }
     }
 
-    private var coffeeArms: some View {
-        HStack(spacing: 8) {
-            // Left arm at side
-            Rectangle()
-                .fill(skinColor)
-                .frame(width: 4, height: 8)
-                .offset(y: 2)
+    // MARK: - Potion Overlay (drinking coffee -> holding potion)
 
-            // Right arm extended with cup
+    private var potionOverlay: some View {
+        ZStack {
+            // Left arm bump (at side)
+            Circle()
+                .fill(bodyColor)
+                .frame(width: 5, height: 5)
+                .offset(x: -12, y: 0)
+
+            // Right arm bump extended with potion bottle
+            Circle()
+                .fill(bodyColor)
+                .frame(width: 5, height: 5)
+                .offset(x: 13, y: -2)
+
+            // Potion bottle
             VStack(spacing: 0) {
+                // Bottle neck
                 Rectangle()
-                    .fill(skinColor)
-                    .frame(width: 4, height: 6)
-                // Coffee cup
-                Rectangle()
-                    .fill(Color(red: 0.55, green: 0.35, blue: 0.17))
-                    .frame(width: 4, height: 4)
-                    .cornerRadius(1)
+                    .fill(Color(red: 0.3, green: 0.6, blue: 0.3))
+                    .frame(width: 2, height: 3)
+                // Bottle body
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Color(red: 0.4, green: 0.2, blue: 0.6))
+                    .frame(width: 4, height: 5)
             }
-            .offset(y: -2)
+            .offset(x: 16, y: -4)
         }
-    }
-
-    // MARK: - Legs
-
-    @ViewBuilder
-    private var legsView: some View {
-        let walkOffset: CGFloat = character.state == .walking
-            ? (character.animationFrame % 2 == 0 ? 3 : -3)
-            : 0
-
-        HStack(spacing: 4) {
-            Rectangle()
-                .fill(legColor)
-                .frame(width: 4, height: 8)
-                .offset(x: walkOffset)
-            Rectangle()
-                .fill(legColor)
-                .frame(width: 4, height: 8)
-                .offset(x: -walkOffset)
-        }
-        .offset(y: 13)
     }
 
     // MARK: - Speech Bubble
 
     private var speechBubble: some View {
-        let scale: CGFloat = character.animationFrame % 2 == 0 ? 1.0 : 1.15
+        let scale: CGFloat = character.animationFrame % 2 == 0 ? 1.0 : 1.2
 
         return ZStack {
-            RoundedRectangle(cornerRadius: 3)
+            RoundedRectangle(cornerRadius: 4)
                 .fill(Color.yellow)
-                .frame(width: 14, height: 12)
+                .frame(width: 16, height: 14)
 
             Text("!")
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 10, weight: .bold))
                 .foregroundColor(.black)
         }
         .scaleEffect(scale)
     }
 
+    // MARK: - Zzz Bubble (waitingForWork)
+
+    private var zzzBubble: some View {
+        let drift: CGFloat = character.animationFrame % 2 == 0 ? 0 : -2
+
+        return Text("zzz")
+            .font(.system(size: 7, weight: .medium))
+            .foregroundColor(glowColor.opacity(0.8))
+            .offset(x: 6, y: drift)
+    }
+
     // MARK: - Helpers
 
-    private var idleBob: CGFloat {
-        guard character.state == .idle else { return 0 }
-        return character.animationFrame % 2 == 0 ? 0 : -1
+    private var ghostBob: CGFloat {
+        switch character.state {
+        case .idle:
+            return character.animationFrame % 2 == 0 ? 0 : -2
+        case .walking:
+            return character.animationFrame % 2 == 0 ? -2 : 2
+        case .waitingForWork:
+            return character.animationFrame % 2 == 0 ? -1 : 1
+        default:
+            return 0
+        }
     }
 }
 
