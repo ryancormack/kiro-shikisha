@@ -34,6 +34,7 @@ public struct DashboardView: View {
                 QuickActionsView(
                     onCancelAll: cancelAllTasks,
                     onRefreshAll: refreshAllAgents,
+                    onSummarizeAll: summarizeAllTasks,
                     onNewTask: onNewTask
                 )
             }
@@ -145,6 +146,11 @@ public struct DashboardView: View {
         }
     }
 
+    /// Summarizes all active tasks
+    private func summarizeAllTasks() async {
+        _ = await taskManager.summarizeAllActiveTasks()
+    }
+
     /// Refreshes all agents (reconnects them)
     private func refreshAllAgents() async {
         // Placeholder that would reconnect agents
@@ -163,6 +169,6 @@ public struct DashboardView: View {
     )
     .environment(AgentManager())
     .environment(TaskManager())
-    .frame(width: 800, height: 600)
+    .frame(width: 900, height: 600)
 }
 #endif

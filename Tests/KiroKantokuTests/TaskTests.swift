@@ -1986,4 +1986,168 @@ final class TaskTests: XCTestCase {
         XCTAssertEqual(taskManager.tasks.count, 0)
         XCTAssertNil(taskManager.tasks[pausedTask.id])
     }
+
+    // MARK: - Auto-Resume Disabled Tests
+
+    func testRestoredTasksStayPausedNoAutoReconnect() async throws {
+        await MainActor.run {
+            let taskManager = TaskManager()
+            let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+            // Create entries that simulate tasks that were active before app quit
+            let workingEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Working task with session",
+                statusRawValue: "working",
+                workspacePath: "/Users/test/projects/repo1",
+                gitBranch: "feature/a",
+                sessionId: "session-abc",
+                createdAt: fixedDate
+            )
+
+            let startingEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Starting task with session",
+                statusRawValue: "starting",
+                workspacePath: "/Users/test/projects/repo2",
+                sessionId: "session-def",
+                createdAt: fixedDate
+            )
+
+            let needsAttentionEntry = AppStateManager.TaskPersistenceEntry(
+                id: UUID(),
+                name: "Attention task with session",
+                statusRawValue: "needsAttention",
+                workspacePath: "/Users/test/projects/repo3",
+                sessionId: "session-ghi",
+                createdAt: fixedDate
+            )
+
+            taskManager.restoreTasks(from: [workingEntry, startingEntry, needsAttentionEntry])
+
+            XCTAssertEqual(taskManager.tasks.count, 3)
+
+            // All active tasks should be restored as paused (no auto-reconnect)
+            let restoredWorking = taskManager.tasks[workingEntry.id]
+            XCTAssertNotNil(restoredWorking)
+            XCTAssertEqual(restoredWorking?.status, .paused,
+                "Working task should be restored as paused, not auto-reconnected")
+            XCTAssertEqual(restoredWorking?.sessionId, "session-abc",
+                "Session ID should be preserved for manual resume")
+
+            let restoredStarting = taskManager.tasks[startingEntry.id]
+            XCTAssertNotNil(restoredStarting)
+            XCTAssertEqual(restoredStarting?.status, .paused,
+                "Starting task should be restored as paused, not auto-reconnected")
+            XCTAssertEqual(restoredStarting?.sessionId, "session-def")
+
+            let restoredAttention = taskManager.tasks[needsAttentionEntry.id]
+            XCTAssertNotNil(restoredAttention)
+            XCTAssertEqual(restoredAttention?.status, .paused,
+                "NeedsAttention task should be restored as paused, not auto-reconnected")
+            XCTAssertEqual(restoredAttention?.sessionId, "session-ghi")
+
+            // None should be in activeTasks (all are paused)
+            XCTAssertTrue(taskManager.activeTasks.isEmpty,
+                "No tasks should be active after restore - they should all be paused")
+        }
+    }
+
+    // MARK: - Summarize All Active Tasks Tests
+
+    @MainActor
+    func testSummarizeAllActiveTasksWithNoActiveTasks() async throws {
+        let taskManager = TaskManager()
+        let path = URL(fileURLWithPath: "/Users/test/projects/repo")
+
+        // Create tasks in non-active states
+        let pendingTask = taskManager.createTask(from: TaskCreationRequest(name: "Pending task", workspacePath: path))
+        XCTAssertEqual(pendingTask.status, .pending)
+
+        let pausedTask = taskManager.createTask(from: TaskCreationRequest(name: "Paused task", workspacePath: path))
+        taskManager.pauseTask(id: pausedTask.id)
+        XCTAssertEqual(pausedTask.status, .paused)
+
+        let completedTask = taskManager.createTask(from: TaskCreationRequest(name: "Completed task", workspacePath: path))
+        taskManager.completeTask(id: completedTask.id)
+        XCTAssertEqual(completedTask.status, .completed)
+
+        // Verify no active tasks
+        XCTAssertTrue(taskManager.activeTasks.isEmpty,
+            "There should be no active tasks")
+
+        // On Linux the stub returns 0
+        let count = await taskManager.summarizeAllActiveTasks()
+        XCTAssertEqual(count, 0,
+            "summarizeAllActiveTasks should return 0 when there are no active tasks")
+    }
+
+    @MainActor
+    func testSummarizeAllActiveTasksOnlyTargetsActiveTasks() async throws {
+        let taskManager = TaskManager()
+        let fixedDate = Date(timeIntervalSinceReferenceDate: 700000000)
+
+        // Restore tasks in various states
+        let workingEntry = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Was working",
+            statusRawValue: "working",
+            workspacePath: "/Users/test/projects/repo1",
+            sessionId: "session-1",
+            createdAt: fixedDate
+        )
+
+        let completedEntry = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Completed",
+            statusRawValue: "completed",
+            workspacePath: "/Users/test/projects/repo2",
+            createdAt: fixedDate
+        )
+
+        let pendingEntry = AppStateManager.TaskPersistenceEntry(
+            id: UUID(),
+            name: "Pending",
+            statusRawValue: "pending",
+            workspacePath: "/Users/test/projects/repo3",
+            createdAt: fixedDate
+        )
+
+        taskManager.restoreTasks(from: [workingEntry, completedEntry, pendingEntry])
+
+        // Working -> paused after restore, completed stays completed, pending stays pending
+        XCTAssertEqual(taskManager.tasks[workingEntry.id]?.status, .paused)
+        XCTAssertEqual(taskManager.tasks[completedEntry.id]?.status, .completed)
+        XCTAssertEqual(taskManager.tasks[pendingEntry.id]?.status, .pending)
+
+        // No tasks are active (working was restored as paused)
+        XCTAssertTrue(taskManager.activeTasks.isEmpty,
+            "No tasks should be active after restore")
+
+        // Manually set one task to working with an agentId to simulate an active task
+        let workingTask = taskManager.tasks[workingEntry.id]!
+        workingTask.status = .working
+        let fakeAgentId = UUID()
+        workingTask.agentId = fakeAgentId
+
+        // Now there should be exactly one active task with an agentId
+        XCTAssertEqual(taskManager.activeTasks.count, 1,
+            "Should have exactly one active task")
+        XCTAssertEqual(taskManager.activeTasks.first?.agentId, fakeAgentId,
+            "Active task should have an agentId")
+
+        // Verify non-active tasks would not be candidates
+        let nonActiveWithNoAgent = taskManager.allTasks.filter { !$0.status.isActive }
+        XCTAssertEqual(nonActiveWithNoAgent.count, 2,
+            "Two tasks should not be active")
+        for task in nonActiveWithNoAgent {
+            XCTAssertNil(task.agentId,
+                "Non-active tasks should not have agentIds (not connected to agents)")
+        }
+
+        // On Linux the stub returns 0 regardless
+        let count = await taskManager.summarizeAllActiveTasks()
+        XCTAssertEqual(count, 0,
+            "On Linux stub, summarizeAllActiveTasks always returns 0")
+    }
 }

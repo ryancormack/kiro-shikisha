@@ -311,6 +311,25 @@ public final class TaskManager {
         }
     }
 
+    /// Sends a summary prompt to all active tasks, returns the count of tasks prompted
+    public func summarizeAllActiveTasks() async -> Int {
+        guard let agentManager = agentManager else { return 0 }
+
+        let summaryPrompt = "Please provide a brief summary of what you have been working on most recently, what progress has been made, any blockers or issues encountered, and whether you need any input or decisions from me."
+
+        var promptedCount = 0
+        for task in activeTasks {
+            guard let agentId = task.agentId else { continue }
+            do {
+                try await agentManager.sendPrompt(agentId: agentId, prompt: summaryPrompt)
+                promptedCount += 1
+            } catch {
+                print("[TaskManager] Failed to send summary prompt to task '\(task.name)': \(error)")
+            }
+        }
+        return promptedCount
+    }
+
     // MARK: - Private Reconnect Helper
 
     /// Shared reconnect logic for resumeTask and reopenTask.
@@ -541,6 +560,10 @@ public final class TaskManager {
         persistCurrentState()
     }
 
+    public func summarizeAllActiveTasks() async -> Int {
+        return 0
+    }
+
     public func reopenTask(id: UUID) async throws {
         throw AgentManagerError.platformNotSupported
     }
@@ -672,6 +695,10 @@ public final class TaskManager {
             tasks[task.id] = task
         }
         persistCurrentState()
+    }
+
+    public func summarizeAllActiveTasks() async -> Int {
+        return 0
     }
 
     public func reopenTask(id: UUID) async throws {
