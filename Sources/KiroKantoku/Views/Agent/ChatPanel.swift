@@ -91,6 +91,7 @@ public struct ChatPanel: View {
                 } else {
                     if let usage = agent.contextUsagePercentage {
                         ContextUsageBar(percentage: usage)
+                            .padding(.top, DesignConstants.spacingSM)
                     }
 
                     ConfigSelectorBar(agent: agent, onError: { error in
@@ -143,7 +144,6 @@ public struct ChatPanel: View {
                     }, onSlashCommand: { command, optionValue in
                         handleSlashCommand(command, optionValue: optionValue)
                     })
-                    .padding()
                 }
                 
                 if let error = errorMessage {

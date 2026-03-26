@@ -30,7 +30,7 @@ public struct CodePanel: View {
 
             // Tab content - all views stay alive to preserve scroll state
             ZStack {
-                FilesChangedView(workspacePath: workspacePath)
+                FilesChangedView(workspacePath: workspacePath, fileChangeCount: agent.fileChanges.count)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .opacity(selectedTab == .filesChanged ? 1 : 0)
                     .allowsHitTesting(selectedTab == .filesChanged)

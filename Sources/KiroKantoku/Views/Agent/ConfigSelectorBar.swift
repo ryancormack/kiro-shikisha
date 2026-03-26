@@ -15,8 +15,6 @@ struct ConfigSelectorBar: View {
         let hasModels = !agent.availableModels.isEmpty
 
         if hasModes || hasModels {
-            VStack(spacing: 0) {
-            Divider()
             HStack(spacing: DesignConstants.spacingSM) {
                 if hasModes {
                     Picker("Agent", selection: $selectedModeId) {
@@ -72,7 +70,6 @@ struct ConfigSelectorBar: View {
                     selectedModelId = newValue
                 }
             }
-            } // end VStack
         }
     }
 }
