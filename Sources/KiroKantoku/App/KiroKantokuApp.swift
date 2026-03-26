@@ -44,38 +44,10 @@ struct KiroKantokuApp: App {
                 taskManager.appSettings = appSettings
                 // Kill only our own kiro-cli processes from previous runs
                 killOwnedProcesses()
-                // Restore persisted tasks
+                // Restore persisted tasks (active tasks are restored as .paused;
+                // users must manually Resume/Re-open them)
                 let entries = appStateManager.persistedTaskEntries
                 taskManager.restoreTasks(from: entries)
-                // Task-centric auto-reconnect for tasks with saved sessions.
-                // Collect task info while on @MainActor, then use it in the task group.
-                let tasksToReconnect: [(name: String, id: UUID)] = taskManager.allTasks
-                    .filter { $0.status == .paused && $0.sessionId != nil }
-                    .map { (name: $0.name, id: $0.id) }
-
-                Task {
-                    for taskInfo in tasksToReconnect {
-                        print("[TaskReconnect] Starting reconnect for: \(taskInfo.name)")
-                        do {
-                            try await taskManager.reopenTask(id: taskInfo.id)
-                            print("[TaskReconnect] Successfully reconnected: \(taskInfo.name)")
-                        } catch {
-                            if let acpError = error as? ACPConnectionError,
-                               case .notLoggedIn = acpError {
-                                print("[TaskReconnect] Auth error for \(taskInfo.name): not logged in")
-                                appStateManager.addGlobalError(ErrorItem(
-                                    message: "Not logged in. Please run `kiro-cli login` in your terminal, then relaunch the app."
-                                ))
-                                if let task = taskManager.getTask(id: taskInfo.id) {
-                                    task.status = .needsAttention
-                                    task.attentionReason = "Not logged in"
-                                }
-                                break
-                            }
-                            print("[TaskReconnect] Failed for \(taskInfo.name): \(error)")
-                        }
-                    }
-                }
             }
             .onChange(of: appSettings.kirocliPath) { _, _ in
                 // Update agent manager when settings change

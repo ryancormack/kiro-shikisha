@@ -9,22 +9,28 @@ public struct QuickActionsView: View {
     let onCancelAll: () async -> Void
     /// Callback when refresh all is triggered
     let onRefreshAll: () async -> Void
+    /// Callback when summarize all is triggered
+    let onSummarizeAll: () async -> Void
     /// Callback when new task is requested
     let onNewTask: (() -> Void)?
 
     @State private var isCancellingAll: Bool = false
     @State private var isRefreshingAll: Bool = false
+    @State private var isSummarizingAll: Bool = false
     @State private var isNewTaskHovered: Bool = false
     @State private var isCancelHovered: Bool = false
     @State private var isRefreshHovered: Bool = false
+    @State private var isSummarizeHovered: Bool = false
 
     public init(
         onCancelAll: @escaping () async -> Void,
         onRefreshAll: @escaping () async -> Void,
+        onSummarizeAll: @escaping () async -> Void,
         onNewTask: (() -> Void)? = nil
     ) {
         self.onCancelAll = onCancelAll
         self.onRefreshAll = onRefreshAll
+        self.onSummarizeAll = onSummarizeAll
         self.onNewTask = onNewTask
     }
 
@@ -55,6 +61,9 @@ public struct QuickActionsView: View {
 
             // Cancel All Tasks button
             cancelAllButton
+
+            // Summarize All button
+            summarizeAllButton
 
             // Refresh All button
             refreshAllButton
@@ -144,6 +153,41 @@ public struct QuickActionsView: View {
         .help("Cancel all active tasks")
     }
 
+    private var summarizeAllButton: some View {
+        Button {
+            Task {
+                isSummarizingAll = true
+                await onSummarizeAll()
+                isSummarizingAll = false
+            }
+        } label: {
+            HStack(spacing: 4) {
+                if isSummarizingAll {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "text.bubble")
+                        .font(.system(size: 12))
+                }
+                Text("Summarize All")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundColor(hasActiveTasks ? .accentColor : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: DesignConstants.buttonCornerRadius).fill(Color.primary.opacity(isSummarizeHovered ? DesignConstants.hoverBackgroundOpacity : 0)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasActiveTasks || isSummarizingAll)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isSummarizeHovered = hovering
+            }
+        }
+        .help("Request a summary from all active tasks")
+    }
+
     private var refreshAllButton: some View {
         Button {
             Task {
@@ -194,12 +238,15 @@ public struct QuickActionsView: View {
         onRefreshAll: {
             try? await Task.sleep(for: .seconds(1))
         },
+        onSummarizeAll: {
+            try? await Task.sleep(for: .seconds(1))
+        },
         onNewTask: {
             print("New task requested")
         }
     )
     .environment(TaskManager())
     .padding()
-    .frame(width: 500)
+    .frame(width: 600)
 }
 #endif
