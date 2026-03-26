@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "feat",
   "description": "Retheme PixelOfficeView as the House of Kiroween with dark purple floor/walls, atmospheric decorations, updated legend, and wire AgentManager for agent status detection.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Step 1 - Update PixelOfficeView.swift header and floor: Change header from 'Pixel Office' to 'House of Kiroween'. Replace floor tile colors: lightTan -> Color(red: 0.15, green: 0.08, blue: 0.20), darkTan -> Color(red: 0.12, green: 0.06, blue: 0.16). Replace wall color with dark stone purple: Color(red: 0.20, green: 0.12, blue: 0.25).",
     "Step 2 - Add atmospheric decorations: In furnitureLayer, add a few simple floating candle views (small yellow/orange flame shapes positioned near walls), and/or cobweb corner decorations. Keep these simple using Circle/Ellipse/Rectangle shapes.",
@@ -20,5 +20,5 @@
   ],
   "verification": ["cd /projects/sandbox/kiro-kantoku && swift build && swift test"],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "258 tests, 0 failures. All 7 changes applied: header renamed, floor/wall colors dark purple, FloatingCandleView added to PixelFurnitureView.swift, candles placed in furnitureLayer, legend includes Waiting for Work, AgentManager wired via @Environment, updateCharacters builds agentStatuses dictionary, background uses dark purple."
 }
