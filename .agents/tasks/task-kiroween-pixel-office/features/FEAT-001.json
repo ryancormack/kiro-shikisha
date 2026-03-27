@@ -1,0 +1,19 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Retheme PixelOfficeConstants, PixelCharacter (add waitingForWork state), and PixelOfficeViewModel to support the House of Kiroween theme and ACP idle detection.",
+  "status": "completed",
+  "steps": [
+    "Step 1 - Update PixelOfficeConstants.swift: Replace characterPalettes with ghost-themed palettes.",
+    "Step 2 - Update PixelCharacter.swift: Add waitingForWork case and from(taskStatus:agentStatus:) method.",
+    "Step 3 - Update PixelOfficeViewModel.swift: Add updateCharacters(from:agentStatuses:) in both platform blocks.",
+    "Step 4 - Update PixelOfficeTests.swift: Add 8 new tests for waitingForWork state."
+  ],
+  "acceptance_criteria": [
+    "swift build completes with 0 errors",
+    "swift test passes 258 tests with 0 failures"
+  ],
+  "verification": ["cd /projects/sandbox/kiro-kantoku && swift build && swift test"],
+  "blocked_reason": null,
+  "findings": "258 tests, 0 failures. All changes applied to both platform blocks."
+}

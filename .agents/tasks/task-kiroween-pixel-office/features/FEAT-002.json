@@ -1,0 +1,17 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Retheme PixelSpriteView as cute ghost characters with improved name text visibility, and retheme PixelFurnitureView as haunted mansion furniture.",
+  "status": "completed",
+  "steps": [
+    "Step 1 - Rethemed PixelSpriteView.swift as ghost characters with 6 visual states and improved name text.",
+    "Step 2 - Rethemed PixelFurnitureView.swift with gothic desk, throne, potion cauldron, dark stone counter, jack-o-lantern."
+  ],
+  "acceptance_criteria": [
+    "swift build completes with 0 errors",
+    "swift test passes 258 tests with 0 failures"
+  ],
+  "verification": ["cd /projects/sandbox/kiro-kantoku && swift build && swift test"],
+  "blocked_reason": null,
+  "findings": "258 tests, 0 failures. Ghost sprites and haunted furniture complete."
+}

@@ -6,9 +6,11 @@ public struct MainView: View {
     @Environment(AgentManager.self) var agentManager
     @Environment(AppStateManager.self) var appStateManager
     @Environment(TaskManager.self) var taskManager
+    @Environment(AppSettings.self) var appSettings
 
     @State private var showDashboard: Bool = false
     @State private var showNewTaskSheet: Bool = false
+    @State private var showPixelOffice: Bool = false
 
     /// The currently selected task, looked up from taskManager
     private var selectedTask: AgentTask? {
@@ -76,6 +78,15 @@ public struct MainView: View {
                         Image(systemName: showDashboard ? "person.fill" : "rectangle.grid.2x2")
                             .help(showDashboard ? "Show Single Task" : "Show Dashboard")
                     }
+
+                    if appSettings.showPixelOffice {
+                        Button {
+                            showPixelOffice.toggle()
+                        } label: {
+                            Image(systemName: showPixelOffice ? "building.2.fill" : "building.2")
+                                .help(showPixelOffice ? "Hide Pixel Office" : "Show Pixel Office")
+                        }
+                    }
                 }
             }
         }
@@ -89,6 +100,10 @@ public struct MainView: View {
                 }
                 showNewTaskSheet = false
             }
+        }
+        .sheet(isPresented: $showPixelOffice) {
+            PixelOfficeView()
+                .frame(minWidth: 700, minHeight: 520)
         }
         } // ErrorBannerContainer
     }
@@ -155,5 +170,6 @@ struct PlaceholderView: View {
         .environment(AgentManager())
         .environment(AppStateManager())
         .environment(TaskManager())
+        .environment(AppSettings())
 }
 #endif

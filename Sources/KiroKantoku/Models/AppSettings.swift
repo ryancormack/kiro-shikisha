@@ -68,6 +68,11 @@ public final class AppSettings {
         didSet { UserDefaults.standard.set(codePanelPosition, forKey: "codePanelPosition") }
     }
     
+    /// Whether to show the pixel office view for task visualization
+    public var showPixelOffice: Bool = UserDefaults.standard.bool(forKey: "showPixelOffice") {
+        didSet { UserDefaults.standard.set(showPixelOffice, forKey: "showPixelOffice") }
+    }
+    
     // MARK: - Agent Configuration Profiles
     
     /// Named agent configuration profiles
@@ -179,6 +184,7 @@ public final class AppSettings {
     public var theme: String = "system"
     public var fontSize: Double = 13.0
     public var codePanelPosition: String = "right"
+    public var showPixelOffice: Bool = false
     
     public var expandedKirocliPath: String {
         if kirocliPath.hasPrefix("~") {
