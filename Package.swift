@@ -27,6 +27,7 @@ let package = Package(
             ],
             path: "Sources/KiroKantoku",
             exclude: ["Info.plist"],
+            resources: [.copy("Resources/Kiroween")],
             linkerSettings: linkerSettings
         ),
         .testTarget(

@@ -43,6 +43,11 @@ public final class AppSettings {
         didSet { UserDefaults.standard.set(autoStartAgent, forKey: "autoStartAgent") }
     }
     
+    /// Whether to show the Kiroween pixel art office overlay on the dashboard
+    public var showKiroweenOffice: Bool = UserDefaults.standard.bool(forKey: "showKiroweenOffice") {
+        didSet { UserDefaults.standard.set(showKiroweenOffice, forKey: "showKiroweenOffice") }
+    }
+
     // MARK: - Appearance Settings
     
     /// Application theme: "light", "dark", or "system"
