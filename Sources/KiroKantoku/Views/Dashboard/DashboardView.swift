@@ -5,6 +5,7 @@ import SwiftUI
 public struct DashboardView: View {
     @Environment(AgentManager.self) var agentManager
     @Environment(TaskManager.self) var taskManager
+    @Environment(AppSettings.self) var appSettings
 
     let onSelectTask: (AgentTask) -> Void
     var onNewTask: (() -> Void)?
@@ -21,6 +22,8 @@ public struct DashboardView: View {
         self.onNewTask = onNewTask
     }
 
+    @State private var showKiroweenSheet = false
+
     public var body: some View {
         VStack(spacing: 0) {
             // Header with Quick Actions
@@ -28,6 +31,17 @@ public struct DashboardView: View {
                 Text("Tasks Overview")
                     .font(.title2)
                     .fontWeight(.semibold)
+
+                if appSettings.showKiroweenOffice {
+                    Button {
+                        showKiroweenSheet = true
+                    } label: {
+                        Text("🎃")
+                            .font(.title2)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open Kiroween Office")
+                }
 
                 Spacer()
 
@@ -76,6 +90,16 @@ public struct DashboardView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
+        .sheet(isPresented: $showKiroweenSheet) {
+            KiroweenOfficeView(onNewTask: {
+                showKiroweenSheet = false
+                onNewTask?()
+            }, onSelectTask: { task in
+                showKiroweenSheet = false
+                onSelectTask(task)
+            })
+            .frame(minWidth: 700, minHeight: 450)
+        }
     }
 
     private var attentionSection: some View {
@@ -169,6 +193,7 @@ public struct DashboardView: View {
     )
     .environment(AgentManager())
     .environment(TaskManager())
+    .environment(AppSettings())
     .frame(width: 900, height: 600)
 }
 #endif

@@ -281,6 +281,15 @@ public struct AppearanceSettingsView: View {
             } header: {
                 Text("Layout")
             }
+
+            Section {
+                Toggle("Show Kiroween Office", isOn: $settings.showKiroweenOffice)
+                Text("Display the pixel art House of Kiroween with ghost agents on the dashboard.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } header: {
+                Text("Fun Stuff 🎃")
+            }
         }
         .formStyle(.grouped)
         .padding()
