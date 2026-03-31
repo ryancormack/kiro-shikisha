@@ -1,0 +1,7 @@
+{
+  "task_id": "task-clipboard-image-paste",
+  "task_description": "Extend the image uploader in ChatInputView to support pasting images from the macOS clipboard (Cmd+V) in addition to the existing file picker. Also allow sending image-only messages (no text required when images are attached).",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}

@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add clipboard image paste support to ChatInputView so users can paste images from the macOS clipboard (Cmd+V) in addition to using the existing file picker",
+  "status": "in_progress",
+  "steps": [
+    "In Sources/KiroKantoku/Views/Agent/ChatInputView.swift, add a private method `pasteImagesFromClipboard()` that reads image data from NSPasteboard.general. It should check for image types (PNG, TIFF, JPEG) on the pasteboard. Use NSPasteboard.general.data(forType:) to retrieve image data. For TIFF data (which is how macOS stores most copied images), convert it to PNG using NSImage(data:).tiffRepresentation and NSBitmapImageRep. The method should append valid image Data to the existing `imageAttachments` array and return a Bool indicating whether any images were pasted.",
+    "Add a .onPasteCommand(of:) modifier OR use .onKeyPress to intercept Cmd+V on the TextEditor. The recommended approach is to add an .onPasteCommand(of: [.png, .jpeg, .gif, .webP, .tiff, .image]) modifier on the TextEditor or its parent container. The handler should use NSItemProvider to extract image data. If the paste contains image data, add it to imageAttachments. If it contains only text, let the default paste behavior handle it (return without consuming the event).",
+    "Update the `canSend` computed property so that a message can also be sent when there are image attachments even if the text is empty. Change from `!inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty` to `!inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !imageAttachments.isEmpty`.",
+    "Verify the build compiles cleanly with `swift build`.",
+    "Verify all existing tests still pass with `swift test`."
+  ],
+  "acceptance_criteria": [
+    "ChatInputView has a mechanism to intercept paste events and extract image data from the macOS pasteboard",
+    "Pasted images are added to the existing imageAttachments array and displayed in the same thumbnail strip as file-picker images",
+    "Users can still paste text normally when the clipboard contains text (not images)",
+    "The send button becomes enabled when images are attached even without text input",
+    "The existing file picker (pickImages) continues to work unchanged",
+    "swift build completes without errors",
+    "swift test passes all existing tests"
+  ],
+  "verification": [
+    "Run `cd /projects/sandbox/kiro-kantoku && swift build` and confirm it succeeds with no errors",
+    "Run `cd /projects/sandbox/kiro-kantoku && swift test` and confirm all 258+ tests pass"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

@@ -42,7 +42,7 @@ public struct ChatInputView: View {
     }
     
     private var canSend: Bool {
-        !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !imageAttachments.isEmpty
     }
     
     /// Merged list of all available slash commands
@@ -194,6 +194,14 @@ public struct ChatInputView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 8)
                         .frame(minHeight: 56, maxHeight: 300)
+                        .onKeyPress(.init("v"), modifiers: .command) {
+                            let pasteboard = NSPasteboard.general
+                            let hasImage = pasteboard.types?.contains(where: { $0 == .png || $0 == .tiff }) ?? false
+                            if hasImage {
+                                return pasteImagesFromClipboard() ? .handled : .ignored
+                            }
+                            return .ignored
+                        }
                         .onKeyPress(.upArrow) {
                             if showSlashPicker {
                                 if slashSelectedIndex > 0 { slashSelectedIndex -= 1 }
@@ -406,6 +414,29 @@ public struct ChatInputView: View {
                 }
             }
         }
+    }
+    
+    @discardableResult
+    private func pasteImagesFromClipboard() -> Bool {
+        let pasteboard = NSPasteboard.general
+        
+        // Try PNG first
+        if let pngData = pasteboard.data(forType: .png) {
+            imageAttachments.append(pngData)
+            return true
+        }
+        
+        // Fall back to TIFF (macOS stores most copied images as TIFF)
+        if let tiffData = pasteboard.data(forType: .tiff) {
+            // Convert TIFF to PNG
+            if let bitmapRep = NSBitmapImageRep(data: tiffData),
+               let pngData = bitmapRep.representation(using: .png, properties: [:]) {
+                imageAttachments.append(pngData)
+                return true
+            }
+        }
+        
+        return false
     }
 }
 
