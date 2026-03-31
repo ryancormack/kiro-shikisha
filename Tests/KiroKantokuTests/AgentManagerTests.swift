@@ -252,17 +252,17 @@ final class AgentManagerTests: XCTestCase {
     #if os(macOS)
     func testMergeSlashCommandsKiroOnly() {
         let kiroCommands = [
-            KiroAvailableCommand(name: "model", description: "Switch model", meta: .object([
+            KiroAvailableCommand(name: "compact", description: "Switch model", meta: .object([
                 "inputType": .string("selection"),
                 "optionsMethod": .string("_kiro.dev/commands/options")
             ])),
             KiroAvailableCommand(name: "context", description: "Show context", meta: .object([
                 "inputType": .string("panel")
             ])),
-            KiroAvailableCommand(name: "quit", description: "Quit app", meta: .object([
+            KiroAvailableCommand(name: "tools", description: "Quit app", meta: .object([
                 "local": .bool(true)
             ])),
-            KiroAvailableCommand(name: "clear", description: "Clear chat", meta: nil)
+            KiroAvailableCommand(name: "usage", description: "Clear chat", meta: nil)
         ]
         
         let merged = mergeSlashCommands(acpCommands: [], kiroCommands: kiroCommands)
@@ -273,9 +273,9 @@ final class AgentManagerTests: XCTestCase {
         let byName = Dictionary(uniqueKeysWithValues: merged.map { ($0.name, $0) })
         
         // Selection type
-        let model = byName["model"]!
-        XCTAssertEqual(model.inputType, .selection)
-        XCTAssertEqual(model.optionsMethod, "_kiro.dev/commands/options")
+        let compact = byName["compact"]!
+        XCTAssertEqual(compact.inputType, .selection)
+        XCTAssertEqual(compact.optionsMethod, "_kiro.dev/commands/options")
         
         // Panel type
         let context = byName["context"]!
@@ -283,18 +283,18 @@ final class AgentManagerTests: XCTestCase {
         XCTAssertNil(context.optionsMethod)
         
         // Local type
-        let quit = byName["quit"]!
-        XCTAssertEqual(quit.inputType, .local)
+        let tools = byName["tools"]!
+        XCTAssertEqual(tools.inputType, .local)
         
         // Simple type (nil meta)
-        let clear = byName["clear"]!
-        XCTAssertEqual(clear.inputType, .simple)
+        let usage = byName["usage"]!
+        XCTAssertEqual(usage.inputType, .simple)
     }
     
     func testMergeSlashCommandsAcpOnly() {
         let acpCommands = [
             AvailableCommand(name: "help", description: "Show help"),
-            AvailableCommand(name: "ask", description: "Ask a question",
+            AvailableCommand(name: "usage", description: "Show usage",
                              input: .unstructured(UnstructuredInput(hint: "Type your question")))
         ]
         
@@ -308,18 +308,18 @@ final class AgentManagerTests: XCTestCase {
         XCTAssertEqual(help.inputType, .simple)
         XCTAssertNil(help.hint)
         
-        let ask = byName["ask"]!
-        XCTAssertEqual(ask.inputType, .simple)
-        XCTAssertEqual(ask.hint, "Type your question")
+        let usage = byName["usage"]!
+        XCTAssertEqual(usage.inputType, .simple)
+        XCTAssertEqual(usage.hint, "Type your question")
     }
     
     func testMergeSlashCommandsKiroOverridesAcp() {
         // When both sources have a command with the same name, Kiro wins
         let acpCommands = [
-            AvailableCommand(name: "model", description: "ACP model command")
+            AvailableCommand(name: "compact", description: "ACP compact command")
         ]
         let kiroCommands = [
-            KiroAvailableCommand(name: "model", description: "Kiro model command", meta: .object([
+            KiroAvailableCommand(name: "compact", description: "Kiro compact command", meta: .object([
                 "inputType": .string("selection"),
                 "optionsMethod": .string("_kiro.dev/commands/options")
             ]))
@@ -328,61 +328,61 @@ final class AgentManagerTests: XCTestCase {
         let merged = mergeSlashCommands(acpCommands: acpCommands, kiroCommands: kiroCommands)
         
         XCTAssertEqual(merged.count, 1)
-        XCTAssertEqual(merged[0].name, "model")
-        XCTAssertEqual(merged[0].description, "Kiro model command") // Kiro description wins
+        XCTAssertEqual(merged[0].name, "compact")
+        XCTAssertEqual(merged[0].description, "Kiro compact command") // Kiro description wins
         XCTAssertEqual(merged[0].inputType, .selection) // Kiro metadata applied
     }
     
     func testMergeSlashCommandsCombined() {
         let acpCommands = [
             AvailableCommand(name: "help", description: "Show help"),
-            AvailableCommand(name: "model", description: "ACP model") // Will be overridden
+            AvailableCommand(name: "compact", description: "ACP compact") // Will be overridden
         ]
         let kiroCommands = [
-            KiroAvailableCommand(name: "model", description: "Kiro model", meta: .object([
+            KiroAvailableCommand(name: "compact", description: "Kiro compact", meta: .object([
                 "inputType": .string("selection")
             ])),
-            KiroAvailableCommand(name: "quit", description: "Quit", meta: .object([
+            KiroAvailableCommand(name: "tools", description: "Tools", meta: .object([
                 "local": .bool(true)
             ]))
         ]
         
         let merged = mergeSlashCommands(acpCommands: acpCommands, kiroCommands: kiroCommands)
         
-        // help (from ACP) + model (from Kiro, overrides ACP) + quit (from Kiro) = 3
+        // help (from ACP) + compact (from Kiro, overrides ACP) + tools (from Kiro) = 3
         XCTAssertEqual(merged.count, 3)
         
         // Verify sorted order
-        XCTAssertEqual(merged[0].name, "help")
-        XCTAssertEqual(merged[1].name, "model")
-        XCTAssertEqual(merged[2].name, "quit")
+        XCTAssertEqual(merged[0].name, "compact")
+        XCTAssertEqual(merged[1].name, "help")
+        XCTAssertEqual(merged[2].name, "tools")
     }
     
     func testMergeSlashCommandsDeduplicatesKiro() {
         let kiroCommands = [
-            KiroAvailableCommand(name: "model", description: "First model", meta: nil),
-            KiroAvailableCommand(name: "model", description: "Duplicate model", meta: nil)
+            KiroAvailableCommand(name: "compact", description: "First compact", meta: nil),
+            KiroAvailableCommand(name: "compact", description: "Duplicate compact", meta: nil)
         ]
         
         let merged = mergeSlashCommands(acpCommands: [], kiroCommands: kiroCommands)
         
         // Only the first should be kept
         XCTAssertEqual(merged.count, 1)
-        XCTAssertEqual(merged[0].description, "First model")
+        XCTAssertEqual(merged[0].description, "First compact")
     }
     
     func testMergeSlashCommandsResultIsSorted() {
         let kiroCommands = [
-            KiroAvailableCommand(name: "zebra", description: "Z command", meta: nil),
-            KiroAvailableCommand(name: "alpha", description: "A command", meta: nil),
-            KiroAvailableCommand(name: "middle", description: "M command", meta: nil)
+            KiroAvailableCommand(name: "usage", description: "U command", meta: nil),
+            KiroAvailableCommand(name: "compact", description: "C command", meta: nil),
+            KiroAvailableCommand(name: "help", description: "H command", meta: nil)
         ]
         
         let merged = mergeSlashCommands(acpCommands: [], kiroCommands: kiroCommands)
         
-        XCTAssertEqual(merged[0].name, "alpha")
-        XCTAssertEqual(merged[1].name, "middle")
-        XCTAssertEqual(merged[2].name, "zebra")
+        XCTAssertEqual(merged[0].name, "compact")
+        XCTAssertEqual(merged[1].name, "help")
+        XCTAssertEqual(merged[2].name, "usage")
     }
     
     func testSlashCommandInputTypeClassification() {
