@@ -78,213 +78,16 @@ public struct ChatInputView: View {
     public var body: some View {
         VStack(spacing: 4) {
             if !imageAttachments.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(imageAttachments.indices, id: \.self) { index in
-                            ZStack(alignment: .topTrailing) {
-                                if let nsImage = NSImage(data: imageAttachments[index]) {
-                                    Image(nsImage: nsImage)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 48, height: 48)
-                                        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
-                                } else {
-                                    RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
-                                        .fill(Color.secondary.opacity(0.3))
-                                        .frame(width: 48, height: 48)
-                                }
-                                Button {
-                                    imageAttachments.remove(at: index)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.white)
-                                        .background(Circle().fill(Color.black.opacity(0.5)))
-                                }
-                                .buttonStyle(.plain)
-                                .offset(x: 4, y: -4)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                }
-                .frame(height: 56)
+                imageAttachmentsBar
             }
-            
             ZStack(alignment: .bottom) {
-                // Slash command picker overlay (positioned above the input)
                 if showSlashPicker {
-                    VStack {
-                        Spacer()
-                        SlashCommandPicker(
-                            commands: allCommands,
-                            filterText: slashFilterText,
-                            onSelect: { command in
-                                handleCommandSelection(command)
-                            },
-                            onDismiss: {
-                                dismissSlashPicker()
-                            },
-                            selectedIndex: $slashSelectedIndex
-                        )
-                        .padding(.horizontal, DesignConstants.spacingSM)
-                    }
-                    .offset(y: -44)
-                    .zIndex(1)
+                    slashPickerOverlay
                 }
-                
-                // Options picker overlay
                 if showOptionsPicker {
-                    VStack {
-                        Spacer()
-                        if isLoadingOptions {
-                            HStack {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Loading options...")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
-                                    .fill(Color(nsColor: .controlBackgroundColor))
-                                    .shadow(color: .black.opacity(DesignConstants.popoverShadowOpacity), radius: DesignConstants.popoverShadowRadius, y: -2)
-                            )
-                        } else {
-                            CommandOptionsPicker(
-                                options: commandOptions,
-                                filterText: optionsFilterText,
-                                onSelect: { option in
-                                    handleOptionSelection(option)
-                                },
-                                onDismiss: {
-                                    dismissOptionsPicker()
-                                },
-                                selectedIndex: $optionsSelectedIndex
-                            )
-                        }
-                    }
-                    .padding(.horizontal, DesignConstants.spacingSM)
-                    .offset(y: -44)
-                    .zIndex(1)
+                    optionsPickerOverlay
                 }
-                
-                HStack(alignment: .bottom, spacing: 0) {
-                    Button(action: pickImages) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 16))
-                            .foregroundColor(isPhotoHovered ? .primary : .secondary)
-                            .frame(width: 32, height: 32)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            isPhotoHovered = hovering
-                        }
-                    }
-                    .padding(.leading, 6)
-                    .padding(.bottom, 4)
-                    
-                    TextEditor(text: $inputText)
-                        .font(.body)
-                        .focused($isFocused)
-                        .scrollContentBackground(.hidden)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 8)
-                        .frame(minHeight: 56, maxHeight: 300)
-                        .onKeyPress(.init("v"), modifiers: .command) {
-                            let pasteboard = NSPasteboard.general
-                            let hasImage = pasteboard.types?.contains(where: { $0 == .png || $0 == .tiff || $0 == .init("public.jpeg") }) ?? false
-                            if hasImage {
-                                return pasteImagesFromClipboard() ? .handled : .ignored
-                            }
-                            return .ignored
-                        }
-                        .onKeyPress(.upArrow) {
-                            if showSlashPicker {
-                                if slashSelectedIndex > 0 { slashSelectedIndex -= 1 }
-                                return .handled
-                            }
-                            if showOptionsPicker {
-                                if optionsSelectedIndex > 0 { optionsSelectedIndex -= 1 }
-                                return .handled
-                            }
-                            return .ignored
-                        }
-                        .onKeyPress(.downArrow) {
-                            if showSlashPicker {
-                                let count = filteredSlashCommands.count
-                                if slashSelectedIndex < count - 1 { slashSelectedIndex += 1 }
-                                return .handled
-                            }
-                            if showOptionsPicker {
-                                let count = filteredCommandOptions.count
-                                if optionsSelectedIndex < count - 1 { optionsSelectedIndex += 1 }
-                                return .handled
-                            }
-                            return .ignored
-                        }
-                        .onKeyPress(.return) {
-                            if showSlashPicker {
-                                let cmds = filteredSlashCommands
-                                if slashSelectedIndex >= 0 && slashSelectedIndex < cmds.count {
-                                    handleCommandSelection(cmds[slashSelectedIndex])
-                                }
-                                return .handled
-                            }
-                            if showOptionsPicker {
-                                let opts = filteredCommandOptions
-                                if optionsSelectedIndex >= 0 && optionsSelectedIndex < opts.count {
-                                    handleOptionSelection(opts[optionsSelectedIndex])
-                                }
-                                return .handled
-                            }
-                            return .ignored
-                        }
-                        .onKeyPress(.escape) {
-                            if showSlashPicker {
-                                dismissSlashPicker()
-                                return .handled
-                            }
-                            if showOptionsPicker {
-                                dismissOptionsPicker()
-                                return .handled
-                            }
-                            return .ignored
-                        }
-                    
-                    Button(action: send) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 26))
-                            .foregroundColor(canSend ? .accentColor : .secondary.opacity(0.4))
-                            .scaleEffect(isSendHovered && canSend ? 1.08 : 1.0)
-                            .frame(width: 32, height: 32)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canSend)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            isSendHovered = hovering
-                        }
-                    }
-                    .padding(.trailing, 6)
-                    .padding(.bottom, 4)
-                }
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(
-                            isFocused ? Color.accentColor.opacity(0.5) : Color(nsColor: .separatorColor).opacity(0.3),
-                            lineWidth: isFocused ? 1.5 : 0.5
-                        )
-                )
-                .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
-                .frame(maxWidth: .infinity)
+                inputBar
             }
         }
         .padding(.horizontal, DesignConstants.spacingLG)
@@ -292,6 +95,221 @@ public struct ChatInputView: View {
         .onChange(of: inputText) { _, newValue in
             updateSlashPickerState(newValue)
         }
+    }
+    
+    // MARK: - Extracted Subviews
+    
+    private var imageAttachmentsBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(imageAttachments.indices, id: \.self) { index in
+                    ZStack(alignment: .topTrailing) {
+                        if let nsImage = NSImage(data: imageAttachments[index]) {
+                            Image(nsImage: nsImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 48, height: 48)
+                                .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
+                        } else {
+                            RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
+                                .fill(Color.secondary.opacity(0.3))
+                                .frame(width: 48, height: 48)
+                        }
+                        Button {
+                            imageAttachments.remove(at: index)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white)
+                                .background(Circle().fill(Color.black.opacity(0.5)))
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 4, y: -4)
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+        }
+        .frame(height: 56)
+    }
+    
+    private var slashPickerOverlay: some View {
+        VStack {
+            Spacer()
+            SlashCommandPicker(
+                commands: allCommands,
+                filterText: slashFilterText,
+                onSelect: { command in
+                    handleCommandSelection(command)
+                },
+                onDismiss: {
+                    dismissSlashPicker()
+                },
+                selectedIndex: $slashSelectedIndex
+            )
+            .padding(.horizontal, DesignConstants.spacingSM)
+        }
+        .offset(y: -44)
+        .zIndex(1)
+    }
+    
+    private var optionsPickerOverlay: some View {
+        VStack {
+            Spacer()
+            if isLoadingOptions {
+                HStack {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading options...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .shadow(color: .black.opacity(DesignConstants.popoverShadowOpacity), radius: DesignConstants.popoverShadowRadius, y: -2)
+                )
+            } else {
+                CommandOptionsPicker(
+                    options: commandOptions,
+                    filterText: optionsFilterText,
+                    onSelect: { option in
+                        handleOptionSelection(option)
+                    },
+                    onDismiss: {
+                        dismissOptionsPicker()
+                    },
+                    selectedIndex: $optionsSelectedIndex
+                )
+            }
+        }
+        .padding(.horizontal, DesignConstants.spacingSM)
+        .offset(y: -44)
+        .zIndex(1)
+    }
+    
+    private var inputBar: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            Button(action: pickImages) {
+                Image(systemName: "photo")
+                    .font(.system(size: 16))
+                    .foregroundColor(isPhotoHovered ? .primary : .secondary)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isPhotoHovered = hovering
+                }
+            }
+            .padding(.leading, 6)
+            .padding(.bottom, 4)
+            
+            textEditor
+            
+            Button(action: send) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 26))
+                    .foregroundColor(canSend ? .accentColor : .secondary.opacity(0.4))
+                    .scaleEffect(isSendHovered && canSend ? 1.08 : 1.0)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSend)
+            .keyboardShortcut(.return, modifiers: .command)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isSendHovered = hovering
+                }
+            }
+            .padding(.trailing, 6)
+            .padding(.bottom, 4)
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(
+                    isFocused ? Color.accentColor.opacity(0.5) : Color(nsColor: .separatorColor).opacity(0.3),
+                    lineWidth: isFocused ? 1.5 : 0.5
+                )
+        )
+        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+        .frame(maxWidth: .infinity)
+    }
+    
+    private var textEditor: some View {
+        TextEditor(text: $inputText)
+            .font(.body)
+            .focused($isFocused)
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .frame(minHeight: 56, maxHeight: 300)
+            .onKeyPress(characters: CharacterSet(charactersIn: "v"), phases: .down) { press in
+                guard press.modifiers.contains(.command) else { return .ignored }
+                let pasteboard = NSPasteboard.general
+                let hasImage = pasteboard.types?.contains(where: { $0 == .png || $0 == .tiff || $0 == .init("public.jpeg") }) ?? false
+                if hasImage {
+                    return pasteImagesFromClipboard() ? .handled : .ignored
+                }
+                return .ignored
+            }
+            .onKeyPress(.upArrow) {
+                if showSlashPicker {
+                    if slashSelectedIndex > 0 { slashSelectedIndex -= 1 }
+                    return .handled
+                }
+                if showOptionsPicker {
+                    if optionsSelectedIndex > 0 { optionsSelectedIndex -= 1 }
+                    return .handled
+                }
+                return .ignored
+            }
+            .onKeyPress(.downArrow) {
+                if showSlashPicker {
+                    let count = filteredSlashCommands.count
+                    if slashSelectedIndex < count - 1 { slashSelectedIndex += 1 }
+                    return .handled
+                }
+                if showOptionsPicker {
+                    let count = filteredCommandOptions.count
+                    if optionsSelectedIndex < count - 1 { optionsSelectedIndex += 1 }
+                    return .handled
+                }
+                return .ignored
+            }
+            .onKeyPress(.return) {
+                if showSlashPicker {
+                    let cmds = filteredSlashCommands
+                    if slashSelectedIndex >= 0 && slashSelectedIndex < cmds.count {
+                        handleCommandSelection(cmds[slashSelectedIndex])
+                    }
+                    return .handled
+                }
+                if showOptionsPicker {
+                    let opts = filteredCommandOptions
+                    if optionsSelectedIndex >= 0 && optionsSelectedIndex < opts.count {
+                        handleOptionSelection(opts[optionsSelectedIndex])
+                    }
+                    return .handled
+                }
+                return .ignored
+            }
+            .onKeyPress(.escape) {
+                if showSlashPicker {
+                    dismissSlashPicker()
+                    return .handled
+                }
+                if showOptionsPicker {
+                    dismissOptionsPicker()
+                    return .handled
+                }
+                return .ignored
+            }
     }
     
     // MARK: - Slash Command Logic

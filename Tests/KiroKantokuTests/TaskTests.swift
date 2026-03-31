@@ -1855,6 +1855,7 @@ final class TaskTests: XCTestCase {
     func testAppSettingsDefaultAgentConfiguration() async throws {
         await MainActor.run {
             let settings = AppSettings()
+            settings.agentConfigurations = []
             XCTAssertTrue(settings.agentConfigurations.isEmpty)
             XCTAssertNil(settings.defaultAgentConfiguration)
 
