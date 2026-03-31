@@ -8,6 +8,25 @@ A native macOS desktop app for managing multiple AI coding agents in parallel. K
 
 ![Main View](screenshots/main-view.png)
 
+## Quick Start
+
+```bash
+# Install via Homebrew
+brew tap ryancormack/kiro-kantoku
+brew install --cask kiro-kantoku
+
+# Make sure kiro-cli is installed and authenticated
+kiro-cli login
+
+# Launch the app
+open -a KiroKantoku
+```
+
+1. The onboarding flow will guide you through verifying your `kiro-cli` path.
+2. Create a new task with **⌘⇧T** or the **+** button.
+3. Give it a name, choose a project directory, and optionally configure a git branch or worktree.
+4. The agent connects and you can start chatting.
+
 ## Features
 
 ### Task-Centric Workflow
@@ -123,6 +142,13 @@ Built with SwiftUI. Supports light/dark/system themes, configurable font sizes, 
 - Swift 6.0+ toolchain (for building from source)
 
 ## Installation
+
+### Homebrew (Recommended)
+
+```bash
+brew tap ryancormack/kiro-kantoku
+brew install --cask kiro-kantoku
+```
 
 ### Build from Source
 
