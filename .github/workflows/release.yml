@@ -158,7 +158,7 @@ jobs:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           gh release download "$GITHUB_REF_NAME" \
-            --repo ryancormack/kiro-shikisha \
+            --repo ryancormack/kiro-kantoku \
             --pattern '*.sha256' \
             --dir ./
 
@@ -171,7 +171,7 @@ jobs:
       - name: Checkout tap repository
         uses: actions/checkout@v6
         with:
-          repository: ryancormack/homebrew-kiro-shikisha
+          repository: ryancormack/homebrew-kiro-kantoku
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
 
@@ -183,10 +183,10 @@ jobs:
             version "${{ steps.version.outputs.version }}"
             sha256 "${{ steps.sha256.outputs.sha256 }}"
 
-            url "https://github.com/ryancormack/kiro-shikisha/releases/download/v#{version}/KiroKantoku-#{version}.dmg"
+            url "https://github.com/ryancormack/kiro-kantoku/releases/download/v#{version}/KiroKantoku-#{version}.dmg"
             name "Kiro Kantoku"
             desc "macOS GUI for managing Kiro CLI agents and tasks"
-            homepage "https://github.com/ryancormack/kiro-shikisha"
+            homepage "https://github.com/ryancormack/kiro-kantoku"
 
             depends_on macos: ">= :sonoma"
 

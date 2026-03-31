@@ -17,7 +17,7 @@ This document describes how to cut a new release of Kiro Kantoku.
 
 ### One-time setup (GitHub Secrets)
 
-Add these secrets to the kiro-shikisha repository (Settings → Secrets and variables → Actions):
+Add these secrets to the kiro-kantoku repository (Settings → Secrets and variables → Actions):
 
 | Secret | Description |
 |--------|-------------|
@@ -38,7 +38,7 @@ To create an app-specific password:
 
 ### One-time setup (Homebrew Tap)
 
-1. Create a public GitHub repository named `ryancormack/homebrew-kiro-shikisha`
+1. Create a public GitHub repository named `ryancormack/homebrew-kiro-kantoku`
 2. The release workflow will push the `Casks/` directory automatically
 
 ## Cutting a Release
@@ -69,7 +69,7 @@ To create an app-specific password:
 Once released, users can install with:
 
 ```bash
-brew tap ryancormack/kiro-shikisha
+brew tap ryancormack/kiro-kantoku
 brew install --cask kiro-kantoku
 ```
 
