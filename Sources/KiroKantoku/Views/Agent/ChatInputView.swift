@@ -196,7 +196,7 @@ public struct ChatInputView: View {
                         .frame(minHeight: 56, maxHeight: 300)
                         .onKeyPress(.init("v"), modifiers: .command) {
                             let pasteboard = NSPasteboard.general
-                            let hasImage = pasteboard.types?.contains(where: { $0 == .png || $0 == .tiff }) ?? false
+                            let hasImage = pasteboard.types?.contains(where: { $0 == .png || $0 == .tiff || $0 == .init("public.jpeg") }) ?? false
                             if hasImage {
                                 return pasteImagesFromClipboard() ? .handled : .ignored
                             }
@@ -424,6 +424,16 @@ public struct ChatInputView: View {
         if let pngData = pasteboard.data(forType: .png) {
             imageAttachments.append(pngData)
             return true
+        }
+        
+        // Try JPEG
+        if let jpegData = pasteboard.data(forType: .init("public.jpeg")) {
+            // Convert JPEG to PNG for consistent handling
+            if let bitmapRep = NSBitmapImageRep(data: jpegData),
+               let pngData = bitmapRep.representation(using: .png, properties: [:]) {
+                imageAttachments.append(pngData)
+                return true
+            }
         }
         
         // Fall back to TIFF (macOS stores most copied images as TIFF)
