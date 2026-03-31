@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Add clipboard image paste support to ChatInputView so users can paste images from the macOS clipboard (Cmd+V) in addition to using the existing file picker",
+  "status": "completed",
+  "steps": [
+    "In Sources/KiroKantoku/Views/Agent/ChatInputView.swift, add a private method pasteImagesFromClipboard() that reads image data from NSPasteboard.general",
+    "Add .onKeyPress(.init(\"v\"), modifiers: .command) handler on the TextEditor to intercept Cmd+V paste events",
+    "Update the canSend computed property to also return true when imageAttachments is not empty",
+    "Verify the build compiles cleanly with swift build",
+    "Verify all existing tests still pass with swift test"
+  ],
+  "acceptance_criteria": [
+    "ChatInputView has a mechanism to intercept paste events and extract image data from the macOS pasteboard",
+    "Pasted images are added to the existing imageAttachments array and displayed in the same thumbnail strip as file-picker images",
+    "Users can still paste text normally when the clipboard contains text (not images)",
+    "The send button becomes enabled when images are attached even without text input",
+    "The existing file picker (pickImages) continues to work unchanged",
+    "swift build completes without errors",
+    "swift test passes all existing tests"
+  ],
+  "verification": [
+    "Run `cd /projects/sandbox/kiro-kantoku && swift build` and confirm it succeeds with no errors",
+    "Run `cd /projects/sandbox/kiro-kantoku && swift test` and confirm all 258+ tests pass"
+  ],
+  "blocked_reason": null,
+  "findings": "Implementation added 3 changes to ChatInputView.swift: (1) pasteImagesFromClipboard() method that tries PNG first then falls back to TIFF with conversion, (2) .onKeyPress Cmd+V handler on TextEditor, (3) updated canSend to include imageAttachments check."
+}

@@ -1,0 +1,21 @@
+{
+  "project_type": "Native macOS desktop app built with SwiftUI (Swift 6.0+, macOS 14+)",
+  "language": "Swift",
+  "build_system": "Swift Package Manager (Package.swift at root). Single executable target KiroKantoku with test target KiroKantokuTests.",
+  "test_framework": "XCTest (Tests/KiroKantokuTests/). 258 tests all passing.",
+  "build_command": "cd /projects/sandbox/kiro-kantoku && swift build",
+  "test_command": "cd /projects/sandbox/kiro-kantoku && swift test",
+  "verification_instructions": "1. Run swift build and confirm no errors. 2. Run swift test and confirm all tests pass (258+ tests).",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "Swift 6.2.1 is pre-installed. Run swift build to resolve SPM dependencies and build.",
+  "environment_constraints": "OPEN_INTERNET network mode. Swift 6.2.1 available. This is a macOS app but the build/test sandbox is Linux - some macOS-specific APIs (NSPasteboard, NSImage, NSOpenPanel) will compile behind #if os(macOS) guards but won't execute at test time. Unit tests test model/service logic, not UI views.",
+  "contribution_requirements": "Open an issue first to discuss changes. MIT License.",
+  "key_patterns": "All view files are wrapped in #if os(macOS). The ChatInputView manages image attachments as [Data]. The pickImages() method uses NSOpenPanel with UTType filtering (png, jpeg, gif, webP). NSPasteboard is already used in DebugLogView for copy-to-clipboard. DesignConstants enum centralizes UI constants. The TextEditor is the main input component with keyboard handling via .onKeyPress modifiers.",
+  "relevant_files": [
+    "Sources/KiroKantoku/Views/Agent/ChatInputView.swift",
+    "Sources/KiroKantoku/Views/Agent/ChatPanel.swift",
+    "Sources/KiroKantoku/Views/Components/DesignConstants.swift",
+    "Sources/KiroKantoku/Views/Code/DebugLogView.swift"
+  ],
+  "directory_structure": "Sources/KiroKantoku/ contains App/, Models/, Services/, Views/. Views/ has Agent/ (chat UI), Code/ (diff viewer), Components/ (shared), Dashboard/, Task/, Sidebar/, Session/, Settings/, Workspace/, Onboarding/. Tests/KiroKantokuTests/ has XCTest files."
+}

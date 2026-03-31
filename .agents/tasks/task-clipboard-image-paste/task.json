@@ -1,0 +1,14 @@
+{
+  "task_id": "task-clipboard-image-paste",
+  "task_description": "Extend the image uploader in ChatInputView to support pasting images from the macOS clipboard (Cmd+V) in addition to the existing file picker. Also allow sending image-only messages (no text required when images are attached).",
+  "status": "completed",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "swift build succeeded. swift test passed all 258 tests with 0 failures. No new tests were added because the changes are in a SwiftUI view behind #if os(macOS) guards on a Linux-based sandbox, and the existing test infrastructure tests model/service logic rather than views. The code changes are minimal (31 net new lines) and follow established codebase patterns."
+  }
+}
