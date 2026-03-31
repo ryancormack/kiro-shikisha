@@ -1,0 +1,204 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: KiroKantoku
+  APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version $VERSION"
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.1.app
+
+      - name: Update version in Info.plist
+        run: |
+          plutil -replace CFBundleShortVersionString -string "${{ steps.version.outputs.version }}" Sources/KiroKantoku/Info.plist
+          plutil -replace CFBundleVersion -string "${{ github.run_number }}" Sources/KiroKantoku/Info.plist
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build release
+        run: swift build -c release
+
+      - name: Assemble app bundle
+        run: |
+          mkdir -p "artifacts/$APP_NAME.app/Contents/MacOS"
+          mkdir -p "artifacts/$APP_NAME.app/Contents/Resources"
+
+          # Binary
+          cp ".build/release/$APP_NAME" "artifacts/$APP_NAME.app/Contents/MacOS/"
+
+          # Info.plist
+          cp Sources/KiroKantoku/Info.plist "artifacts/$APP_NAME.app/Contents/"
+
+          # SPM resource bundle
+          if [ -d ".build/release/KiroKantoku_KiroKantoku.bundle" ]; then
+            cp -R ".build/release/KiroKantoku_KiroKantoku.bundle" "artifacts/$APP_NAME.app/Contents/Resources/"
+          fi
+
+      - name: Import signing certificate
+        if: ${{ env.APPLE_CERTIFICATE_BASE64 != '' }}
+        env:
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+      - name: Sign app
+        if: ${{ env.APPLE_CERTIFICATE_BASE64 != '' }}
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          APP_PATH="artifacts/$APP_NAME.app"
+          codesign --force --verify --verbose \
+            --sign "Developer ID Application: ${{ secrets.APPLE_DEVELOPER_NAME }} ($APPLE_TEAM_ID)" \
+            --options runtime \
+            --timestamp \
+            --entitlements KiroKantoku.entitlements \
+            "$APP_PATH"
+
+      - name: Notarize app
+        if: ${{ env.APPLE_CERTIFICATE_BASE64 != '' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          APP_PATH="artifacts/$APP_NAME.app"
+
+          ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/notarize.zip"
+
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+
+          xcrun stapler staple "$APP_PATH"
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain $KEYCHAIN_PATH || true
+          fi
+
+      - name: Create DMG
+        run: |
+          DMG_NAME="${APP_NAME}-${{ steps.version.outputs.version }}.dmg"
+
+          mkdir -p dmg_contents
+          cp -R "artifacts/$APP_NAME.app" dmg_contents/
+          ln -s /Applications dmg_contents/Applications
+
+          hdiutil create -volname "$APP_NAME" \
+            -srcfolder dmg_contents \
+            -ov -format UDZO \
+            "$DMG_NAME"
+
+          shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg
+            ${{ env.APP_NAME }}-${{ steps.version.outputs.version }}.dmg.sha256
+
+  update-homebrew:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download SHA256 file from release
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" \
+            --repo ryancormack/kiro-shikisha \
+            --pattern '*.sha256' \
+            --dir ./
+
+      - name: Extract SHA256 hash
+        id: sha256
+        run: |
+          SHA256=$(awk '{print $1}' KiroKantoku-${{ steps.version.outputs.version }}.dmg.sha256)
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+
+      - name: Checkout tap repository
+        uses: actions/checkout@v6
+        with:
+          repository: ryancormack/homebrew-kiro-shikisha
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Cask formula
+        run: |
+          mkdir -p homebrew-tap/Casks
+          cat > homebrew-tap/Casks/kiro-kantoku.rb <<'FORMULA'
+          cask "kiro-kantoku" do
+            version "${{ steps.version.outputs.version }}"
+            sha256 "${{ steps.sha256.outputs.sha256 }}"
+
+            url "https://github.com/ryancormack/kiro-shikisha/releases/download/v#{version}/KiroKantoku-#{version}.dmg"
+            name "Kiro Kantoku"
+            desc "macOS GUI for managing Kiro CLI agents and tasks"
+            homepage "https://github.com/ryancormack/kiro-shikisha"
+
+            depends_on macos: ">= :sonoma"
+
+            app "KiroKantoku.app"
+          end
+          FORMULA
+
+      - name: Commit and push formula
+        working-directory: homebrew-tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/kiro-kantoku.rb
+          git commit -m "Update kiro-kantoku to ${{ steps.version.outputs.version }}"
+          git push
