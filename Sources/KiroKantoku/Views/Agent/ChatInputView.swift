@@ -249,7 +249,8 @@ public struct ChatInputView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
             .frame(minHeight: 56, maxHeight: 300)
-            .onKeyPress(.init("v"), modifiers: .command) {
+            .onKeyPress(characters: CharacterSet(charactersIn: "v"), phases: .down) { press in
+                guard press.modifiers.contains(.command) else { return .ignored }
                 let pasteboard = NSPasteboard.general
                 let hasImage = pasteboard.types?.contains(where: { $0 == .png || $0 == .tiff || $0 == .init("public.jpeg") }) ?? false
                 if hasImage {
