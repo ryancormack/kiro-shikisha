@@ -19,18 +19,22 @@ public struct ChatMessage: Identifiable, Equatable, Sendable, Codable {
     public let timestamp: Date
     /// IDs of tool calls associated with this message (for assistant messages)
     public var toolCallIds: [String]?
+    /// Image attachments as PNG data (for user messages)
+    public var imageAttachments: [Data]?
     
     public init(
         id: UUID = UUID(),
         role: MessageRole,
         content: String,
         timestamp: Date = Date(),
-        toolCallIds: [String]? = nil
+        toolCallIds: [String]? = nil,
+        imageAttachments: [Data]? = nil
     ) {
         self.id = id
         self.role = role
         self.content = content
         self.timestamp = timestamp
         self.toolCallIds = toolCallIds
+        self.imageAttachments = imageAttachments
     }
 }

@@ -9,6 +9,7 @@ public struct ChatInputView: View {
     let onSlashCommand: ((SlashCommand, String?) -> Void)?
     
     @Environment(AgentManager.self) private var agentManager
+    @Environment(AppSettings.self) private var settings
     
     @State private var inputText: String = ""
     @State private var imageAttachments: [Data] = []
@@ -190,65 +191,81 @@ public struct ChatInputView: View {
     }
     
     private var inputBar: some View {
-        HStack(alignment: .bottom, spacing: 0) {
-            Button(action: pickImages) {
-                Image(systemName: "photo")
-                    .font(.system(size: 16))
-                    .foregroundColor(isPhotoHovered ? .primary : .secondary)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isPhotoHovered = hovering
-                }
-            }
-            .padding(.leading, 6)
-            .padding(.bottom, 4)
-            
+        VStack(spacing: 0) {
             textEditor
-            
-            Button(action: send) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 26))
-                    .foregroundColor(canSend ? .accentColor : .secondary.opacity(0.4))
-                    .scaleEffect(isSendHovered && canSend ? 1.08 : 1.0)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSend)
-            .keyboardShortcut(.return, modifiers: .command)
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isSendHovered = hovering
+
+            HStack(spacing: 8) {
+                Button(action: pickImages) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 15))
+                        .foregroundColor(isPhotoHovered ? .primary : .secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isPhotoHovered = hovering
+                    }
+                }
+
+                Spacer()
+
+                Button(action: send) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(canSend ? .accentColor : .secondary.opacity(0.4))
+                        .scaleEffect(isSendHovered && canSend ? 1.08 : 1.0)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSend)
+                .keyboardShortcut(.return, modifiers: .command)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isSendHovered = hovering
+                    }
                 }
             }
-            .padding(.trailing, 6)
-            .padding(.bottom, 4)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
         }
         .background(Color(nsColor: .textBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: 16)
                 .stroke(
-                    isFocused ? Color.accentColor.opacity(0.5) : Color(nsColor: .separatorColor).opacity(0.3),
-                    lineWidth: isFocused ? 1.5 : 0.5
+                    isFocused ? Color.accentColor.opacity(0.5) : Color(nsColor: .separatorColor).opacity(0.4),
+                    lineWidth: isFocused ? 1.5 : 1
                 )
         )
         .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
         .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            isFocused = true
+        }
     }
     
     private var textEditor: some View {
-        TextEditor(text: $inputText)
-            .font(.body)
-            .focused($isFocused)
-            .scrollContentBackground(.hidden)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .frame(minHeight: 56, maxHeight: 300)
+        ZStack(alignment: .topLeading) {
+            if inputText.isEmpty {
+                Text("Message the agent…")
+                    .font(.body)
+                    .foregroundColor(.secondary.opacity(0.5))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .allowsHitTesting(false)
+            }
+            TextEditor(text: $inputText)
+                .font(.body)
+                .focused($isFocused)
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+        }
+        .frame(minHeight: 40, maxHeight: 300)
             .onKeyPress(characters: CharacterSet(charactersIn: "v"), phases: .down) { press in
                 guard press.modifiers.contains(.command) else { return .ignored }
                 let pasteboard = NSPasteboard.general
@@ -282,7 +299,7 @@ public struct ChatInputView: View {
                 }
                 return .ignored
             }
-            .onKeyPress(.return) {
+            .onKeyPress(.return, phases: .down) { press in
                 if showSlashPicker {
                     let cmds = filteredSlashCommands
                     if slashSelectedIndex >= 0 && slashSelectedIndex < cmds.count {
@@ -294,6 +311,16 @@ public struct ChatInputView: View {
                     let opts = filteredCommandOptions
                     if optionsSelectedIndex >= 0 && optionsSelectedIndex < opts.count {
                         handleOptionSelection(opts[optionsSelectedIndex])
+                    }
+                    return .handled
+                }
+                if settings.enterToSend {
+                    if press.modifiers.contains(.shift) {
+                        inputText += "\n"
+                        return .handled
+                    }
+                    if canSend {
+                        send()
                     }
                     return .handled
                 }

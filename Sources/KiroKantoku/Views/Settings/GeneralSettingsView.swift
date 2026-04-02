@@ -72,6 +72,17 @@ public struct GeneralSettingsView: View {
             } header: {
                 Text("Startup")
             }
+            
+            Section {
+                Toggle("Enter to Send", isOn: $settings.enterToSend)
+                    .help("Press Enter to send messages. Use Shift+Enter for new lines.")
+                
+                Text("When enabled, pressing Enter sends the message. Use Shift+Enter to insert a new line.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } header: {
+                Text("Chat Input")
+            }
         }
         .formStyle(.grouped)
         .padding()

@@ -510,7 +510,8 @@ public final class AgentManager {
         // Create user message and append to history
         let userMessage = ChatMessage(
             role: .user,
-            content: prompt
+            content: prompt,
+            imageAttachments: imageAttachments.isEmpty ? nil : imageAttachments
         )
         agent.messages.append(userMessage)
         agent.status = .active

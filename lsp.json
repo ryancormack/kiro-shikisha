@@ -1,0 +1,14 @@
+{
+  "languages": {
+    "swift": {
+      "name": "sourcekit-lsp",
+      "command": "sourcekit-lsp",
+      "args": [],
+      "file_extensions": ["swift"],
+      "project_patterns": ["Package.swift", "*.xcodeproj", "*.xcworkspace"],
+      "exclude_patterns": ["**/.build/**", "**/DerivedData/**"],
+      "multi_workspace": false,
+      "request_timeout_secs": 120
+    }
+  }
+}

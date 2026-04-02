@@ -181,9 +181,32 @@ final class KiroweenImageCache {
     static let shared = KiroweenImageCache()
     private var cache: [String: NSImage] = [:]
 
+    /// Resolve the resource bundle without crashing.
+    /// Bundle.module uses fatalError when the SPM resource bundle isn't found,
+    /// which happens when the app is distributed as a .app bundle (e.g. Homebrew cask).
+    private static let resourceBundle: Bundle? = {
+        // 1. SPM resource bundle next to the main bundle
+        let mainPath = Bundle.main.bundleURL
+            .appendingPathComponent("KiroKantoku_KiroKantoku.bundle").path
+        if let b = Bundle(path: mainPath) { return b }
+
+        // 2. Inside Contents/Resources (standard .app layout)
+        let appResources = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Resources/KiroKantoku_KiroKantoku.bundle").path
+        if let b = Bundle(path: appResources) { return b }
+
+        // 3. Fallback: main bundle itself (resources copied directly)
+        if Bundle.main.url(forResource: "kiro-ghost", withExtension: "png", subdirectory: "Kiroween") != nil {
+            return Bundle.main
+        }
+
+        return nil
+    }()
+
     func image(named name: String) -> NSImage? {
         if let cached = cache[name] { return cached }
-        guard let url = Bundle.module.url(forResource: name, withExtension: "png", subdirectory: "Kiroween"),
+        guard let bundle = Self.resourceBundle,
+              let url = bundle.url(forResource: name, withExtension: "png", subdirectory: "Kiroween"),
               let img = NSImage(contentsOf: url) else { return nil }
         cache[name] = img
         return img

@@ -63,6 +63,7 @@ public struct ChatPanel: View {
                     }
                     .padding()
                     .frame(maxWidth: .infinity)
+                    .textSelection(.enabled)
                 }
                 .scrollContentBackground(.hidden)
                 .onChange(of: agent.messages.count) { _, _ in
