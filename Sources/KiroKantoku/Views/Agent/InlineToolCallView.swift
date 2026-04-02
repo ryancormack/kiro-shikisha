@@ -8,6 +8,8 @@ struct InlineToolCallView: View {
     let toolCall: ToolCallUpdate?
     let toolCallId: String
     @State private var isExpanded = false
+    @State private var isOutputExpanded = false
+    @State private var isInputExpanded = false
 
     private var icon: String {
         switch toolCall?.kind {
@@ -40,6 +42,19 @@ struct InlineToolCallView: View {
         }
     }
 
+    private var accentColor: Color {
+        switch toolCall?.kind {
+        case .execute: return .orange
+        case .edit: return .blue
+        case .delete: return .red
+        case .search: return .purple
+        case .read: return .cyan
+        case .think: return .purple
+        case .fetch: return .teal
+        default: return .secondary
+        }
+    }
+
     private static let jsonEncoder: JSONEncoder = {
         let e = JSONEncoder()
         e.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -62,17 +77,103 @@ struct InlineToolCallView: View {
         return fileName
     }
 
+    /// Extract a short summary of the command/input for the header
+    private var commandSummary: String? {
+        guard let input = toolCall?.rawInput else { return nil }
+        let json = formatJson(input)
+        // Try to pull out a "command" field for execute-type calls
+        if case .object(let dict) = input {
+            if let cmd = dict["command"], case .string(let s) = cmd {
+                return s
+            }
+            if let cmd = dict["input"], case .string(let s) = cmd {
+                let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                return String(trimmed.prefix(120))
+            }
+        }
+        // For short inputs, show inline
+        if json.count < 80 {
+            return json
+        }
+        return nil
+    }
+
+    @ViewBuilder
+    private func collapsibleSection(
+        label: String,
+        icon: String,
+        isExpanded: Binding<Bool>,
+        lineCount: Int,
+        @ViewBuilder content: () -> some View
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.wrappedValue.toggle() } }) {
+                HStack(spacing: 4) {
+                    Image(systemName: isExpanded.wrappedValue ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                    Image(systemName: icon)
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                    Text(label)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundColor(.secondary)
+                    if lineCount > 0 {
+                        Text("(\(lineCount) lines)")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary.opacity(0.6))
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 3)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                content()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func codeBlock(_ text: String, maxHeight: CGFloat = 200) -> some View {
+        ScrollView([.horizontal, .vertical], showsIndicators: true) {
+            Text(text)
+                .font(.system(size: 11, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: true, vertical: true)
+                .padding(8)
+        }
+        .frame(maxHeight: maxHeight)
+        .background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
+    }
+
     @ViewBuilder
     private func toolCallContentView(_ item: ToolCallContent) -> some View {
         switch item {
         case .content(let c):
             if case .text(let t) = c.content {
-                Text(t.text)
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
+                let text = t.text
+                let lines = text.components(separatedBy: .newlines)
+                let isLong = lines.count > 8
+                VStack(alignment: .leading, spacing: 0) {
+                    if isLong {
+                        collapsibleSection(
+                            label: "Output",
+                            icon: "text.alignleft",
+                            isExpanded: $isOutputExpanded,
+                            lineCount: lines.count
+                        ) {
+                            codeBlock(text, maxHeight: 300)
+                        }
+                    } else {
+                        codeBlock(text, maxHeight: 150)
+                    }
+                }
             }
         case .diff(let diff):
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
                     Image(systemName: "doc.text")
                         .font(.caption2)
@@ -84,21 +185,21 @@ struct InlineToolCallView: View {
                 if let oldText = diff.oldText, !oldText.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         Text("- " + oldText.prefix(500))
-                            .font(.system(.caption, design: .monospaced))
+                            .font(.system(size: 11, design: .monospaced))
                             .foregroundColor(.red)
                             .fixedSize(horizontal: true, vertical: false)
                     }
-                    .padding(4)
+                    .padding(6)
                     .background(Color.red.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text("+ " + diff.newText.prefix(500))
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(.green)
                         .fixedSize(horizontal: true, vertical: false)
                 }
-                .padding(4)
+                .padding(6)
                 .background(Color.green.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
             }
@@ -116,6 +217,7 @@ struct InlineToolCallView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Header row
             Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
                 HStack(spacing: 6) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
@@ -123,10 +225,10 @@ struct InlineToolCallView: View {
                         .foregroundColor(.secondary)
                         .frame(width: 10)
                     Image(systemName: icon)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(accentColor)
                         .frame(width: 14)
                     Text(toolCall?.title ?? "Tool call \(toolCallId.prefix(8))…")
-                        .font(.caption)
+                        .font(.system(.caption, weight: .medium))
                         .lineLimit(1)
                     if let locations = toolCall?.locations, !locations.isEmpty {
                         ForEach(Array(locations.prefix(3).enumerated()), id: \.offset) { _, loc in
@@ -153,46 +255,78 @@ struct InlineToolCallView: View {
             }
             .buttonStyle(.plain)
 
+            // Command summary shown below header when collapsed (for execute-type calls)
+            if !isExpanded, let summary = commandSummary {
+                Text(summary)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 30)
+                    .padding(.bottom, 6)
+            }
+
+            // Expanded detail
             if isExpanded {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
+                    // Input section
                     if let input = toolCall?.rawInput {
-                        Text("Input:")
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(.secondary)
-                        ScrollView(.horizontal, showsIndicators: true) {
-                            Text(formatJson(input))
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: true, vertical: false)
+                        let formatted = formatJson(input)
+                        let lines = formatted.components(separatedBy: .newlines)
+                        collapsibleSection(
+                            label: "Input",
+                            icon: "arrow.right.circle",
+                            isExpanded: $isInputExpanded,
+                            lineCount: lines.count
+                        ) {
+                            codeBlock(formatted)
                         }
-                        .frame(maxHeight: 100)
                     }
 
+                    // Output section
                     if let output = toolCall?.rawOutput {
-                        Text("Output:")
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(.secondary)
-                        ScrollView(.horizontal, showsIndicators: true) {
-                            Text(formatJson(output))
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: true, vertical: false)
+                        let formatted = formatJson(output)
+                        let lines = formatted.components(separatedBy: .newlines)
+                        let isLong = lines.count > 10
+                        if isLong {
+                            collapsibleSection(
+                                label: "Raw Output",
+                                icon: "arrow.left.circle",
+                                isExpanded: $isOutputExpanded,
+                                lineCount: lines.count
+                            ) {
+                                codeBlock(formatted, maxHeight: 300)
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.left.circle")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(.secondary)
+                                    Text("Raw Output")
+                                        .font(.system(.caption2, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                }
+                                codeBlock(formatted)
+                            }
                         }
-                        .frame(maxHeight: 100)
                     }
 
-                    if let tc = toolCall {
+                    // Structured content (diffs, terminal refs, text output)
+                    if let tc = toolCall, !tc.content.isEmpty {
                         ForEach(Array(tc.content.enumerated()), id: \.offset) { _, item in
                             toolCallContentView(item)
                         }
                     }
                 }
-                .padding(8)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusSmall))
                 .padding(.horizontal, 10)
-                .padding(.bottom, 6)
+                .padding(.bottom, 8)
             }
+        }
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(accentColor.opacity(0.4))
+                .frame(width: 2)
         }
         .background(DesignConstants.cardBackground.opacity(0.6))
         .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))

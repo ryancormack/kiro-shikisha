@@ -43,6 +43,13 @@ public final class AppSettings {
         didSet { UserDefaults.standard.set(autoStartAgent, forKey: "autoStartAgent") }
     }
     
+    /// Whether pressing Enter sends the message (Shift+Enter for new line)
+    public var enterToSend: Bool = {
+        UserDefaults.standard.object(forKey: "enterToSend") != nil ? UserDefaults.standard.bool(forKey: "enterToSend") : false
+    }() {
+        didSet { UserDefaults.standard.set(enterToSend, forKey: "enterToSend") }
+    }
+    
     /// Whether to show the Kiroween pixel art office overlay on the dashboard
     public var showKiroweenOffice: Bool = UserDefaults.standard.bool(forKey: "showKiroweenOffice") {
         didSet { UserDefaults.standard.set(showKiroweenOffice, forKey: "showKiroweenOffice") }

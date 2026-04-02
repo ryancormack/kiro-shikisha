@@ -53,10 +53,15 @@ public struct ChatMessageView: View {
                 }
                 
                 VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                    Group {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let images = message.imageAttachments, !images.isEmpty {
+                            FlowImageLayout(images: images)
+                        }
                         if isUser {
-                            Text(message.content)
-                                .textSelection(.enabled)
+                            if !message.content.isEmpty {
+                                Text(message.content)
+                                    .textSelection(.enabled)
+                            }
                         } else {
                             MarkdownContentView(content: message.content)
                                 .textSelection(.enabled)
@@ -111,4 +116,28 @@ public struct ChatMessageView: View {
     .padding()
     .frame(width: 400)
 }
+/// Displays attached images in a compact layout within a message bubble
+private struct FlowImageLayout: View {
+    let images: [Data]
+
+    var body: some View {
+        let columns = min(images.count, 3)
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: columns),
+            spacing: 4
+        ) {
+            ForEach(Array(images.enumerated()), id: \.offset) { _, data in
+                if let nsImage = NSImage(data: data) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(minWidth: 60, maxWidth: .infinity)
+                        .frame(height: images.count == 1 ? 200 : 120)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+}
+
 #endif
