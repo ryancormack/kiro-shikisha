@@ -60,11 +60,9 @@ public struct ChatMessageView: View {
                         if isUser {
                             if !message.content.isEmpty {
                                 Text(message.content)
-                                    .textSelection(.enabled)
                             }
                         } else {
                             MarkdownContentView(content: message.content)
-                                .textSelection(.enabled)
                         }
                     }
                     .padding(.horizontal, 12)
