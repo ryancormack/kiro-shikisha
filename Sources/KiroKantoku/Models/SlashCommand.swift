@@ -41,7 +41,7 @@ public struct SlashCommand: Identifiable, Sendable {
 /// Commands we support in the GUI. Other Kiro commands are CLI-specific
 /// and either don't make sense in a GUI context or aren't implemented yet.
 private let supportedCommands: Set<String> = [
-    "compact", "context", "help", "tools", "usage"
+    "code", "compact", "context", "help", "tools", "usage"
 ]
 
 /// Builds a merged list of SlashCommand from standard ACP commands and Kiro extension commands.
