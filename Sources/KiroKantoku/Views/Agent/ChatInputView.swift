@@ -228,8 +228,9 @@ public struct ChatInputView: View {
                     }
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 8)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 10)
+            .padding(.top, 4)
         }
         .background(Color(nsColor: .textBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -254,18 +255,18 @@ public struct ChatInputView: View {
                 Text("Message the agent…")
                     .font(.body)
                     .foregroundColor(.secondary.opacity(0.5))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
+                    .padding(.leading, 12)
+                    .padding(.top, 10)
                     .allowsHitTesting(false)
             }
             TextEditor(text: $inputText)
                 .font(.body)
                 .focused($isFocused)
                 .scrollContentBackground(.hidden)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
         }
-        .frame(minHeight: 40, maxHeight: 300)
+        .frame(minHeight: 36, maxHeight: 300)
             .onKeyPress(characters: CharacterSet(charactersIn: "v"), phases: .down) { press in
                 guard press.modifiers.contains(.command) else { return .ignored }
                 let pasteboard = NSPasteboard.general
