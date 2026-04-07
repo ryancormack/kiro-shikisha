@@ -10,6 +10,7 @@ public struct MainView: View {
 
     @State private var showDashboard: Bool = false
     @State private var showNewTaskSheet: Bool = false
+    @State private var showLoadSessionSheet: Bool = false
     @State private var showPixelOffice: Bool = false
 
     /// The currently selected task, looked up from taskManager
@@ -104,6 +105,16 @@ public struct MainView: View {
         .sheet(isPresented: $showPixelOffice) {
             PixelOfficeView()
                 .frame(minWidth: 700, minHeight: 520)
+        }
+        .sheet(isPresented: $showLoadSessionSheet) {
+            AllSessionsView { sessionId, cwd in
+                Task {
+                    if let task = try? await taskManager.loadExternalSession(sessionId: sessionId, cwd: cwd) {
+                        appStateManager.selectTask(task.id)
+                        showDashboard = false
+                    }
+                }
+            }
         }
         } // ErrorBannerContainer
     }

@@ -431,6 +431,41 @@ public final class TaskManager {
         }
     }
 
+    // MARK: - External Session Loading
+
+    /// Creates a new task by loading a session that was created outside this app (e.g. from kiro-cli or another editor).
+    /// - Parameters:
+    ///   - sessionId: The session ID to load
+    ///   - cwd: The working directory the session was created in
+    /// - Returns: The newly created task
+    public func loadExternalSession(sessionId: String, cwd: URL) async throws -> AgentTask {
+        guard agentManager != nil else {
+            throw AgentManagerError.platformNotSupported
+        }
+
+        let sessionStorage = SessionStorage()
+        let displayName = (try? sessionStorage.getSessionMetadata(sessionId: sessionId))?.displayName
+        let name = (displayName?.isEmpty == false ? displayName : nil) ?? cwd.lastPathComponent
+
+        let task = AgentTask(
+            name: name,
+            status: .starting,
+            workspacePath: cwd
+        )
+        task.sessionId = sessionId
+        tasks[task.id] = task
+        persistCurrentState()
+
+        do {
+            try await reconnectTask(task: task, sessionId: sessionId)
+        } catch {
+            task.status = .failed
+            persistCurrentState()
+            throw error
+        }
+        return task
+    }
+
     // MARK: - Tool Call History Restoration
 
     /// Known tool names that map to execute kind for the Terminal tab

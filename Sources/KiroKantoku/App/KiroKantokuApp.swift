@@ -18,6 +18,7 @@ struct KiroKantokuApp: App {
     // State for commands
     @State private var showDashboard: Bool = false
     @State private var showNewTaskSheet: Bool = false
+    @State private var showLoadSessionSheet: Bool = false
 
     var body: some Scene {
         WindowGroup {
@@ -75,6 +76,7 @@ struct KiroKantokuApp: App {
             AppCommands(
                 showDashboard: $showDashboard,
                 showNewTaskSheet: $showNewTaskSheet,
+                showLoadSessionSheet: $showLoadSessionSheet,
                 agentManager: agentManager,
                 appStateManager: appStateManager,
                 taskManager: taskManager
@@ -111,6 +113,7 @@ struct KiroKantokuApp: App {
 struct AppCommands: Commands {
     @Binding var showDashboard: Bool
     @Binding var showNewTaskSheet: Bool
+    @Binding var showLoadSessionSheet: Bool
     let agentManager: AgentManager
     let appStateManager: AppStateManager
     let taskManager: TaskManager
@@ -126,6 +129,11 @@ struct AppCommands: Commands {
                 showNewTaskSheet = true
             }
             .keyboardShortcut("t", modifiers: [.command, .shift])
+
+            Button("Load Session…") {
+                showLoadSessionSheet = true
+            }
+            .keyboardShortcut("l", modifiers: [.command, .shift])
         }
 
         // View menu additions

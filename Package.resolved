@@ -1,5 +1,5 @@
 {
-  "originHash" : "f2b48b8d9d0d330f0d0c6f99781d1bd92406e3680f5792258f06875ec7f8517c",
+  "originHash" : "3bfe3193e97d06fcdc4eb56a80ef4ed9f32acd6e6e7620ce416bec7d14a2bc20",
   "pins" : [
     {
       "identity" : "swift-collections",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/aptove/swift-sdk",
       "state" : {
-        "revision" : "ccc5678ced736492312900865fe57048db4e631e",
-        "version" : "0.1.15"
+        "revision" : "f38606f7bb43a12122b8338b2bb694084ededf94",
+        "version" : "0.1.16"
       }
     }
   ],

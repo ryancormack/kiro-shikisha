@@ -96,11 +96,11 @@ public struct SessionHistoryView: View {
         .listStyle(.inset)
     }
     
-    /// Sessions sorted by last modified date (most recent first)
+    /// Sessions sorted by last activity date (most recent first)
     private var sortedSessions: [SessionMetadata] {
         sessions.sorted { (s1, s2) in
-            let date1 = s1.lastModified ?? s1.createdAt ?? .distantPast
-            let date2 = s2.lastModified ?? s2.createdAt ?? .distantPast
+            let date1 = s1.lastActivityDate ?? .distantPast
+            let date2 = s2.lastActivityDate ?? .distantPast
             return date1 > date2
         }
     }

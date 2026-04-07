@@ -139,7 +139,7 @@ public struct SessionRow: View {
     
     /// Formatted date string showing relative dates
     private var formattedDate: String {
-        guard let date = session.lastModified ?? session.createdAt else {
+        guard let date = session.lastActivityDate else {
             return "Unknown date"
         }
         

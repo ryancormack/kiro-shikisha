@@ -8,31 +8,42 @@ public struct SessionMetadata: Codable, Identifiable, Sendable {
     public let cwd: String
     /// User-provided session name (optional)
     public var sessionName: String?
+    /// Session title set by kiro-cli (optional)
+    public let title: String?
     /// When the session was created
     public let createdAt: Date?
-    /// When the session was last modified
+    /// When the session was last updated (from kiro-cli `updated_at` field)
+    public let updatedAt: Date?
+    /// When the session was last modified (legacy field)
     public let lastModified: Date?
     
     public var id: String { sessionId }
     
-    /// Display name for the session - returns sessionName if set, otherwise last path component of cwd
+    /// Display name: prefers title, then sessionName, then last path component of cwd
     public var displayName: String {
-        if let name = sessionName, !name.isEmpty {
-            return name
-        }
+        if let t = title, !t.isEmpty { return t }
+        if let name = sessionName, !name.isEmpty { return name }
         return URL(fileURLWithPath: cwd).lastPathComponent
     }
     
     /// Whether this session has a custom name
     public var hasCustomName: Bool {
-        sessionName != nil && !(sessionName?.isEmpty ?? true)
+        (title != nil && !(title?.isEmpty ?? true)) ||
+        (sessionName != nil && !(sessionName?.isEmpty ?? true))
+    }
+    
+    /// Best available "last activity" date
+    public var lastActivityDate: Date? {
+        updatedAt ?? lastModified ?? createdAt
     }
     
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case cwd
         case sessionName = "session_name"
+        case title
         case createdAt = "created_at"
+        case updatedAt = "updated_at"
         case lastModified = "last_modified"
     }
     
@@ -40,13 +51,17 @@ public struct SessionMetadata: Codable, Identifiable, Sendable {
         sessionId: String,
         cwd: String,
         sessionName: String? = nil,
+        title: String? = nil,
         createdAt: Date? = nil,
+        updatedAt: Date? = nil,
         lastModified: Date? = nil
     ) {
         self.sessionId = sessionId
         self.cwd = cwd
         self.sessionName = sessionName
+        self.title = title
         self.createdAt = createdAt
+        self.updatedAt = updatedAt
         self.lastModified = lastModified
     }
     
@@ -56,6 +71,7 @@ public struct SessionMetadata: Codable, Identifiable, Sendable {
         sessionId = try container.decode(String.self, forKey: .sessionId)
         cwd = try container.decode(String.self, forKey: .cwd)
         sessionName = try container.decodeIfPresent(String.self, forKey: .sessionName)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
         
         // Handle date decoding with flexibility for different formats
         if let timestamp = try? container.decode(Double.self, forKey: .createdAt) {
@@ -64,6 +80,14 @@ public struct SessionMetadata: Codable, Identifiable, Sendable {
             createdAt = ISO8601DateFormatter().date(from: dateString)
         } else {
             createdAt = nil
+        }
+        
+        if let timestamp = try? container.decode(Double.self, forKey: .updatedAt) {
+            updatedAt = Date(timeIntervalSince1970: timestamp)
+        } else if let dateString = try? container.decode(String.self, forKey: .updatedAt) {
+            updatedAt = ISO8601DateFormatter().date(from: dateString)
+        } else {
+            updatedAt = nil
         }
         
         if let timestamp = try? container.decode(Double.self, forKey: .lastModified) {
