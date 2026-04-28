@@ -15,11 +15,6 @@ struct KiroKantokuApp: App {
     @State private var appSettings = AppSettings()
     @State private var taskManager = TaskManager()
 
-    // State for commands
-    @State private var showDashboard: Bool = false
-    @State private var showNewTaskSheet: Bool = false
-    @State private var showLoadSessionSheet: Bool = false
-
     var body: some Scene {
         WindowGroup {
             Group {
@@ -74,9 +69,6 @@ struct KiroKantokuApp: App {
         }
         .commands {
             AppCommands(
-                showDashboard: $showDashboard,
-                showNewTaskSheet: $showNewTaskSheet,
-                showLoadSessionSheet: $showLoadSessionSheet,
                 agentManager: agentManager,
                 appStateManager: appStateManager,
                 taskManager: taskManager
@@ -111,9 +103,6 @@ struct KiroKantokuApp: App {
 
 /// App-wide commands for menus and keyboard shortcuts
 struct AppCommands: Commands {
-    @Binding var showDashboard: Bool
-    @Binding var showNewTaskSheet: Bool
-    @Binding var showLoadSessionSheet: Bool
     let agentManager: AgentManager
     let appStateManager: AppStateManager
     let taskManager: TaskManager
@@ -126,20 +115,25 @@ struct AppCommands: Commands {
         // File menu additions
         CommandGroup(after: .newItem) {
             Button("New Task...") {
-                showNewTaskSheet = true
+                appStateManager.showNewTaskSheet = true
             }
             .keyboardShortcut("t", modifiers: [.command, .shift])
 
             Button("Load Session…") {
-                showLoadSessionSheet = true
+                appStateManager.showLoadSessionSheet = true
             }
             .keyboardShortcut("l", modifiers: [.command, .shift])
+
+            Button("Resume Last Session") {
+                resumeLastSession()
+            }
+            .keyboardShortcut("r", modifiers: [.command, .shift])
         }
 
         // View menu additions
         CommandGroup(after: .sidebar) {
             Button("Toggle Dashboard") {
-                showDashboard.toggle()
+                appStateManager.showDashboard.toggle()
             }
             .keyboardShortcut("d", modifiers: .command)
 
@@ -260,6 +254,40 @@ struct AppCommands: Commands {
         guard let selectedTaskId = appStateManager.selectedTaskId else { return }
         Task { @MainActor in
             taskManager.completeTask(id: selectedTaskId)
+        }
+    }
+
+    /// Reconnect the most recent session for the currently selected task, or —
+    /// if no task is selected — the most recent session from anywhere on disk.
+    /// Mirrors `kiro-cli chat --resume`.
+    private func resumeLastSession() {
+        // Prefer: reopen the currently selected paused/completed task if it has a session.
+        if let selectedTaskId = appStateManager.selectedTaskId,
+           let task = taskManager.getTask(id: selectedTaskId),
+           task.sessionId != nil,
+           task.agentId == nil {
+            Task {
+                try? await taskManager.reopenTask(id: selectedTaskId)
+            }
+            return
+        }
+
+        // Otherwise: find the most recently updated session on disk and load it as a new task.
+        let storage = SessionStorage()
+        let all = storage.listAllSessions()
+        guard let latest = all.sorted(by: { ($0.lastActivityDate ?? .distantPast) > ($1.lastActivityDate ?? .distantPast) }).first else {
+            print("[AppCommands] Resume Last Session: no sessions on disk")
+            return
+        }
+
+        let cwd = URL(fileURLWithPath: latest.cwd)
+        Task {
+            do {
+                let newTask = try await taskManager.loadExternalSession(sessionId: latest.sessionId, cwd: cwd)
+                appStateManager.selectTask(newTask.id)
+            } catch {
+                print("[AppCommands] Resume Last Session failed: \(error)")
+            }
         }
     }
 }

@@ -323,6 +323,20 @@ public actor ACPConnection {
         }
         proc.arguments = arguments
         
+        // Ensure kiro-cli inherits a PATH that includes common tool locations.
+        // When launched from Finder/Spotlight, macOS apps get a minimal PATH that
+        // may not include /opt/homebrew/bin, ~/.local/bin, etc.
+        var env = ProcessInfo.processInfo.environment
+        let extraPaths = ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin",
+                          FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin").path]
+        let currentPath = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        let currentComponents = Set(currentPath.components(separatedBy: ":"))
+        let missing = extraPaths.filter { !currentComponents.contains($0) }
+        if !missing.isEmpty {
+            env["PATH"] = (missing + [currentPath]).joined(separator: ":")
+        }
+        proc.environment = env
+        
         // Set up pipes for communication
         let stdin = Pipe()
         let stdout = Pipe()

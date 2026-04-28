@@ -87,6 +87,17 @@ struct SlashCommandPicker: View {
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundColor(.primary)
 
+            if command.isSkill {
+                Text("Skill")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Color.purple)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
+                    .accessibilityLabel("Skill-based slash command")
+            }
+
             Text(command.description)
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)

@@ -21,7 +21,18 @@ public final class AppStateManager {
 
     /// PIDs of kiro-cli processes spawned by this app (saved on quit, killed on next launch)
     public var ownedProcessPids: [Int32] = []
-    
+
+    // MARK: - Transient UI State (not persisted)
+
+    /// Whether the New Task sheet is currently visible
+    public var showNewTaskSheet: Bool = false
+
+    /// Whether the Load Session sheet is currently visible
+    public var showLoadSessionSheet: Bool = false
+
+    /// Whether the dashboard is currently visible
+    public var showDashboard: Bool = false
+
     // MARK: - Private Properties
     
     private let userDefaults: UserDefaults

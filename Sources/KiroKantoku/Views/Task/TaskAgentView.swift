@@ -6,8 +6,10 @@ public struct TaskAgentView: View {
     let task: AgentTask
     @Environment(AgentManager.self) var agentManager
     @Environment(TaskManager.self) var taskManager
+    @Environment(AppStateManager.self) var appStateManager
     @State private var actionError: String?
     @State private var showStartingCancel: Bool = false
+    @State private var showSessionHistory: Bool = false
 
     public init(task: AgentTask) {
         self.task = task
@@ -56,7 +58,6 @@ public struct TaskAgentView: View {
 
                     CodePanel(agent: agent, workspacePath: task.workspacePath)
                         .frame(minWidth: 400, idealWidth: 700)
-                        .id(task.id)
                 }
             } else if task.status == .pending {
                 // Task created but not started
@@ -138,6 +139,34 @@ public struct TaskAgentView: View {
             }
         }
         .navigationTitle(task.name)
+        .sheet(isPresented: $showSessionHistory) {
+            VStack(spacing: 0) {
+                HStack {
+                    Text("Sessions for \(task.workspacePath.lastPathComponent)")
+                        .font(.headline)
+                    Spacer()
+                    Button("Close") { showSessionHistory = false }
+                        .keyboardShortcut(.cancelAction)
+                }
+                .padding()
+                Divider()
+                SessionHistoryView(workspacePath: task.workspacePath) { sessionId in
+                    showSessionHistory = false
+                    Task {
+                        do {
+                            let newTask = try await taskManager.loadExternalSession(
+                                sessionId: sessionId,
+                                cwd: task.workspacePath
+                            )
+                            appStateManager.selectTask(newTask.id)
+                        } catch {
+                            actionError = error.localizedDescription
+                        }
+                    }
+                }
+            }
+            .frame(minWidth: 500, minHeight: 440)
+        }
     }
 
     private var taskHeader: some View {
@@ -169,6 +198,15 @@ public struct TaskAgentView: View {
             }
 
             Spacer()
+
+            // Browse past sessions for this workspace
+            Button {
+                showSessionHistory = true
+            } label: {
+                Image(systemName: "clock.arrow.circlepath")
+            }
+            .buttonStyle(.plain)
+            .help("Browse past sessions for this directory")
 
             // File changes count
             if !task.fileChanges.isEmpty {
@@ -388,7 +426,6 @@ struct TaskCompletedView: View {
 
                     CodePanel(agent: agent, workspacePath: task.workspacePath)
                         .frame(minWidth: 400, idealWidth: 700)
-                        .id(task.id)
                 }
             } else if !task.messages.isEmpty || !task.fileChanges.isEmpty {
                 // Show stored messages and file changes
@@ -659,7 +696,6 @@ struct TaskPausedView: View {
 
                     CodePanel(agent: agent, workspacePath: task.workspacePath)
                         .frame(minWidth: 400, idealWidth: 700)
-                        .id(task.id)
                 }
             } else if !task.messages.isEmpty || !task.fileChanges.isEmpty {
                 // Show stored content with chat input

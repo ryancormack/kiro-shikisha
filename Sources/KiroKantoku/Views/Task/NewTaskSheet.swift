@@ -19,13 +19,26 @@ public struct NewTaskSheet: View {
     @State private var startImmediately: Bool = true
     @State private var selectedAgentConfigId: UUID?
 
-    private let gitService = GitService()
+    // Existing session discovery for the selected directory
+    @State private var existingSessions: [SessionMetadata] = []
+    @State private var isLoadingSessions: Bool = false
+    @State private var showExistingSessions: Bool = true
 
-    /// Callback when task is created
+    private let gitService = GitService()
+    private let sessionStorage = SessionStorage()
+
+    /// Callback when task is created from scratch
     public var onCreate: (TaskCreationRequest) -> Void
 
-    public init(onCreate: @escaping (TaskCreationRequest) -> Void) {
+    /// Callback when user chooses to resume an existing session instead of creating a new task
+    public var onResumeSession: ((String, URL) -> Void)?
+
+    public init(
+        onCreate: @escaping (TaskCreationRequest) -> Void,
+        onResumeSession: ((String, URL) -> Void)? = nil
+    ) {
         self.onCreate = onCreate
+        self.onResumeSession = onResumeSession
     }
 
     public var body: some View {
@@ -47,6 +60,10 @@ public struct NewTaskSheet: View {
 
                     directorySection
 
+                    if !existingSessions.isEmpty || isLoadingSessions {
+                        existingSessionsSection
+                    }
+
                     if detectedRepository != nil {
                         gitSection
                     }
@@ -55,7 +72,7 @@ public struct NewTaskSheet: View {
                 }
                 .formStyle(.grouped)
             }
-            .frame(maxHeight: 400)
+            .frame(maxHeight: 480)
 
             Divider()
 
@@ -77,7 +94,15 @@ public struct NewTaskSheet: View {
             }
             .padding()
         }
-        .frame(width: 500, height: detectedRepository != nil ? 520 : 400)
+        .frame(width: 520, height: computedHeight)
+    }
+
+    /// Compute the sheet height based on what's visible.
+    private var computedHeight: CGFloat {
+        var h: CGFloat = 400
+        if detectedRepository != nil { h += 140 }
+        if !existingSessions.isEmpty { h += 120 }
+        return min(h, 720)
     }
 
     @ViewBuilder
@@ -123,6 +148,64 @@ public struct NewTaskSheet: View {
             }
         } header: {
             Text("Directory")
+        }
+    }
+
+    @ViewBuilder
+    private var existingSessionsSection: some View {
+        Section {
+            if isLoadingSessions {
+                HStack {
+                    ProgressView().scaleEffect(0.7)
+                    Text("Looking for past sessions…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                DisclosureGroup(isExpanded: $showExistingSessions) {
+                    ForEach(existingSessions.prefix(5)) { session in
+                        Button {
+                            resumeSession(session)
+                        } label: {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "bubble.left.and.bubble.right")
+                                    .foregroundColor(.blue)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(session.displayName)
+                                        .font(.body)
+                                        .lineLimit(1)
+                                    if let date = session.lastActivityDate {
+                                        Text(date, style: .relative)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "arrow.right.circle")
+                                    .foregroundColor(.accentColor)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 2)
+                    }
+                    if existingSessions.count > 5 {
+                        Text("+ \(existingSessions.count - 5) more — use File > Load Session… to browse all")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } label: {
+                    Label("Resume an existing session for this directory (\(existingSessions.count))", systemImage: "clock.arrow.circlepath")
+                        .font(.subheadline)
+                }
+            }
+        } header: {
+            Text("Past Sessions")
+        } footer: {
+            Text("Past kiro sessions found for this directory. Pick one to resume where you left off, or fill in the form below to start fresh.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -247,6 +330,9 @@ public struct NewTaskSheet: View {
 
             // Detect git repository
             detectGitRepository(at: url)
+
+            // Discover past sessions for this directory
+            loadExistingSessions(for: url)
         }
     }
 
@@ -275,6 +361,26 @@ public struct NewTaskSheet: View {
                 }
             }
         }
+    }
+
+    /// Look up past kiro-cli sessions for the selected directory so the user can resume one.
+    private func loadExistingSessions(for url: URL) {
+        isLoadingSessions = true
+        existingSessions = []
+        Task {
+            let found = sessionStorage.getSessionsForWorkspace(path: url)
+                .sorted { ($0.lastActivityDate ?? .distantPast) > ($1.lastActivityDate ?? .distantPast) }
+            await MainActor.run {
+                self.existingSessions = found
+                self.isLoadingSessions = false
+            }
+        }
+    }
+
+    private func resumeSession(_ session: SessionMetadata) {
+        let cwd = URL(fileURLWithPath: session.cwd)
+        onResumeSession?(session.sessionId, cwd)
+        dismiss()
     }
 
     private func createTask() {

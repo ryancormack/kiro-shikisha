@@ -6,9 +6,24 @@ public struct ChatPanel: View {
     let agent: Agent
     @Environment(AgentManager.self) private var agentManager
     @State private var errorMessage: String?
+    @State private var hasAppeared: Bool = false
     
     public init(agent: Agent) {
         self.agent = agent
+    }
+
+    /// Names (without leading `/`) of every slash command the agent has advertised
+    /// — standard ACP + Kiro extensions. Used to decide whether a skill can be
+    /// invoked as a real slash command or needs a natural-language fallback.
+    private var availableSlashCommandNames: Set<String> {
+        var names = Set<String>()
+        for cmd in agent.availableCommands {
+            names.insert(cmd.name.hasPrefix("/") ? String(cmd.name.dropFirst()) : cmd.name)
+        }
+        for cmd in agent.kiroAvailableCommands {
+            names.insert(cmd.name.hasPrefix("/") ? String(cmd.name.dropFirst()) : cmd.name)
+        }
+        return names
     }
     
     public var body: some View {
@@ -73,6 +88,8 @@ public struct ChatPanel: View {
                     scrollToBottom(proxy: proxy)
                 }
                 .onAppear {
+                    guard !hasAppeared else { return }
+                    hasAppeared = true
                     scrollToBottom(proxy: proxy)
                 }
             }
@@ -99,9 +116,33 @@ public struct ChatPanel: View {
                         errorMessage = error
                     })
 
-                    SkillsPanel(skills: agent.availableSkills) { skillName in
-                        sendMessage("Please use the \(skillName) skill for the following request.")
-                    }
+                    SkillsPanel(
+                        skills: agent.availableSkills,
+                        availableCommandNames: availableSlashCommandNames,
+                        onRefresh: {
+                            agentManager.refreshSkills(agentId: agent.id)
+                        },
+                        onUseSkill: { skill, asSlashCommand in
+                            if asSlashCommand {
+                                // Invoke /skill-name as a real slash command — this is the
+                                // native path in recent kiro-cli versions.
+                                Task {
+                                    do {
+                                        try await agentManager.executeSlashCommand(
+                                            agentId: agent.id,
+                                            command: skill.name
+                                        )
+                                    } catch {
+                                        errorMessage = error.localizedDescription
+                                    }
+                                }
+                            } else {
+                                // Fallback for older CLIs that don't advertise skills as
+                                // slash commands: ask the agent to use the skill in words.
+                                sendMessage("Please use the \(skill.name) skill for the following request.")
+                            }
+                        }
+                    )
 
                     if agent.isCompacting, let message = agent.compactionMessage {
                         StatusBannerView(
@@ -125,6 +166,12 @@ public struct ChatPanel: View {
                                 NSWorkspace.shared.open(url)
                             }
                             agent.pendingOAuthURL = nil
+                        }
+                    }
+
+                    if !agent.mcpServerErrors.isEmpty {
+                        McpServerErrorsView(errors: agent.mcpServerErrors) {
+                            agent.mcpServerErrors.removeAll()
                         }
                     }
 
@@ -392,6 +439,51 @@ private struct OAuthRequestView: View {
         .padding(.horizontal, DesignConstants.spacingMD)
         .padding(.vertical, DesignConstants.spacingSM)
         .background(Color.blue.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
+        .padding(.horizontal)
+    }
+}
+
+/// Inline view showing MCP server initialization failures with a dismiss button
+private struct McpServerErrorsView: View {
+    let errors: [McpServerError]
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignConstants.spacingSM) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.red)
+                Text("MCP Server Errors")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                Spacer()
+                Button { onDismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            ForEach(errors) { error in
+                HStack(alignment: .top, spacing: 4) {
+                    Text("•")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(error.serverName)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                        Text(error.error)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, DesignConstants.spacingMD)
+        .padding(.vertical, DesignConstants.spacingSM)
+        .background(Color.red.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: DesignConstants.cornerRadiusMedium))
         .padding(.horizontal)
     }

@@ -63,9 +63,9 @@ public struct TaskRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: DesignConstants.badgeCornerRadius))
             }
 
-            // Last activity time
-            if !task.status.isTerminal, let lastActivity = task.lastActivityAt {
-                Text(lastActivity, style: .relative)
+            // Started time
+            if let startedAt = task.startedAt {
+                Text("Started \(startedAt, format: .dateTime.hour().minute())")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }

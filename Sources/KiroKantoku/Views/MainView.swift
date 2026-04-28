@@ -8,9 +8,6 @@ public struct MainView: View {
     @Environment(TaskManager.self) var taskManager
     @Environment(AppSettings.self) var appSettings
 
-    @State private var showDashboard: Bool = false
-    @State private var showNewTaskSheet: Bool = false
-    @State private var showLoadSessionSheet: Bool = false
     @State private var showPixelOffice: Bool = false
 
     /// The currently selected task, looked up from taskManager
@@ -36,7 +33,10 @@ public struct MainView: View {
             SidebarView(
                 selectedTaskId: $stateManager.selectedTaskId,
                 onCreateTask: {
-                    showNewTaskSheet = true
+                    stateManager.showNewTaskSheet = true
+                },
+                onBrowseSessions: {
+                    stateManager.showLoadSessionSheet = true
                 },
                 onDeleteTask: { id in
                     Task { await taskManager.deleteTask(id: id) }
@@ -46,14 +46,14 @@ public struct MainView: View {
                 }
             )
         } detail: {
-            if showDashboard {
+            if stateManager.showDashboard {
                 DashboardView(
                     onSelectTask: { task in
                         stateManager.selectedTaskId = task.id
-                        showDashboard = false
+                        stateManager.showDashboard = false
                     },
                     onNewTask: {
-                        showNewTaskSheet = true
+                        stateManager.showNewTaskSheet = true
                     }
                 )
             } else if let task = selectedTask {
@@ -67,17 +67,24 @@ public struct MainView: View {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 8) {
                     Button {
-                        showNewTaskSheet = true
+                        stateManager.showNewTaskSheet = true
                     } label: {
                         Image(systemName: "plus")
                             .help("New Task")
                     }
 
                     Button {
-                        showDashboard.toggle()
+                        stateManager.showLoadSessionSheet = true
                     } label: {
-                        Image(systemName: showDashboard ? "person.fill" : "rectangle.grid.2x2")
-                            .help(showDashboard ? "Show Single Task" : "Show Dashboard")
+                        Image(systemName: "clock.arrow.circlepath")
+                            .help("Load Session…")
+                    }
+
+                    Button {
+                        stateManager.showDashboard.toggle()
+                    } label: {
+                        Image(systemName: stateManager.showDashboard ? "person.fill" : "rectangle.grid.2x2")
+                            .help(stateManager.showDashboard ? "Show Single Task" : "Show Dashboard")
                     }
 
                     if appSettings.showPixelOffice {
@@ -91,27 +98,38 @@ public struct MainView: View {
                 }
             }
         }
-        .sheet(isPresented: $showNewTaskSheet) {
-            NewTaskSheet { request in
-                let task = taskManager.createTask(from: request)
-                appStateManager.selectTask(task.id)
-                showDashboard = false
-                if request.startImmediately {
-                    Task { try? await taskManager.startTask(id: task.id) }
+        .sheet(isPresented: $stateManager.showNewTaskSheet) {
+            NewTaskSheet(
+                onCreate: { request in
+                    let task = taskManager.createTask(from: request)
+                    appStateManager.selectTask(task.id)
+                    stateManager.showDashboard = false
+                    if request.startImmediately {
+                        Task { try? await taskManager.startTask(id: task.id) }
+                    }
+                    stateManager.showNewTaskSheet = false
+                },
+                onResumeSession: { sessionId, cwd in
+                    Task {
+                        if let task = try? await taskManager.loadExternalSession(sessionId: sessionId, cwd: cwd) {
+                            appStateManager.selectTask(task.id)
+                            stateManager.showDashboard = false
+                        }
+                    }
+                    stateManager.showNewTaskSheet = false
                 }
-                showNewTaskSheet = false
-            }
+            )
         }
         .sheet(isPresented: $showPixelOffice) {
             PixelOfficeView()
                 .frame(minWidth: 700, minHeight: 520)
         }
-        .sheet(isPresented: $showLoadSessionSheet) {
+        .sheet(isPresented: $stateManager.showLoadSessionSheet) {
             AllSessionsView { sessionId, cwd in
                 Task {
                     if let task = try? await taskManager.loadExternalSession(sessionId: sessionId, cwd: cwd) {
                         appStateManager.selectTask(task.id)
-                        showDashboard = false
+                        stateManager.showDashboard = false
                     }
                 }
             }

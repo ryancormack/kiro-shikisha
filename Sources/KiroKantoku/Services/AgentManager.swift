@@ -473,6 +473,22 @@ public final class AgentManager {
     public func getAgent(id: UUID) -> Agent? {
         return agents[id]
     }
+
+    /// Re-scan the workspace and global `~/.kiro/skills/` directories for skills,
+    /// updating the given agent's `availableSkills`. Preserves the `isActive` flag
+    /// for any skill that still exists after rediscovery so the Active badge doesn't
+    /// flicker when the user adds unrelated skills.
+    /// - Parameter id: The agent ID whose skill list should be refreshed.
+    public func refreshSkills(agentId id: UUID) {
+        guard let agent = agents[id] else { return }
+        let previouslyActive = Set(agent.availableSkills.filter { $0.isActive }.map { $0.name })
+        let discovery = SkillDiscoveryService()
+        var refreshed = discovery.discoverSkills(workspacePath: agent.workspace.path)
+        for i in refreshed.indices where previouslyActive.contains(refreshed[i].name) {
+            refreshed[i].isActive = true
+        }
+        agent.availableSkills = refreshed
+    }
     
     /// Get all agents
     /// - Returns: Array of all agents
@@ -925,6 +941,26 @@ public final class AgentManager {
                 rawJson: rawJson
             ))
             
+        case "_kiro.dev/mcp/server_init_failure":
+            if let params = params {
+                if let data = try? JSONEncoder().encode(params),
+                   let parsed = try? JSONDecoder().decode(KiroMcpServerInitFailureParams.self, from: data) {
+                    agent.mcpServerErrors.append(McpServerError(serverName: parsed.serverName, error: parsed.error))
+                }
+            }
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_mcp_server_init_failure",
+                summary: "MCP server init failure",
+                rawJson: rawJson
+            ))
+
+        case "_kiro.dev/subagent/list_update":
+            agent.debugLog.append(DebugLogEntry(
+                type: "kiro_subagent_list_update",
+                summary: "Subagent list updated",
+                rawJson: rawJson
+            ))
+
         default:
             agent.debugLog.append(DebugLogEntry(
                 type: "kiro_unknown",
@@ -1198,6 +1234,10 @@ public final class AgentManager {
     public func getAgent(id: UUID) -> Agent? {
         return nil
     }
+
+    public func refreshSkills(agentId id: UUID) {
+        // No-op on non-macOS
+    }
     
     public func getAllAgents() -> [Agent] {
         return []
@@ -1316,6 +1356,10 @@ public final class AgentManager {
     
     public func getAgent(id: UUID) -> Agent? {
         return nil
+    }
+
+    public func refreshSkills(agentId id: UUID) {
+        // No-op on non-macOS
     }
     
     public func getAllAgents() -> [Agent] {

@@ -1144,6 +1144,63 @@ final class TaskTests: XCTestCase {
         }
     }
 
+    func testSessionStorageDeleteSessionRemovesAllFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "delete-test-session"
+        let metadataURL = tempDir.appendingPathComponent("\(sessionId).json")
+        let eventsURL = tempDir.appendingPathComponent("\(sessionId).jsonl")
+        let lockURL = tempDir.appendingPathComponent("\(sessionId).lock")
+
+        let metadataJson = #"{"session_id":"\#(sessionId)","cwd":"/tmp/project"}"#
+        try metadataJson.write(to: metadataURL, atomically: true, encoding: .utf8)
+        try "".write(to: eventsURL, atomically: true, encoding: .utf8)
+        try "".write(to: lockURL, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let removed = storage.deleteSession(sessionId: sessionId)
+
+        XCTAssertTrue(removed, "deleteSession should return true when files were removed")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: metadataURL.path), "metadata file should be gone")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: eventsURL.path), "events file should be gone")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: lockURL.path), "lock file should be gone")
+    }
+
+    func testSessionStorageDeleteSessionReturnsFalseWhenNothingToDelete() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        let removed = storage.deleteSession(sessionId: "no-such-session")
+        XCTAssertFalse(removed, "deleteSession should return false when nothing existed")
+    }
+
+    func testSessionStorageDeleteSessionOnlyRemovesTargetedFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let keepId = "keep-me"
+        let deleteId = "delete-me"
+        let keepURL = tempDir.appendingPathComponent("\(keepId).json")
+        let keepEventsURL = tempDir.appendingPathComponent("\(keepId).jsonl")
+        let deleteURL = tempDir.appendingPathComponent("\(deleteId).json")
+
+        try #"{"session_id":"keep-me","cwd":"/tmp"}"#.write(to: keepURL, atomically: true, encoding: .utf8)
+        try "".write(to: keepEventsURL, atomically: true, encoding: .utf8)
+        try #"{"session_id":"delete-me","cwd":"/tmp"}"#.write(to: deleteURL, atomically: true, encoding: .utf8)
+
+        let storage = SessionStorage(sessionsDirectory: tempDir)
+        XCTAssertTrue(storage.deleteSession(sessionId: deleteId))
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: deleteURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keepURL.path), "untargeted session should survive")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keepEventsURL.path))
+    }
+
     func testSessionStorageWithToolCallEvents() throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)

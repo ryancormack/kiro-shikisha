@@ -28,26 +28,53 @@ public struct SlashCommand: Identifiable, Sendable {
     public let optionsMethod: String?
     /// Hint text for the input field
     public let hint: String?
+    /// True when this command comes from a skill (`.kiro/skills/` or `~/.kiro/skills/`)
+    /// as opposed to a built-in kiro-cli command.
+    public let isSkill: Bool
 
-    public init(name: String, description: String, inputType: SlashCommandInputType = .simple, optionsMethod: String? = nil, hint: String? = nil) {
+    public init(
+        name: String,
+        description: String,
+        inputType: SlashCommandInputType = .simple,
+        optionsMethod: String? = nil,
+        hint: String? = nil,
+        isSkill: Bool = false
+    ) {
         self.name = name
         self.description = description
         self.inputType = inputType
         self.optionsMethod = optionsMethod
         self.hint = hint
+        self.isSkill = isSkill
     }
 }
 
-/// Commands we support in the GUI. Other Kiro commands are CLI-specific
-/// and either don't make sense in a GUI context or aren't implemented yet.
-private let supportedCommands: Set<String> = [
-    "code", "compact", "context", "help", "tools", "usage"
+/// Commands that either don't make sense in a GUI (they drop into a terminal editor,
+/// pager, etc.) or duplicate functionality the app already provides via its own UI.
+/// Everything the server advertises that is NOT in this set passes through.
+///
+/// Notes on each entry:
+/// - editor/reply: open `$EDITOR` for long-form input — nonsensical inside a Mac app.
+/// - transcript/pager: open `$PAGER` like `less`.
+/// - logdump: writes a zip to CWD from the CLI process; not useful from the GUI.
+/// - theme: terminal color overrides.
+/// - experiment: toggles experimental CLI features.
+/// - paste: we handle clipboard images natively with ⌘V.
+/// - todos/issue/tangent: CLI-only UX flows we don't wire into the GUI.
+/// - quit: the GUI has its own quit mechanism; let the user close the window instead.
+private let guiIncompatibleCommands: Set<String> = [
+    "editor", "reply", "transcript", "logdump", "theme",
+    "experiment", "paste", "todos", "issue", "tangent", "quit", "exit", "q"
 ]
 
-/// Builds a merged list of SlashCommand from standard ACP commands and Kiro extension commands.
+/// Builds a merged list of SlashCommand from standard ACP commands, Kiro extension commands,
+/// and skill-based slash commands discovered on disk. The result is ordered so built-in
+/// commands appear first (alphabetically) and skill-based commands appear after them
+/// (also alphabetically), which matches how users typically think about the `/` menu.
 public func mergeSlashCommands(
     acpCommands: [AvailableCommand],
-    kiroCommands: [KiroAvailableCommand]
+    kiroCommands: [KiroAvailableCommand],
+    skills: [Skill] = []
 ) -> [SlashCommand] {
     var result: [SlashCommand] = []
     var seen = Set<String>()
@@ -106,8 +133,28 @@ public func mergeSlashCommands(
         ))
     }
 
-    // Filter to only supported commands
-    let filtered = result.filter { supportedCommands.contains($0.name) }
-    return filtered.sorted { $0.name < $1.name }
+    // Drop GUI-incompatible commands before we consider skills so a skill named,
+    // say, "paste" (unusual, but legal) can still appear.
+    result.removeAll { guiIncompatibleCommands.contains($0.name) }
+
+    // Sort the built-in commands alphabetically before appending skills.
+    result.sort { $0.name < $1.name }
+
+    // Append skill-based commands — each discovered skill is a valid slash command.
+    // Skip any whose name collides with a server-advertised command we already have.
+    let skillCommands = skills
+        .filter { !seen.contains($0.name) }
+        .sorted { $0.name < $1.name }
+        .map { skill in
+            SlashCommand(
+                name: skill.name,
+                description: skill.description,
+                inputType: .simple,
+                isSkill: true
+            )
+        }
+    result.append(contentsOf: skillCommands)
+
+    return result
 }
 #endif

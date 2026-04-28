@@ -10,6 +10,9 @@ public struct SidebarView: View {
     /// Callback when a task should be created
     var onCreateTask: (() -> Void)?
 
+    /// Callback when the user wants to browse all sessions on disk
+    var onBrowseSessions: (() -> Void)?
+
     /// Callback when a task should be deleted
     var onDeleteTask: ((UUID) -> Void)?
 
@@ -42,10 +45,12 @@ public struct SidebarView: View {
     public init(
         selectedTaskId: Binding<UUID?>,
         onCreateTask: (() -> Void)? = nil,
+        onBrowseSessions: (() -> Void)? = nil,
         onDeleteTask: ((UUID) -> Void)? = nil
     ) {
         self._selectedTaskId = selectedTaskId
         self.onCreateTask = onCreateTask
+        self.onBrowseSessions = onBrowseSessions
         self.onDeleteTask = onDeleteTask
     }
 
@@ -169,6 +174,14 @@ public struct SidebarView: View {
         .toolbar {
             ToolbarItem {
                 NewTaskButton(showingSheet: $showingNewTask)
+            }
+            ToolbarItem {
+                Button {
+                    onBrowseSessions?()
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .help("Browse All Sessions (⌘⇧L)")
+                }
             }
         }
         .onChange(of: showingNewTask) { _, newValue in

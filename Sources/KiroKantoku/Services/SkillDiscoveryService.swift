@@ -55,14 +55,38 @@ public struct SkillDiscoveryService {
                   let parsed = Self.parseSkillFrontmatter(content: content) else {
                 continue
             }
+            let references = Self.scanReferences(skillFolder: item, fileManager: fileManager)
             let skill = Skill(
                 name: parsed.name,
                 description: parsed.description,
-                sourcePath: skillFile.path
+                sourcePath: skillFile.path,
+                references: references
             )
             skills.append(skill)
         }
         return skills
+    }
+
+    /// Enumerate files inside the skill's `references/` folder, if present.
+    /// Only immediate children are listed — the reference folder structure is shallow
+    /// per the Agent Skills spec. Hidden files and subdirectories are skipped.
+    private static func scanReferences(skillFolder: URL, fileManager: FileManager) -> [String] {
+        let referencesDir = skillFolder.appendingPathComponent("references")
+        var isDir: ObjCBool = false
+        guard fileManager.fileExists(atPath: referencesDir.path, isDirectory: &isDir), isDir.boolValue else {
+            return []
+        }
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: referencesDir,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+        return entries
+            .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false }
+            .map { $0.lastPathComponent }
+            .sorted()
     }
 
     /// Parse YAML frontmatter from a SKILL.md file to extract name and description.

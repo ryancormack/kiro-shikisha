@@ -4,6 +4,13 @@ import ACPModel
 import Observation
 #endif
 
+/// An MCP server initialization failure reported by kiro-cli
+public struct McpServerError: Identifiable, Sendable {
+    public let id = UUID()
+    public let serverName: String
+    public let error: String
+}
+
 /// Current operational status of an agent
 public enum AgentStatus: String, Codable, Sendable {
     /// Agent is idle, not processing any requests
@@ -83,6 +90,8 @@ public final class Agent: Identifiable {
     public var clearStatusMessage: String? = nil
     /// Pending OAuth URL that the user needs to open
     public var pendingOAuthURL: String? = nil
+    /// MCP server initialization errors
+    public var mcpServerErrors: [McpServerError] = []
     /// Pending permission request awaiting user response
     public var pendingPermissionRequest: PendingPermissionRequest? = nil
     /// Current execution plan from the agent
@@ -174,6 +183,8 @@ public final class Agent: Identifiable {
     public var clearStatusMessage: String? = nil
     /// Pending OAuth URL that the user needs to open
     public var pendingOAuthURL: String? = nil
+    /// MCP server initialization errors
+    public var mcpServerErrors: [McpServerError] = []
     /// Pending permission request awaiting user response
     public var pendingPermissionRequest: PendingPermissionRequest? = nil
     /// Current execution plan from the agent

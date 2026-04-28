@@ -46,12 +46,13 @@ public struct ChatInputView: View {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !imageAttachments.isEmpty
     }
     
-    /// Merged list of all available slash commands
+    /// Merged list of all available slash commands (built-ins + skill commands)
     private var allCommands: [SlashCommand] {
         guard let agent else { return [] }
         return mergeSlashCommands(
             acpCommands: agent.availableCommands,
-            kiroCommands: agent.kiroAvailableCommands
+            kiroCommands: agent.kiroAvailableCommands,
+            skills: agent.availableSkills
         )
     }
     

@@ -120,11 +120,9 @@ public struct SessionHistoryView: View {
     }
     
     private func deleteSession(_ session: SessionMetadata) {
-        // Remove from local state
+        // Remove from disk first, then from local state
+        _ = sessionStorage.deleteSession(sessionId: session.sessionId)
         sessions.removeAll { $0.sessionId == session.sessionId }
-        
-        // Note: Actual file deletion could be implemented here if needed
-        // For now, we just remove from the view
     }
 }
 

@@ -118,4 +118,85 @@ final class SkillTests: XCTestCase {
         let skill3 = Skill(id: skill1.id, name: "skill-a", description: "Desc A", sourcePath: "/a/SKILL.md")
         XCTAssertEqual(skill1, skill3)
     }
+
+    // MARK: - References folder discovery
+
+    func testSkillDefaultReferencesIsEmpty() {
+        let skill = Skill(name: "pr-review", description: "desc", sourcePath: "/path/SKILL.md")
+        XCTAssertTrue(skill.references.isEmpty)
+    }
+
+    func testSkillDiscoveryPopulatesReferencesFolder() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let skillDir = tempDir.appendingPathComponent(".kiro/skills/cdk-deploy")
+        let referencesDir = skillDir.appendingPathComponent("references")
+        try FileManager.default.createDirectory(at: referencesDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let skillContent = """
+        ---
+        name: cdk-deploy
+        description: Deploy AWS CDK stacks
+        ---
+        See references/stack-patterns.md for details.
+        """
+        try skillContent.write(to: skillDir.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        try "# Stack patterns".write(to: referencesDir.appendingPathComponent("stack-patterns.md"), atomically: true, encoding: .utf8)
+        try "# Troubleshooting".write(to: referencesDir.appendingPathComponent("troubleshooting.md"), atomically: true, encoding: .utf8)
+
+        let service = SkillDiscoveryService()
+        let skill = service.discoverSkills(workspacePath: tempDir).first(where: { $0.name == "cdk-deploy" })
+
+        XCTAssertNotNil(skill, "expected to discover the cdk-deploy skill")
+        XCTAssertEqual(skill?.references.sorted(), ["stack-patterns.md", "troubleshooting.md"])
+    }
+
+    func testSkillDiscoveryHasEmptyReferencesWhenFolderMissing() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let skillDir = tempDir.appendingPathComponent(".kiro/skills/simple")
+        try FileManager.default.createDirectory(at: skillDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let skillContent = """
+        ---
+        name: simple
+        description: No reference files at all
+        ---
+        Just instructions.
+        """
+        try skillContent.write(to: skillDir.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        let service = SkillDiscoveryService()
+        let skill = service.discoverSkills(workspacePath: tempDir).first(where: { $0.name == "simple" })
+
+        XCTAssertNotNil(skill)
+        XCTAssertEqual(skill?.references, [])
+    }
+
+    func testSkillDiscoveryReferencesSkipsHiddenFilesAndSubdirs() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let skillDir = tempDir.appendingPathComponent(".kiro/skills/deep")
+        let referencesDir = skillDir.appendingPathComponent("references")
+        let nestedDir = referencesDir.appendingPathComponent("nested")
+        try FileManager.default.createDirectory(at: nestedDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try """
+        ---
+        name: deep
+        description: Skill with nested references folder
+        ---
+        """.write(to: skillDir.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        try "".write(to: referencesDir.appendingPathComponent("guide.md"), atomically: true, encoding: .utf8)
+        try "".write(to: referencesDir.appendingPathComponent(".DS_Store"), atomically: true, encoding: .utf8)
+        try "".write(to: nestedDir.appendingPathComponent("ignored.md"), atomically: true, encoding: .utf8)
+
+        let service = SkillDiscoveryService()
+        let skill = service.discoverSkills(workspacePath: tempDir).first(where: { $0.name == "deep" })
+
+        // Only the immediate regular file "guide.md" should be picked up.
+        // Subdirectories and hidden files are excluded.
+        XCTAssertEqual(skill?.references, ["guide.md"])
+    }
 }
+

@@ -49,7 +49,12 @@ Converse with agents directly. The chat panel supports markdown rendering, inlin
 
 ### Slash Commands
 
-The chat input supports slash commands with an autocomplete picker. Type `/` to see available commands. Supported commands include `/compact`, `/context`, `/help`, `/tools`, and `/usage`. Selection-type commands (like `/model`) show an interactive options picker. Commands are provided by the server via both standard ACP and Kiro vendor extensions, then merged into a unified list.
+The chat input supports slash commands with an autocomplete picker. Type `/` to see every command the agent advertises — both standard ACP commands and Kiro vendor extensions are merged into a single list.
+
+- **Built-in commands.** `/agent`, `/chat`, `/clear`, `/code`, `/compact`, `/context`, `/checkpoint`, `/copy`, `/help`, `/hooks`, `/knowledge`, `/mcp`, `/model`, `/plan`, `/prompts`, `/tools`, `/usage`, `/changelog` — whatever kiro-cli reports for the session. The app no longer filters commands to a short allow-list.
+- **Skill-based commands.** Every skill discovered in `.kiro/skills/` and `~/.kiro/skills/` is also available as a `/skill-name` slash command. These appear in the picker with a purple **Skill** badge so they are easy to spot.
+- **Selection commands.** Commands like `/model` that need an argument open an interactive options picker populated via `_kiro.dev/commands/options`.
+- **GUI-only exclusions.** Commands that require a terminal `$EDITOR`/`$PAGER` or duplicate native macOS behavior are hidden (`/editor`, `/reply`, `/transcript`, `/logdump`, `/theme`, `/experiment`, `/paste`, `/todos`, `/issue`, `/tangent`, `/quit`). Everything else passes through.
 
 ### Permission Control
 
@@ -85,7 +90,11 @@ The code panel position is configurable: place it to the right of the chat or be
 
 ### Skills Discovery
 
-Kiro Kantoku discovers SKILL.md files from both workspace-local (`.kiro/skills/`) and global (`~/.kiro/skills/`) directories. Each skill is parsed from YAML frontmatter for its name and description. Workspace skills override global skills with the same name. A collapsible skills panel shows all discovered skills, and activated skills are highlighted when detected in agent output.
+Kiro Kantoku discovers SKILL.md files from both workspace-local (`.kiro/skills/`) and global (`~/.kiro/skills/`) directories. Each skill is parsed from YAML frontmatter, and any files in its `references/` subfolder are counted for display. Workspace skills override global skills with the same name.
+
+- **Collapsible panel.** A panel above the chat input lists every discovered skill with its description, reference-file count, and an Active badge when the agent has activated it.
+- **Invoke as slash commands.** The "Use" button and the `/` autocomplete picker both invoke the skill as a real `/skill-name` slash command when kiro-cli advertises it. Older CLIs fall back to a natural-language prompt automatically.
+- **Live refresh.** A refresh button on the panel re-scans both skill directories so newly-added skills appear without restarting the task.
 
 ### MCP OAuth Support
 
@@ -97,7 +106,16 @@ Status banners appear during context compaction (blue) and history clearing (ora
 
 ### Session History
 
-Browse and resume past sessions for a workspace. The session history view lets you load a previous session by its ID, reconnecting the agent to where it left off.
+Kiro Kantoku reads kiro-cli's on-disk sessions (`~/.kiro/sessions/cli/`) and gives you several ways to pick up where you left off:
+
+- **File > Load Session… (⌘⇧L)** opens a browser of every session on disk, grouped by workspace directory. Pick one and it starts a new task reconnected to that session.
+- **File > Resume Last Session (⌘⇧R)** reconnects the currently selected task (if it has a saved session) or, if no task is selected, loads the most recently updated session on disk — the same behavior as `kiro-cli chat --resume`.
+- **New Task sheet** automatically discovers past sessions for the directory you pick and offers a "Resume an existing session for this directory" option right in the form, so you don't need to leave the new-task flow.
+- **Per-task history** — click the clock button in the task header to see just the sessions for that task's workspace directory.
+- **Sidebar toolbar** has a clock-arrow button that opens the same global session browser.
+- **Delete from disk** — right-click any session (or swipe-to-delete in the per-workspace history) to permanently remove its `.json`, `.jsonl`, and any stale `.lock` file. A confirmation alert prevents accidents.
+
+Under the hood the app uses ACP's `session/load` method to reconnect, with workspace-based fallback and automatic stale-lock recovery if a previous kiro-cli process crashed with a session locked.
 
 ### Configuration Options
 
@@ -194,6 +212,8 @@ kiro-cli login
 | Shortcut | Action |
 |---|---|
 | ⌘⇧T | New Task |
+| ⌘⇧L | Load Session… (browse every session on disk) |
+| ⌘⇧R | Resume Last Session (re-open selected task, or newest session) |
 | ⌘D | Toggle Dashboard |
 | ⌘1–9 | Switch between tasks |
 | ⌘Return | Send prompt |

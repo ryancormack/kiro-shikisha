@@ -244,6 +244,30 @@ public final class SessionStorage: Sendable {
             return false
         }
     }
+
+    /// Permanently delete a session's files from disk (metadata, event log, and any lock file).
+    /// - Parameter sessionId: The session ID to delete
+    /// - Returns: true if at least one file was removed, false if nothing matched
+    @discardableResult
+    public func deleteSession(sessionId: String) -> Bool {
+        let metadataURL = sessionsDirectory.appendingPathComponent("\(sessionId).json")
+        let eventsURL = sessionsDirectory.appendingPathComponent("\(sessionId).jsonl")
+        let lockURL = sessionsDirectory.appendingPathComponent("\(sessionId).lock")
+
+        var removedAny = false
+        for url in [metadataURL, eventsURL, lockURL] {
+            if fileManager.fileExists(atPath: url.path) {
+                do {
+                    try fileManager.removeItem(at: url)
+                    removedAny = true
+                    print("[SessionStorage] Deleted session file: \(url.lastPathComponent)")
+                } catch {
+                    print("[SessionStorage] Failed to delete \(url.lastPathComponent): \(error)")
+                }
+            }
+        }
+        return removedAny
+    }
     
     /// Load and reconstruct the conversation history for a session
     /// - Parameter sessionId: The session ID to load history for

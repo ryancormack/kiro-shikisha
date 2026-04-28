@@ -13,6 +13,7 @@ public struct AllSessionsView: View {
     @State private var sessions: [SessionMetadata] = []
     @State private var searchText = ""
     @State private var isLoading = true
+    @State private var sessionToDelete: SessionMetadata?
     
     public var body: some View {
         VStack(spacing: 0) {
@@ -31,8 +32,24 @@ public struct AllSessionsView: View {
                 sessionList
             }
         }
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(minWidth: 560, minHeight: 440)
         .onAppear { loadSessions() }
+        .alert("Delete session?", isPresented: Binding(
+            get: { sessionToDelete != nil },
+            set: { if !$0 { sessionToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) { sessionToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let session = sessionToDelete {
+                    deleteSession(session)
+                }
+                sessionToDelete = nil
+            }
+        } message: {
+            if let session = sessionToDelete {
+                Text("This will permanently delete the session \"\(session.displayName)\" and its conversation history from disk. This cannot be undone.")
+            }
+        }
     }
     
     // MARK: - Subviews
@@ -44,8 +61,14 @@ public struct AllSessionsView: View {
             Spacer()
             TextField("Filter…", text: $searchText)
                 .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 200)
-            Button("Cancel") { dismiss() }
+                .frame(maxWidth: 220)
+            Button {
+                loadSessions()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .help("Refresh")
+            Button("Close") { dismiss() }
                 .keyboardShortcut(.cancelAction)
         }
         .padding()
@@ -59,6 +82,10 @@ public struct AllSessionsView: View {
             Text("No sessions found")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+            if !searchText.isEmpty {
+                Button("Clear filter") { searchText = "" }
+                    .font(.caption)
+            }
         }
     }
     
@@ -68,6 +95,25 @@ public struct AllSessionsView: View {
                 Section(header: Text(group.workspace).font(.caption).foregroundColor(.secondary)) {
                     ForEach(group.sessions) { session in
                         sessionRow(session)
+                            .contextMenu {
+                                Button {
+                                    selectSession(session)
+                                } label: {
+                                    Label("Resume", systemImage: "play.fill")
+                                }
+                                Button(role: .destructive) {
+                                    sessionToDelete = session
+                                } label: {
+                                    Label("Delete…", systemImage: "trash")
+                                }
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    sessionToDelete = session
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                     }
                 }
             }
@@ -77,8 +123,7 @@ public struct AllSessionsView: View {
     
     private func sessionRow(_ session: SessionMetadata) -> some View {
         Button {
-            onSelectSession(session.sessionId, URL(fileURLWithPath: session.cwd))
-            dismiss()
+            selectSession(session)
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -98,6 +143,16 @@ public struct AllSessionsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func selectSession(_ session: SessionMetadata) {
+        onSelectSession(session.sessionId, URL(fileURLWithPath: session.cwd))
+        dismiss()
+    }
+
+    private func deleteSession(_ session: SessionMetadata) {
+        _ = sessionStorage.deleteSession(sessionId: session.sessionId)
+        sessions.removeAll { $0.sessionId == session.sessionId }
     }
     
     // MARK: - Data
